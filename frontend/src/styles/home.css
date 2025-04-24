@@ -1,0 +1,107 @@
+/* src/styles/home.css */
+/* Adicione este arquivo nas suas importações principais */
+
+/* Espaçamento adequado para o bloco de atividades recentes */
+.home-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Garantir que o bloco de atividades recentes tenha um bom espaçamento da barra lateral */
+.home-content-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1280px) {
+  .home-content-grid {
+    grid-template-columns: 2fr 1fr;
+    gap: 24px;
+  }
+}
+
+/* Melhorias visuais para cards */
+.home-card {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 24px;
+  height: 100%;
+}
+
+/* Estilos para o dia atual no calendário */
+.calendar-today {
+  border: 1px solid #e60909;
+  color: #333;
+}
+
+/* Estilos para o dia selecionado no calendário */
+.calendar-selected {
+  background-color: #e60909;
+  color: white;
+}
+
+/* Estilos para indicador de eventos */
+.calendar-event-indicator {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #e60909;
+}
+
+/* Animações suaves para transições */
+.home-activity-item {
+  transition: all 0.2s ease-in-out;
+  border: 1px solid transparent;
+}
+
+.home-activity-item:hover {
+  background-color: #f9f9f9;
+  border-color: #e5e5e5;
+  transform: translateY(-1px);
+}
+
+/* Animação para carregamento */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.loading-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Melhorias para a responsividade */
+@media (max-width: 768px) {
+  .home-container {
+    padding: 0 16px;
+  }
+
+  .home-card {
+    padding: 16px;
+  }
+}
+
+/* Ajustes específicos para a barra lateral */
+.sidebar-active ~ .main-content {
+  margin-left: 240px;
+}
+
+.sidebar-collapsed ~ .main-content {
+  margin-left: 64px;
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    margin-left: 0 !important;
+  }
+}

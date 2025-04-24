@@ -1,0 +1,35 @@
+/* Estilos para melhorar a sidebar */
+
+/* Ajustes para o item ativo - aumentado a opacidade para 25% */
+.sidebar-item-active {
+  position: relative;
+  background-color: rgba(255, 255, 255, 0.40) !important; /* Ainda mais visível */
+  color: white !important;
+  font-weight: 500 !important;
+
+/* Pequeno indicador visual à direita para o item ativo */
+.sidebar-item-active::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: white;
+}
+
+/* Quando a sidebar está compactada, movemos o indicador para o centro direita */
+.sidebar-collapsed .sidebar-item-active::after {
+  right: 3px;
+}
+
+/* Transição suave para o hover */
+.sidebar-item {
+  transition: all 0.2s ease-in-out !important;
+}
+
+.sidebar-item:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+}
