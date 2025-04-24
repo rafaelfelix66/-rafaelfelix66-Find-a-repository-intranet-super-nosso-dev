@@ -1,6 +1,7 @@
 // models/index.js (CORRIGIDO)
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const Role = mongoose.model('Role', require('./Role').schema);
 
 const UserSchema = new mongoose.Schema({
   nome: String,
@@ -36,6 +37,7 @@ UserSchema.methods.hasPermission = function(permission) {
 // Método para verificar papel
 UserSchema.methods.hasRole = function(role) {
   return this.roles.includes(role);
+};
   
 // CORRIGIDO: Schema do Post agora inclui eventData
 const PostSchema = new mongoose.Schema({
@@ -167,5 +169,6 @@ module.exports = {
   Message: mongoose.model('Message', MessageSchema),
   File: mongoose.model('File', FileSchema),
   Folder: mongoose.model('Folder', FolderSchema),
-  Banner: mongoose.model('Banner', BannerSchema)
+  Banner: mongoose.model('Banner', BannerSchema),
+  Role
 };

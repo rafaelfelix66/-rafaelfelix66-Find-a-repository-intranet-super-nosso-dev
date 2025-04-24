@@ -27,7 +27,7 @@ import { ArticleContent } from "@/features/knowledge-base/components/ArticleCont
 import { useArticles } from "@/features/knowledge-base/hooks/useArticles";
 import { loadCategories, saveCategories, createCategory as createCategoryService } from "@/services/categoryService";
 import { PermissionGuard } from '@/components/auth/PermissionGuard';
-import { useAuth } from '@/hooks/useAuth'; // Import auth hook to check permissions
+import { useAuth } from '@/contexts/AuthContext';
 
 // Interface para categorias gerenciáveis
 interface CategoryWithStats {

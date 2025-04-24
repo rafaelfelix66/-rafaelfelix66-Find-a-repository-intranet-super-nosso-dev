@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ShieldAlert } from 'lucide-react';
 
-export const Unauthorized: React.FC = () => {
+const Unauthorized: React.FC = () => {
   const navigate = useNavigate();
   
   return (
@@ -29,3 +29,5 @@ export const Unauthorized: React.FC = () => {
     </div>
   );
 };
+
+export default Unauthorized;

@@ -32,7 +32,7 @@ router.get('/user', verificarToken, async (req, res) => {
 // @route   GET api/auth/user-permissions
 // @desc    Obter dados do usuário com permissões
 // @access  Private
-router.get('/user-permissions', auth, async (req, res) => {
+router.get('/user-permissions', verificarToken, async (req, res) => {
   try {
     const user = await User.findById(req.usuario.id).select('-password');
     if (!user) return res.status(404).json({ mensagem: 'Usuário não encontrado' });

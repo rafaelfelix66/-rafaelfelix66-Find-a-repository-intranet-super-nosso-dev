@@ -55,7 +55,7 @@ import { toast } from "@/components/ui/use-toast";
 import { api } from '@/services/api';
 import { PermissionGuard } from '@/components/auth/PermissionGuard';
 import { OwnershipGuard } from '@/components/auth/OwnershipGuard';
-import { useAuth } from '@/hooks/useAuth'; // ou '@/contexts/AuthContext' dependendo da sua estrutura
+import { useAuth } from '@/contexts/AuthContext';
 
 // Interfaces
 interface PostComment {
