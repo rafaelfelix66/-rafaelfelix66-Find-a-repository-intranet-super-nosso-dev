@@ -53,7 +53,9 @@ const login = async (req, res) => {
         email: user.email,
         cargo: user.cargo,
         departamento: user.departamento,
-        avatar: user.avatar
+        avatar: user.avatar,
+        roles: user.roles || [],          // <- Adicione isso
+        permissions: user.permissoes || [] // <- Adicione isso (mapeando permissoes -> permissions)
       }
     });
   } catch (err) {

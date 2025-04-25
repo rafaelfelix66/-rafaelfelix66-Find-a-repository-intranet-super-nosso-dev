@@ -11,13 +11,15 @@ import {
   X, 
   Settings, 
   LogOut,
-  LayoutDashboard
+  LayoutDashboard,
+  Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermission } from "@/hooks/usePermission";
 
 interface SidebarItemProps {
   icon: React.ElementType;
@@ -53,6 +55,7 @@ export function Sidebar() {
   const isMobile = useIsMobile();
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(!isMobile);
+  const { hasPermission } = usePermission();
 
   // Close sidebar when clicking outside on mobile
   useEffect(() => {
@@ -187,6 +190,16 @@ export function Sidebar() {
             active={getActivePath("/base-conhecimento")} 
             isOpen={isOpen}
           />
+          {hasPermission('roles:manage') && (
+          <SidebarItem 
+            icon={Shield} 
+            to="/admin/permissions" 
+            label="Gerenciar Permissões" 
+            active={getActivePath("/admin/permissions")} 
+            isOpen={isOpen}
+          />
+         )}
+          {hasPermission('roles:manage') && ( 
           <SidebarItem 
             icon={LayoutDashboard} 
             to="/admin/banners" 
@@ -194,6 +207,7 @@ export function Sidebar() {
             active={getActivePath("/admin/banners")} 
             isOpen={isOpen}
           />
+		  )}
           <SidebarItem 
             icon={Settings} 
             to="/configuracoes" 

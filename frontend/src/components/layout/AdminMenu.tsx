@@ -54,7 +54,7 @@ export const AdminMenu: React.FC = () => {
             className="flex items-center p-3 rounded-md bg-white hover:bg-gray-100 border border-gray-200"
           >
             <Shield className="h-5 w-5 mr-2 text-purple-600" />
-            <span>Permissões</span>
+            <span>Gerenciar Permissões</span>
           </Link>
         )}
         

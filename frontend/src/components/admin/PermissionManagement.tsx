@@ -592,7 +592,6 @@ export function PermissionManagement() {
                               Editar
                             </Button>
                             <Button
-                              variant="outline"
                               size="sm"
                               variant="destructive"
                               onClick={() => handleDeleteRole(role._id)}

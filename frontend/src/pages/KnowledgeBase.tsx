@@ -28,7 +28,7 @@ import { useArticles } from "@/features/knowledge-base/hooks/useArticles";
 import { loadCategories, saveCategories, createCategory as createCategoryService } from "@/services/categoryService";
 import { PermissionGuard } from '@/components/auth/PermissionGuard';
 import { useAuth } from '@/contexts/AuthContext';
-
+import { usePermission } from '@/hooks/usePermission';
 // Interface para categorias gerenciáveis
 interface CategoryWithStats {
   id: string;
@@ -51,7 +51,8 @@ const KnowledgeBase = () => {
   const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
   
   // Hook de autenticação para verificar permissões diretamente
-  const { currentUser, hasPermission } = useAuth();
+  const { user: currentUser } = useAuth(); // Renomeando para currentUser
+  const { hasPermission } = usePermission(); // Obtendo a função hasPermission
   
   const {
     articles,
@@ -335,7 +336,7 @@ const KnowledgeBase = () => {
               setSearchTerm={setSearchTerm}
               onSearch={handleSearch}
               currentUser={currentUser}
-              hasPermission={hasPermission}
+              hasPermissionFunction={hasPermission}
             />
           </div>
         </div>

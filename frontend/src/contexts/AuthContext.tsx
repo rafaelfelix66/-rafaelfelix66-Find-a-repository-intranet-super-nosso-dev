@@ -6,6 +6,7 @@ import { loginUser, registerUser, getUserData, logoutUser, isAuthenticated } fro
 import { useToast } from "@/hooks/use-toast";
 import { activitiesService } from '@/services/activitiesService';
 import { calendarService } from '@/services/calendarService';
+import { api } from '@/lib/api';
 
 interface User {
   id: string;
@@ -13,6 +14,8 @@ interface User {
   email: string;
   department?: string;
   avatar?: string;
+  roles?: string[];
+  permissions?: string[];
 }
 
 interface AuthContextType {
@@ -62,7 +65,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               name: result.data.nome,
               email: result.data.email,
               department: result.data.departamento,
-              avatar: result.data.avatar
+              avatar: result.data.avatar,
+			  roles: result.data.roles,
+			  permissions: result.data.permissions
             };
             
             setUser(userData);
@@ -93,54 +98,74 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loadUser();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    setIsLoading(true);
-    try {
-      const result = await loginUser(email, password);
-      if (result.success) {
-        // Adaptar o formato de dados do backend para o formato esperado pelo frontend
-        const userData = {
-          id: result.data.usuario.id,
-          name: result.data.usuario.nome,
-          email: result.data.usuario.email,
-          department: result.data.usuario.departamento,
-          avatar: result.data.usuario.avatar
-        };
-        
-        setUser(userData);
-        
-        // Armazenar o ID do usuário no localStorage
-        if (result.data.usuario.id) {
-          localStorage.setItem('userId', result.data.usuario.id);
-          console.log('ID do usuário armazenado:', result.data.usuario.id);
-          
-          // Inicializar serviços após login bem-sucedido
-          initializeServices(result.data.usuario.id);
+ const login = async (email: string, password: string) => {
+  setIsLoading(true);
+  try {
+    const result = await loginUser(email, password);
+    if (result.success) {
+      // Adaptar o formato de dados do backend para o formato esperado pelo frontend
+      const userData = {
+        id: result.data.usuario.id,
+        name: result.data.usuario.nome,
+        email: result.data.usuario.email,
+        department: result.data.usuario.departamento,
+        avatar: result.data.usuario.avatar,
+        roles: result.data.usuario.roles || [],
+        permissions: result.data.usuario.permissions || []
+      };
+      
+      // Buscar permissões detalhadas (adicional)
+      try {
+        const userWithPermissions = await api.get(`/auth/user-permissions`);
+        console.log('Permissões obtidas:', userWithPermissions);
+        if (userWithPermissions) {
+          userData.roles = userWithPermissions.roles || userData.roles;
+          userData.permissions = userWithPermissions.permissions || userData.permissions;
         }
-        
-        toast({
-          title: "Login bem-sucedido",
-          description: `Bem-vindo, ${result.data.usuario.nome}!`,
-        });
-        
-        navigate('/');
-      } else {
-        throw new Error(result.message);
+      } catch (permissionError) {
+        console.error('Erro ao buscar permissões detalhadas:', permissionError);
+        // Continuar com os dados básicos em caso de erro
+        // Se necessário, atribuir permissões mínimas para funcionar
+        if (!userData.permissions || userData.permissions.length === 0) {
+          userData.permissions = ['timeline:view', 'knowledge:view', 'files:view'];
+        }
       }
-    } catch (error) {
-      console.error('Erro no login:', error);
+      
+      console.log('Dados do usuário após login:', userData);
+      
+      setUser(userData);
+      
+      // Armazenar o ID do usuário no localStorage
+      if (result.data.usuario.id) {
+        localStorage.setItem('userId', result.data.usuario.id);
+        
+        // Inicializar serviços após login bem-sucedido
+        initializeServices(result.data.usuario.id);
+      }
       
       toast({
-        title: "Erro no login",
-        description: error instanceof Error ? error.message : "Falha no login. Verifique suas credenciais.",
-        variant: "destructive",
+        title: "Login bem-sucedido",
+        description: `Bem-vindo, ${result.data.usuario.nome}!`,
       });
       
-      throw error;
-    } finally {
-      setIsLoading(false);
+      navigate('/');
+    } else {
+      throw new Error(result.message);
     }
-  };
+  } catch (error) {
+    console.error('Erro no login:', error);
+    
+    toast({
+      title: "Erro no login",
+      description: error instanceof Error ? error.message : "Falha no login. Verifique suas credenciais.",
+      variant: "destructive",
+    });
+    
+    throw error;
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const register = async (name: string, email: string, password: string, cargo: string = '', departamento: string = '') => {
     setIsLoading(true);

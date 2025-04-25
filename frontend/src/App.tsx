@@ -6,6 +6,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PrivateRoute } from "@/components/auth/PrivateRoute";
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { PermissionManagement } from '@/components/admin/PermissionManagement';
+import { Navigate } from "react-router-dom";
+import { PermissionGuard } from '@/components/auth/PermissionGuard'; // Ajuste o caminho conforme necessário
 
 import Index from "./pages/Index";
 import FileStorage from "./pages/FileStorage";
@@ -172,6 +176,14 @@ const App = () => {
                   </PrivateRoute>
                 } 
               />
+			  
+			  <Route 
+				  path="/admin/permissions" 
+				  element={
+					<PermissionGuard requiredPermission="roles:manage" fallback={<Navigate to="/unauthorized" />}>
+					 </PermissionGuard>
+				  } 
+				/>
               
               {/* Rota para página não encontrada */}
               <Route path="*" element={<NotFound />} />
