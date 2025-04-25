@@ -34,7 +34,9 @@ router.get('/user', verificarToken, async (req, res) => {
 // @access  Private
 router.get('/user-permissions', verificarToken, async (req, res) => {
   try {
-    console.log('Buscando permissões para usuário:', req.usuario.id);
+    console.log('Rota de permissões de usuário acessada');
+    console.log('ID do usuário:', req.usuario.id);
+	
     const { User, Role } = require('../models');
 
     const user = await User.findById(req.usuario.id).select('-password');

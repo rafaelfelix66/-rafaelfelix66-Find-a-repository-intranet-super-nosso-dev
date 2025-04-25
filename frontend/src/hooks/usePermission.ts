@@ -14,11 +14,18 @@ export const usePermission = (): UsePermissionResult => {
   
   // Debug - remova em produção
   // console.log('usePermission hook - user:', user);
+  console.log('usePermission - Usuário:', user);
+  console.log('usePermission - Roles:', user?.roles);
+  console.log('usePermission - Permissions:', user?.permissions);
   
   // Verificar uma permissão específica
   const hasPermission = (permission: string): boolean => {
+  console.log(`Verificando permissão: ${permission}`);
     // Se não há usuário, não tem permissão
-    if (!user) return false;
+    if (!user) {
+      console.log('Sem usuário - acesso negado');
+      return false;
+    }
     
     // Log para depuração - remova em produção
     // console.log(`Verificando permissão '${permission}' para usuário:`, user.name);
@@ -33,6 +40,10 @@ export const usePermission = (): UsePermissionResult => {
     
     // Verificar permissões do usuário
     const hasDirectPermission = user.permissions?.includes(permission) || false;
+	const hasRolePermission = user.roles?.includes('admin') || false;
+	
+	console.log('Permissão direta:', hasDirectPermission);
+    console.log('Usuário é admin:', hasRolePermission);
     
     // Para debug - remova em produção
     // if (hasDirectPermission) {
@@ -49,7 +60,7 @@ export const usePermission = (): UsePermissionResult => {
       return true;
     }
     
-    return hasDirectPermission;
+    return hasDirectPermission || hasRolePermission;
   };
   
   // Resto do hook permanece o mesmo...

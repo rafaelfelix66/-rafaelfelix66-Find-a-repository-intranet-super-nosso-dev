@@ -1,3 +1,4 @@
+// src/components/admin/PermissionManagement.tsx
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
@@ -7,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '@/contexts/AuthContext';
+import { usePermission } from '@/hooks/usePermission';
 import {
   Table,
   TableBody,
@@ -57,6 +59,20 @@ interface Permission {
 }
 
 export function PermissionManagement() {
+  // Hooks de autenticação e permissão
+  const { user } = useAuth();
+  const { hasPermission } = usePermission();
+  
+  // Verificar permissão de acesso
+  if (!hasPermission('roles:manage')) {
+    return (
+      <div className="p-4 text-center">
+        <h1 className="text-2xl font-bold text-red-500">Acesso Negado</h1>
+        <p>Você não tem permissão para gerenciar papéis e permissões.</p>
+      </div>
+    );
+  }
+
   // Estados
   const [activeTab, setActiveTab] = useState<string>('users');
   const [users, setUsers] = useState<User[]>([]);
@@ -160,21 +176,50 @@ export function PermissionManagement() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Buscar usuários
-        const usersData = await api.get('/admin/users');
-        setUsers(usersData);
-        setFilteredUsers(usersData);
+        console.log('Iniciando busca de dados de permissões');
         
-        // Buscar papéis
-        const rolesData = await api.get('/admin/roles');
-        setRoles(rolesData);
+        // Log do token de autenticação
+        const token = localStorage.getItem('token');
+        console.log('Token de autenticação:', token ? 'Presente' : 'Ausente');
+
+        try {
+          console.log('Tentando buscar usuários...');
+          const usersData = await api.get('/admin/users');
+          console.log('Usuários recebidos:', usersData);
+          setUsers(usersData);
+          setFilteredUsers(usersData);
+        } catch (userError) {
+          console.error('Erro ao buscar usuários:', userError);
+          console.log('Detalhes do erro:', {
+            status: userError.response?.status,
+            message: userError.response?.data?.message,
+            fullError: userError
+          });
+        }
+
+        try {
+          console.log('Tentando buscar papéis...');
+          const rolesData = await api.get('/admin/roles');
+          console.log('Papéis recebidos:', rolesData);
+          setRoles(rolesData);
+        } catch (roleError) {
+          console.error('Erro ao buscar papéis:', roleError);
+          console.log('Detalhes do erro:', {
+            status: roleError.response?.status,
+            message: roleError.response?.data?.message,
+            fullError: roleError
+          });
+          
+          // Exibir mensagem de erro toast
+          toast({
+            title: "Erro ao buscar papéis",
+            description: roleError.message || "Não foi possível carregar os papéis",
+            variant: "destructive"
+          });
+        }
+        
       } catch (error) {
-        console.error('Erro ao carregar dados:', error);
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível carregar as informações de permissões',
-          variant: 'destructive',
-        });
+        console.error('Erro geral na busca de dados:', error);
       } finally {
         setIsLoading(false);
       }
@@ -221,10 +266,16 @@ export function PermissionManagement() {
   const handleSaveUserRoles = async () => {
     if (!selectedUser) return;
     
-    try {
-      await api.put(`/admin/users/${selectedUser._id}/roles`, {
-        roles: selectedUser.roles,
-      });
+	console.log('Papéis a serem salvos:', selectedUser.roles);
+	// Filtrar apenas as roles que existem no sistema
+    const validRoles = selectedUser.roles.filter(role => 
+     roles.some(r => r.name === role)
+   );
+  
+   try {
+     await api.put(`/admin/users/${selectedUser._id}/roles`, {
+       roles: validRoles,
+     });
       
       // Atualizar a lista de usuários
       setUsers(users.map(u => 
@@ -345,8 +396,8 @@ export function PermissionManagement() {
     setIsRoleDialogOpen(true);
   };
   
-  // Verificar se o usuário tem uma permissão
-  const hasPermission = (userPermissions: string[], permission: string): boolean => {
+  // Função para verificar permissões do usuário selecionado
+  const userHasPermission = (userPermissions: string[] | undefined, permission: string): boolean => {
     return userPermissions?.includes(permission) || false;
   };
   
@@ -686,7 +737,7 @@ export function PermissionManagement() {
                     <div key={permission.key} className="flex items-center space-x-2">
                       <Checkbox
                         id={`permission-${permission.key}`}
-                        checked={hasPermission(selectedUser?.permissions || [], permission.key)}
+                        checked={userHasPermission(selectedUser?.permissions, permission.key)}
                         onCheckedChange={() => togglePermission(permission.key)}
                       />
                       <Label

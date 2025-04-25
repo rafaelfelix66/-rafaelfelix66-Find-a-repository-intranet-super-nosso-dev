@@ -8,7 +8,6 @@ import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { AdminMenu } from '@/components/layout/AdminMenu';
 import { usePermission } from '@/hooks/usePermission';
 // Interfaces para os dados
 interface TimelinePost {
@@ -85,14 +84,6 @@ const Index = () => {
         <div className="mt-8">
           <QuickAccess />
         </div>
-		
-		<div className="space-y-6 max-w-[1400px] mx-auto px-4 sm:px-6 md:px-8">
-        {/* Menu de administração (aparece apenas para usuários com permissão) */}
-        {hasPermission('admin:access') && <AdminMenu />}
-        
-        {/* Restante do conteúdo da página... */}
-        </div>
-        
         {/* Conteúdo principal: Atividades e Calendário */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mt-8">
           {/* Atividades Recentes (com mais espaço) */}

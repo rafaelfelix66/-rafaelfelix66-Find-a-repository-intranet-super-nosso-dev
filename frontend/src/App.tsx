@@ -180,8 +180,9 @@ const App = () => {
 			  <Route 
 				  path="/admin/permissions" 
 				  element={
-					<PermissionGuard requiredPermission="roles:manage" fallback={<Navigate to="/unauthorized" />}>
-					 </PermissionGuard>
+					<PrivateRoute requiredPermission="roles:manage">
+					  <PermissionManagement />
+					</PrivateRoute>
 				  } 
 				/>
               
