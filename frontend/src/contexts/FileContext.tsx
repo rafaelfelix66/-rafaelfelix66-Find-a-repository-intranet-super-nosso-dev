@@ -1,21 +1,38 @@
-//src/contexts/FileContext.tsx
+// src/contexts/FileContext.tsx (Versão corrigida)
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { fileService } from "@/services/fileService";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
+export interface FileOwner {
+  id: string;
+  name: string;
+}
+
 export interface FileItem {
   id: string;
   name: string;
   type: 'file' | 'folder';
-  icon?: React.ReactNode; // Agora é opcional
-  iconType?: string; // Novo campo
+  icon?: React.ReactNode; // Opcional - definido pelo componente
+  iconType?: string;
   size?: string;
   modified: string;
   path: string;
   parentId?: string | null;
   extension?: string;
+  mimeType?: string;  // Adicionado para suporte à visualização
+  originalName?: string; // Adicionado para download correto
+  owner?: FileOwner; // Adicionado para mostrar proprietário
+}
+
+// Interface para visualização de arquivos
+export interface FilePreview {
+  fileId: string;
+  fileName: string;
+  fileType: string;
+  previewUrl: string;
+  canPreview: boolean;
 }
 
 interface FileContextType {
@@ -26,14 +43,16 @@ interface FileContextType {
   filteredFiles: FileItem[];
   isLoading: boolean;
   error: string | null;
+  previewFile: FilePreview | null;
   setSearchQuery: (query: string) => void;
   navigateToFolder: (folder: FileItem) => void;
   navigateToBreadcrumb: (index: number) => void;
   createNewFolder: (name: string) => Promise<void>;
   uploadFile: (file: File) => Promise<void>;
   downloadFile: (fileId: string) => Promise<void>;
-  deleteItem: (id: string) => Promise<void>;
-  renameItem: (id: string, newName: string) => void;
+  deleteItem: (id: string, type: 'file' | 'folder') => Promise<void>;
+  openFilePreview: (file: FileItem) => void;
+  closeFilePreview: () => void;
   refreshFiles: () => Promise<void>;
 }
 
@@ -47,6 +66,8 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [filteredFiles, setFilteredFiles] = useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<FilePreview | null>(null);
+  
   const { toast } = useToast();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -57,7 +78,9 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     
     try {
+      console.log(`Buscando arquivos da pasta ${folderId || 'raiz'}`);
       const items = await fileService.getFiles(folderId);
+      console.log(`Encontrados ${items.length} itens`);
       setFiles(items);
     } catch (err) {
       console.error('Erro ao carregar arquivos:', err);
@@ -92,6 +115,38 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     setFilteredFiles(filtered);
   }, [files, searchQuery]);
+  
+  // Função para abrir visualização de arquivo
+  const openFilePreview = (file: FileItem) => {
+    try {
+      // Verificar se o arquivo pode ser visualizado
+      const canPreview = fileService.canPreviewFile(file.mimeType, file.extension);
+      
+      // Gerar URL para preview
+      const previewUrl = fileService.getFilePreviewUrl(file.id);
+      
+      // Definir informações do preview
+      setPreviewFile({
+        fileId: file.id,
+        fileName: file.name,
+        fileType: file.mimeType || `file/${file.extension}`,
+        previewUrl,
+        canPreview
+      });
+    } catch (error) {
+      console.error('Erro ao abrir visualização:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível abrir a visualização do arquivo",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  // Função para fechar visualização de arquivo
+  const closeFilePreview = () => {
+    setPreviewFile(null);
+  };
   
   // Função para reconstruir o caminho da pasta
   const buildFolderPath = async (folderId: string | null): Promise<string[]> => {
@@ -129,6 +184,8 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     
     try {
+      console.log(`Navegando para a pasta: ${folder.name} (ID: ${folder.id})`);
+      
       // Atualizar o ID da pasta atual
       setCurrentParentId(folder.id);
       
@@ -258,7 +315,8 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Download de arquivo
   const downloadFile = async (fileId: string) => {
     try {
-      await fileService.downloadFile(fileId);
+      const file = files.find(f => f.id === fileId);
+      await fileService.downloadFile(fileId, file?.originalName);
     } catch (error) {
       console.error('Erro ao baixar arquivo:', error);
       const errorMsg = error instanceof Error ? error.message : 'Erro ao baixar arquivo';
@@ -271,7 +329,7 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   
   // Excluir item (arquivo ou pasta)
-  const deleteItem = async (id: string) => {
+  const deleteItem = async (id: string, type: 'file' | 'folder') => {
     setIsLoading(true);
     
     try {
@@ -282,11 +340,11 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       // Excluir o item
-      await fileService.deleteItem(id, item.type);
+      await fileService.deleteItem(id, type);
       
       toast({
         title: "Item excluído",
-        description: `${item.type === 'folder' ? 'Pasta' : 'Arquivo'} "${item.name}" excluído com sucesso`
+        description: `${type === 'folder' ? 'Pasta' : 'Arquivo'} "${item.name}" excluído com sucesso`
       });
       
       // Atualizar a lista de arquivos
@@ -304,15 +362,6 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
   
-  // Renomear item (não implementado no backend, apenas UI)
-  const renameItem = (id: string, newName: string) => {
-    // Placeholder para futura implementação
-    toast({
-      title: "Funcionalidade em desenvolvimento",
-      description: "A função de renomear ainda não está disponível"
-    });
-  };
-  
   // Atualizar lista de arquivos
   const refreshFiles = async () => {
     await fetchFiles(currentParentId);
@@ -327,6 +376,7 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
       filteredFiles,
       isLoading,
       error,
+      previewFile,
       setSearchQuery,
       navigateToFolder,
       navigateToBreadcrumb,
@@ -334,7 +384,8 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
       uploadFile,
       downloadFile,
       deleteItem,
-      renameItem,
+      openFilePreview,
+      closeFilePreview,
       refreshFiles
     }}>
       {children}

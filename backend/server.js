@@ -10,7 +10,7 @@ require('dotenv').config();
 const fs = require('fs');
 
 // Importar modelos
-const { User, File, Message, Chat } = require('./models');
+const { User, File, Message, Chat, Folder } = require('./models');
 
 // Configuração do app
 const app = express();
@@ -270,6 +270,83 @@ app.get('/api/check-file', (req, res) => {
   });
 });
 
+// Acesso público para visualização de arquivos
+app.get('/public/files/preview/:id', async (req, res) => {
+  try {
+    const fileId = req.params.id;
+    console.log(`Requisição de visualização pública para arquivo ${fileId}`);
+    
+    // Buscar o arquivo no banco de dados
+    const file = await File.findById(fileId);
+    if (!file) {
+      console.error(`Arquivo ${fileId} não encontrado`);
+      return res.status(404).send('Arquivo não encontrado');
+    }
+    
+    // Verificar se o arquivo é público
+    if (!file.isPublic) {
+      console.error(`Arquivo ${fileId} não é público`);
+      return res.status(403).send('Arquivo não é público');
+    }
+    
+    // Verificar se o arquivo físico existe
+    if (!fs.existsSync(file.path)) {
+      console.error(`Arquivo físico ${file.path} não encontrado`);
+      return res.status(404).send('Arquivo físico não encontrado');
+    }
+    
+    // Determinar o tipo de conteúdo
+    const mimeType = file.mimeType.toLowerCase();
+    
+    // Definir cabeçalhos apropriados
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${file.originalName}"`);
+    
+    // Para vídeos, implementar streaming
+    if (mimeType.startsWith('video/')) {
+      const stat = fs.statSync(file.path);
+      const fileSize = stat.size;
+      const range = req.headers.range;
+      
+      if (range) {
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunksize = (end - start) + 1;
+        const fileStream = fs.createReadStream(file.path, { start, end });
+        
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunksize,
+          'Content-Type': file.mimeType
+        });
+        
+        fileStream.pipe(res);
+      } else {
+        res.writeHead(200, {
+          'Content-Length': fileSize,
+          'Content-Type': file.mimeType
+        });
+        
+        fs.createReadStream(file.path).pipe(res);
+      }
+      
+      return;
+    }
+    
+    // Para outros tipos de arquivos, enviar diretamente
+    fs.createReadStream(file.path).pipe(res);
+    
+    // Registrar visualização
+    console.log(`Arquivo ${fileId} visualizado publicamente`);
+    
+  } catch (err) {
+    console.error('Erro ao visualizar arquivo público:', err.message);
+    res.status(500).send('Erro interno do servidor');
+  }
+});
+
 // Debug de arquivos na pasta uploads
 fs.readdir(uploadsPath, (err, files) => {
   if (err) {
@@ -499,6 +576,49 @@ app.get('/api/chats/:id/mensagens', verificarToken, async (req, res) => {
     res.json(mensagens);
   } catch (error) {
     res.status(500).json({ mensagem: 'Erro ao buscar mensagens', error: error.message });
+  }
+});
+
+// Rota para API para tornar um arquivo público ou privado
+app.put('/api/files/:itemType/:itemId/public', verificarToken, async (req, res) => {
+  try {
+    const { itemType, itemId } = req.params;
+    const { isPublic } = req.body;
+    
+    if (itemType !== 'file' && itemType !== 'folder') {
+      return res.status(400).json({ msg: 'Tipo de item inválido' });
+    }
+    
+    const Model = itemType === 'file' ? File : Folder;
+    const item = await Model.findById(itemId);
+    
+    if (!item) {
+      return res.status(404).json({ msg: 'Item não encontrado' });
+    }
+    
+    // Verificar se o usuário é o proprietário ou tem permissões especiais
+    if (item.owner.toString() !== req.usuario.id) {
+      const user = await User.findById(req.usuario.id);
+      const hasSpecialPermission = user.permissions?.includes('files:manage_any') || 
+                                  user.roles?.includes('admin');
+      
+      if (!hasSpecialPermission) {
+        return res.status(403).json({ msg: 'Acesso negado' });
+      }
+    }
+    
+    // Atualizar visibilidade
+    item.isPublic = isPublic;
+    await item.save();
+    
+    res.json({ 
+      _id: item._id,
+      isPublic: item.isPublic 
+    });
+    
+  } catch (err) {
+    console.error('Erro ao atualizar visibilidade do item:', err.message);
+    res.status(500).send('Erro no servidor');
   }
 });
 

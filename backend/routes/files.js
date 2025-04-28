@@ -57,6 +57,11 @@ router.get('/info/:id', auth, hasPermission('files:view'), filesController.getFi
 // @access  Private
 router.get('/download/:id', auth, hasPermission('files:download'), filesController.downloadFile);
 
+// @route   GET api/files/preview/:id
+// @desc    Visualizar/preview do arquivo
+// @access  Private
+router.get('/preview/:id', auth, hasPermission('files:view'), filesController.getFilePreview);
+
 // @route   POST api/files/share
 // @desc    Compartilhar arquivo ou pasta
 // @access  Private

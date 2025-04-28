@@ -1,191 +1,217 @@
 //src/components/file-storage/FileViewer.tsx
-import React from "react";
-import { 
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Download, Eye, File } from "lucide-react";
-import { FileItem } from "@/contexts/FileContext";
-import { cn } from "@/lib/utils";
-import { getBaseUrl } from "@/services/api";
-import { FileIcon } from "./FileIcon";
+import React, { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { X, Download, ExternalLink, FileText } from 'lucide-react';
+import { FilePreview } from '@/contexts/FileContext';
+import { fileService } from '@/services/fileService';
 
 interface FileViewerProps {
-  file: FileItem;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  onDownload: () => void;
+  filePreview: FilePreview | null;
+  onClose: () => void;
+  onDownload: (fileId: string) => Promise<void>;
 }
 
-export const FileViewer = ({ file, isOpen, onOpenChange, onDownload }: FileViewerProps) => {
-  // Garantir que o arquivo tenha um ícone
-  const fileIcon = file.icon || <FileIcon type="file" extension={file.extension} />;
+export const FileViewer: React.FC<FileViewerProps> = ({ 
+  filePreview, 
+  onClose,
+  onDownload
+}) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
-  // Determinar a URL de visualização para o arquivo
-  const getFilePreviewUrl = () => {
-    if (!file.path) return null;
+  // Manipulador para fazer download
+  const handleDownload = async () => {
+    if (!filePreview) return;
     
-    // Para arquivos relativos, adicionar o URL base
-    if (file.path.startsWith('/')) {
-      return `${getBaseUrl()}${file.path}`;
+    setIsLoading(true);
+    try {
+      await onDownload(filePreview.fileId);
+    } catch (error) {
+      console.error('Erro ao baixar arquivo:', error);
+      setLoadError(error instanceof Error ? error.message : 'Erro ao baixar arquivo');
+    } finally {
+      setIsLoading(false);
     }
-    
-    return file.path;
   };
   
-  // Determinar preview content based on file extension
+  // Abrir em nova aba
+  const handleOpenInNewTab = () => {
+    if (!filePreview) return;
+    window.open(filePreview.previewUrl, '_blank');
+  };
+  
+  // Não exibir nada se não houver arquivo para visualizar
+  if (!filePreview) return null;
+  
+  // Determinar o tipo de visualização com base no tipo do arquivo
   const renderPreview = () => {
-    const extension = file.extension?.toLowerCase();
-    const previewUrl = getFilePreviewUrl();
+    const fileType = filePreview.fileType.toLowerCase();
     
-    // Renderizar preview específico por tipo de arquivo
-    switch(extension) {
-      case 'pdf':
-        return (
-          <div className="bg-red-50 rounded-lg p-10 text-center">
-            <div className="mx-auto w-20 h-20 flex items-center justify-center bg-red-100 rounded-full mb-4">
-              {fileIcon}
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Documento PDF</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {previewUrl ? (
-                <Button 
-                  variant="outline" 
-                  className="mt-2"
-                  onClick={() => window.open(previewUrl, '_blank')}
-                >
-                  <Eye className="mr-2 h-4 w-4" />
-                  Visualizar PDF
-                </Button>
-              ) : (
-                "Visualização indisponível. Clique em baixar para ver o arquivo."
-              )}
-            </p>
-          </div>
-        );
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-        return previewUrl ? (
-          <div className="text-center">
-            <img 
-              src={previewUrl} 
-              alt={file.name} 
-              className="max-h-96 mx-auto rounded-lg object-contain"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = "/placeholder.svg";
-                target.onerror = null;
-              }}
-            />
-          </div>
-        ) : (
-          <div className="bg-gray-50 rounded-lg p-10 text-center">
-            <div className="mx-auto w-20 h-20 flex items-center justify-center bg-gray-100 rounded-full mb-4">
-              {fileIcon}
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Imagem {extension?.toUpperCase()}</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Visualização indisponível. Clique em baixar para ver a imagem.
-            </p>
-          </div>
-        );
-      case 'docx':
-      case 'doc':
-        return (
-          <div className="bg-blue-50 rounded-lg p-10 text-center">
-            <div className="mx-auto w-20 h-20 flex items-center justify-center bg-blue-100 rounded-full mb-4">
-              {fileIcon}
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Documento Word</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Visualização indisponível. Clique em baixar para ver o arquivo.
-            </p>
-          </div>
-        );
-      case 'xlsx':
-      case 'xls':
-        return (
-          <div className="bg-green-50 rounded-lg p-10 text-center">
-            <div className="mx-auto w-20 h-20 flex items-center justify-center bg-green-100 rounded-full mb-4">
-              {fileIcon}
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Planilha Excel</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Visualização indisponível. Clique em baixar para ver o arquivo.
-            </p>
-          </div>
-        );
-      case 'pptx':
-      case 'ppt':
-        return (
-          <div className="bg-orange-50 rounded-lg p-10 text-center">
-            <div className="mx-auto w-20 h-20 flex items-center justify-center bg-orange-100 rounded-full mb-4">
-              {fileIcon}
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Apresentação PowerPoint</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Visualização indisponível. Clique em baixar para ver o arquivo.
-            </p>
-          </div>
-        );
-      default:
-        return (
-          <div className="bg-gray-50 rounded-lg p-10 text-center">
-            <div className="mx-auto w-20 h-20 flex items-center justify-center bg-gray-100 rounded-full mb-4">
-              <File className="h-12 w-12 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">
-              Arquivo {extension ? extension.toUpperCase() : "Desconhecido"}
-            </h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Visualização não disponível para este tipo de arquivo.
-            </p>
-          </div>
-        );
+    // Se não puder visualizar, mostrar mensagem
+    if (!filePreview.canPreview) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50">
+          <FileText size={48} className="text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium mb-2">Este arquivo não pode ser visualizado</h3>
+          <p className="text-gray-500 text-sm mb-4">
+            Você precisa baixar este arquivo para visualizá-lo.
+          </p>
+          <Button onClick={handleDownload} disabled={isLoading}>
+            <Download className="mr-2 h-4 w-4" />
+            {isLoading ? 'Baixando...' : 'Baixar arquivo'}
+          </Button>
+        </div>
+      );
     }
+    
+    // Imagens
+    if (fileType.startsWith('image/')) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-gray-50">
+          <img 
+            src={filePreview.previewUrl} 
+            alt={filePreview.fileName} 
+            className="max-h-full max-w-full object-contain" 
+            onError={() => setLoadError('Erro ao carregar imagem')}
+          />
+        </div>
+      );
+    }
+    
+    // PDF
+    if (fileType === 'application/pdf') {
+      return (
+        <div className="h-[70vh]">
+          <iframe 
+            src={filePreview.previewUrl} 
+            title={filePreview.fileName}
+            className="w-full h-full"
+            onError={() => setLoadError('Erro ao carregar PDF')}
+          />
+        </div>
+      );
+    }
+    
+    // Vídeos
+    if (fileType.startsWith('video/')) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-black">
+          <video 
+            src={filePreview.previewUrl}
+            controls
+            className="max-h-full max-w-full"
+            onError={() => setLoadError('Erro ao carregar vídeo')}
+          >
+            Seu navegador não suporta a reprodução deste vídeo.
+          </video>
+        </div>
+      );
+    }
+    
+    // Áudio
+    if (fileType.startsWith('audio/')) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50">
+          <div className="w-full max-w-md bg-white p-4 rounded-lg shadow">
+            <h3 className="text-center font-medium mb-4">{filePreview.fileName}</h3>
+            <audio 
+              src={filePreview.previewUrl}
+              controls
+              className="w-full"
+              onError={() => setLoadError('Erro ao carregar áudio')}
+            >
+              Seu navegador não suporta a reprodução deste áudio.
+            </audio>
+          </div>
+        </div>
+      );
+    }
+    
+    // Arquivo de texto
+    if (fileType.startsWith('text/') || 
+        fileType === 'application/json' || 
+        fileType === 'application/xml') {
+      return (
+        <div className="h-[70vh] overflow-auto bg-gray-50">
+          <iframe 
+            src={filePreview.previewUrl}
+            title={filePreview.fileName}
+            className="w-full h-full border-0"
+            onError={() => setLoadError('Erro ao carregar texto')}
+          />
+        </div>
+      );
+    }
+    
+    // Arquivos não suportados diretamente
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50">
+        <FileText size={48} className="text-gray-400 mb-4" />
+        <h3 className="text-lg font-medium mb-2">Visualização não disponível</h3>
+        <p className="text-gray-500 text-sm mb-4">
+          Este tipo de arquivo não pode ser visualizado diretamente no navegador.
+        </p>
+        <div className="flex gap-2">
+          <Button onClick={handleDownload} disabled={isLoading}>
+            <Download className="mr-2 h-4 w-4" />
+            {isLoading ? 'Baixando...' : 'Baixar arquivo'}
+          </Button>
+          <Button variant="outline" onClick={handleOpenInNewTab}>
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Abrir em nova aba
+          </Button>
+        </div>
+      </div>
+    );
   };
   
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="line-clamp-1">{file.name}</span>
-            <span className="text-xs text-gray-500 font-normal">
-              {file.size}
-            </span>
-          </DialogTitle>
+    <Dialog open={!!filePreview} onOpenChange={() => onClose()}>
+      <DialogContent className="sm:max-w-[80vw] max-h-[90vh] p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-0">
+          <div className="flex justify-between items-center">
+            <div className="flex-1">
+              <DialogTitle className="font-medium text-lg">{filePreview.fileName}</DialogTitle>
+              <DialogDescription>
+                {fileService.canPreviewFile(filePreview.fileType) 
+                  ? 'Visualização do arquivo' 
+                  : 'Este arquivo não pode ser visualizado diretamente'}
+              </DialogDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="icon" onClick={handleOpenInNewTab} title="Abrir em nova aba">
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={handleDownload} title="Baixar">
+                <Download className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={onClose} title="Fechar">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </DialogHeader>
-        
-        <div className="py-4 min-h-[300px] flex items-center justify-center">
-          {renderPreview()}
+        <div className="mt-6">
+          {loadError ? (
+            <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50">
+              <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+                <h3 className="font-medium mb-2">Erro ao carregar arquivo</h3>
+                <p>{loadError}</p>
+              </div>
+              <Button 
+                variant="outline" 
+                className="mt-4"
+                onClick={handleDownload}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Tentar baixar o arquivo
+              </Button>
+            </div>
+          ) : (
+            renderPreview()
+          )}
         </div>
-        
-        <DialogFooter>
-		  <div className="flex w-full justify-between items-center">
-			 <div className="text-xs text-gray-500">
-			  Última modificação: {file.modified}
-			 </div>
-			 <Button onClick={() => {
-			  // Construir o nome completo do arquivo
-			  const fileName = file.name;
-			  const extension = file.extension;
-			  const fullFileName = extension ? `${fileName}.${extension}` : fileName;
-			  
-			  // Chamar download com o nome completo
-			  onDownload();
-			 }}>
-			  <Download className="mr-2 h-4 w-4" />
-			  Baixar
-			</Button>
-		  </div>
-		</DialogFooter>
       </DialogContent>
     </Dialog>
   );

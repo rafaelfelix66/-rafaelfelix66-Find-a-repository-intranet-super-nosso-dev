@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermission } from '@/hooks/usePermission';
+import { Layout } from "@/components/layout/Layout";
 import {
   Table,
   TableBody,
@@ -477,7 +478,8 @@ export function PermissionManagement() {
   }
   
   return (
-    <div className="container mx-auto py-6">
+   <Layout>
+    <div className="container mx-auto py-6 max-w-full">
       <h1 className="text-3xl font-bold mb-6">Gerenciamento de Permissões</h1>
       
       <Tabs defaultValue="users" value={activeTab} onValueChange={setActiveTab}>
@@ -832,5 +834,6 @@ export function PermissionManagement() {
         </DialogContent>
       </Dialog>
     </div>
+  </Layout>
   );
 }
