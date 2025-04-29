@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
+
 export interface FileOwner {
   id: string;
   name: string;
@@ -117,36 +118,99 @@ export const FileProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [files, searchQuery]);
   
   // Função para abrir visualização de arquivo
-  const openFilePreview = (file: FileItem) => {
-    try {
-      // Verificar se o arquivo pode ser visualizado
-      const canPreview = fileService.canPreviewFile(file.mimeType, file.extension);
-      
-      // Gerar URL para preview
-      const previewUrl = fileService.getFilePreviewUrl(file.id);
-      
-      // Definir informações do preview
+  const openFilePreview = async (file: FileItem) => {
+  try {
+    // Verificar se o arquivo pode ser visualizado
+    const canPreview = fileService.canPreviewFile(file.mimeType, file.extension);
+    
+    if (!canPreview) {
       setPreviewFile({
         fileId: file.id,
         fileName: file.name,
         fileType: file.mimeType || `file/${file.extension}`,
-        previewUrl,
-        canPreview
+        previewUrl: '', // Vazio para arquivos que não podem ser visualizados
+        canPreview: false
       });
-    } catch (error) {
-      console.error('Erro ao abrir visualização:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível abrir a visualização do arquivo",
-        variant: "destructive"
-      });
+      return;
     }
-  };
-  
-  // Função para fechar visualização de arquivo
-  const closeFilePreview = () => {
-    setPreviewFile(null);
-  };
+    
+    // Obter token de autenticação
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Usuário não autenticado');
+    }
+    
+    // Definir a URL base diretamente, sem depender de api.getBaseUrl()
+    // Em produção, usamos a mesma origem (ou outra URL conforme necessário)
+    let baseUrl = '/api';
+    
+    // Em desenvolvimento, conecta-se ao servidor de desenvolvimento
+    if (process.env.NODE_ENV !== 'production') {
+      baseUrl = 'http://localhost:3000/api';
+    }
+    
+    // Preparar URL completa
+    const url = `${baseUrl}/files/preview/${file.id}`;
+    console.log(`Requisitando preview do arquivo: ${url}`);
+    
+    // Log detalhado para debug
+    console.log(`Token presente: ${token ? 'Sim' : 'Não'}`);
+    console.log(`Token (primeiros caracteres): ${token.substring(0, 10)}...`);
+    
+    // Fazer a requisição com o token nos cabeçalhos
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'x-auth-token': token // Incluir em ambos os formatos para compatibilidade
+      }
+    });
+    
+    // Log de debug para a resposta
+    console.log(`Status da resposta: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Erro na resposta: Status ${response.status}`);
+      console.error(`Corpo da resposta: ${errorText}`);
+      throw new Error(`Erro ao buscar preview: ${response.status} - ${errorText}`);
+    }
+    
+    // Criar blob URL para o conteúdo
+    const blob = await response.blob();
+    const previewUrl = URL.createObjectURL(blob);
+    
+    // Definir o objeto de preview
+    setPreviewFile({
+      fileId: file.id,
+      fileName: file.name,
+      fileType: file.mimeType || `file/${file.extension}`,
+      previewUrl,
+      canPreview: true
+    });
+    
+    console.log('Preview preparado com sucesso:', {
+      fileName: file.name,
+      fileType: file.mimeType
+    });
+  } catch (error) {
+    console.error('Erro ao abrir visualização:', error);
+    toast({
+      title: "Erro ao visualizar arquivo",
+      description: error instanceof Error ? error.message : "Não foi possível abrir a visualização",
+      variant: "destructive"
+    });
+  }
+};
+
+// Função para fechar visualização de arquivo
+const closeFilePreview = () => {
+  // Limpar URL de objeto se existir
+  if (previewFile?.previewUrl && previewFile.previewUrl.startsWith('blob:')) {
+    URL.revokeObjectURL(previewFile.previewUrl);
+  }
+  setPreviewFile(null);
+};
   
   // Função para reconstruir o caminho da pasta
   const buildFolderPath = async (folderId: string | null): Promise<string[]> => {
