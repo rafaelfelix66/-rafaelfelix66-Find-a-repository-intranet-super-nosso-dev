@@ -1,4 +1,4 @@
-
+// src/pages/Login.tsx (modificado)
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import InputMask from "react-input-mask"; // Precisamos adicionar esta dependência
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  const [cpf, setCpf] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
@@ -17,11 +18,18 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-	console.log('Formulário submetido:', { email, password });
+    console.log('Formulário submetido:', { cpf, password });
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
+      // Remover formatação do CPF
+      const cpfLimpo = cpf.replace(/\D/g, '');
+      
+      if (cpfLimpo.length !== 11) {
+        throw new Error("CPF inválido. Informe um CPF com 11 dígitos.");
+      }
+      
+      await login(cpfLimpo, password);
       toast({
         title: "Login bem-sucedido",
         description: "Bem-vindo de volta à Intranet Super Nosso!",
@@ -58,20 +66,22 @@ export default function Login() {
           <CardHeader>
             <CardTitle>Login</CardTitle>
             <CardDescription>
-              Entre com suas credenciais para acessar o sistema.
+              Entre com seu CPF e senha para acessar o sistema.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  placeholder="seu.email@supernosso.com.br"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                <Label htmlFor="cpf">CPF</Label>
+                <InputMask
+                  mask="999.999.999-99"
+                  id="cpf"
+                  type="text"
+                  placeholder="000.000.000-00"
+                  value={cpf}
+                  onChange={(e) => setCpf(e.target.value)}
                   required
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
               <div className="space-y-2">
@@ -100,10 +110,10 @@ export default function Login() {
           </CardContent>
           <CardFooter className="flex justify-center">
             <p className="text-sm text-gray-500">
-              Não tem uma conta?{" "}
-              <Link to="/registro" className="text-supernosso-red hover:underline">
-                Registre-se
-              </Link>
+              Primeiro acesso?{" "}
+              <span className="text-supernosso-red">
+                Use seu CPF e os últimos 6 dígitos do CPF como senha inicial
+              </span>
             </p>
           </CardFooter>
         </Card>

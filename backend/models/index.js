@@ -5,7 +5,16 @@ const Role = mongoose.model('Role', require('./Role').schema);
 
 const UserSchema = new mongoose.Schema({
   nome: String,
-  email: { type: String, unique: true, required: true },
+  cpf: { 
+    type: String, 
+    unique: true, 
+    required: true, 
+    index: true 
+  },
+  email: { 
+    type: String, 
+    unique: true 
+  },
   password: String,
   cargo: String,
   departamento: String,
@@ -13,7 +22,9 @@ const UserSchema = new mongoose.Schema({
   dataCriacao: { type: Date, default: Date.now },
   ultimoAcesso: Date,
   roles: [String],
-  permissoes: [String]
+  permissoes: [String],
+  ativo: { type: Boolean, default: true },
+  ultimaSincronizacao: { type: Date, default: null }
 });
 
 // Hash de senha antes de salvar
