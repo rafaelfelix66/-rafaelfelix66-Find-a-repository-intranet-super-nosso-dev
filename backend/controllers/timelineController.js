@@ -22,12 +22,12 @@ const normalizePath = (filePath) => {
 // Obter todas as publicações
 const getPosts = async (req, res) => {
   try {
-    console.log('Buscando posts para o usuário:', req.usuario.id);
+    //console.log('Buscando posts para o usuário:', req.usuario.id);
     const posts = await Post.find()
       .sort({ createdAt: -1 })
       .populate('user', ['nome'])
       .populate('comments.user', ['nome']);
-    console.log(`Encontrados ${posts.length} posts`);
+    //console.log(`Encontrados ${posts.length} posts`);
     
     // Converter os posts para o formato esperado pelo frontend
     const formattedPosts = posts.map(post => {
@@ -52,10 +52,10 @@ const getPosts = async (req, res) => {
       
       // CORREÇÃO IMPORTANTE: Processar propriamente o eventData para garantir que ele chegue ao frontend
       if (postObj.eventData) {
-        console.log(`Post ${postObj._id} contém dados de evento:`, {
-          tipo: typeof postObj.eventData,
-          valor: postObj.eventData
-        });
+        //console.log(`Post ${postObj._id} contém dados de evento:`, {
+         // tipo: typeof postObj.eventData,
+         // valor: postObj.eventData
+        //});
         
         // Certificar-se de que eventData está no formato correto
         let eventInfo = postObj.eventData;
@@ -64,7 +64,7 @@ const getPosts = async (req, res) => {
         if (typeof eventInfo === 'string') {
           try {
             eventInfo = JSON.parse(eventInfo);
-            console.log(`Post ${postObj._id} - eventData parseado de string:`, eventInfo);
+           // console.log(`Post ${postObj._id} - eventData parseado de string:`, eventInfo);
             // Atualizar o eventData para o objeto parseado
             postObj.eventData = eventInfo;
           } catch (e) {
@@ -92,7 +92,7 @@ const getPosts = async (req, res) => {
           location: postObj.eventData.location
         };
         
-        console.log(`Post ${postObj._id} processado com evento:`, postObj.eventData);
+        //console.log(`Post ${postObj._id} processado com evento:`, postObj.eventData);
       }
       
       // Log detalhado para depuração
@@ -108,7 +108,7 @@ const getPosts = async (req, res) => {
       return postObj;
     });
     
-    console.log('Posts formatados com sucesso:', formattedPosts.length);
+    //console.log('Posts formatados com sucesso:', formattedPosts.length);
     return res.json(formattedPosts);
   } catch (err) {
     console.error('Erro ao buscar posts:', err.message);

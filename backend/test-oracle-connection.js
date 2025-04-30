@@ -27,8 +27,15 @@ async function testarConexao() {
     console.log('✅ Conexão estabelecida com sucesso!');
     
     // Testar consulta simples
-    const result = await connection.execute('SELECT USER FROM DUAL');
+    const result = await connection.execute('SELECT NOME, CPF, FUNCAO, SETOR FROM CONSINCO.STAV_LOG_INTR');
     console.log('Usuário conectado:', result.rows[0]);
+	
+	console.log('Configuração de conexão Oracle:', {
+  host: '172.19.0.63',
+  port: 1521,
+  sid: 'desenv20',
+  user: process.env.ORACLE_USER ? 'PRESENTE' : 'AUSENTE'
+});
     
     await connection.close();
   } catch (err) {

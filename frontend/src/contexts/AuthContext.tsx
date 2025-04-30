@@ -114,7 +114,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       senha: password // Usando 'senha' como esperado pelo backend
     };
     
-    console.log('Enviando dados de login:', { cpf: payload.cpf, senha: '******' });
+    //console.log('Enviando dados de login:', { cpf: payload.cpf, senha: '******' });
     
     // Fazer a requisição diretamente usando axios ou fetch
     const response = await fetch(`${window.location.origin}/api/auth/login`, {

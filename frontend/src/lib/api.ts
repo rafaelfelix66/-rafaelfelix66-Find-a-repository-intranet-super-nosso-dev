@@ -71,7 +71,7 @@ export const loginUser = async (cpf: string, password: string) => {
       senha: password  // "senha" em vez de "password"
     };
     
-    console.log('Enviando requisição de login:', requestBody);
+    //console.log('Enviando requisição de login:', requestBody);
     
     const response = await api.post('/auth/login', requestBody);
     
