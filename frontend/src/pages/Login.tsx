@@ -16,35 +16,40 @@ export default function Login() {
   const { login } = useAuth();
   const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log('Formulário submetido:', { cpf, password });
-    setIsSubmitting(true);
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  console.log('Formulário submetido:', { cpf, password });
+  setIsSubmitting(true);
 
-    try {
-      // Remover formatação do CPF
-      const cpfLimpo = cpf.replace(/\D/g, '');
-      
-      if (cpfLimpo.length !== 11) {
-        throw new Error("CPF inválido. Informe um CPF com 11 dígitos.");
-      }
-      
-      await login(cpfLimpo, password);
-      toast({
-        title: "Login bem-sucedido",
-        description: "Bem-vindo de volta à Intranet Super Nosso!",
-      });
-    } catch (error) {
-      console.error(error);
-      toast({
-        title: "Erro de autenticação",
-        description: error instanceof Error ? error.message : "Falha no login. Verifique suas credenciais.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
+  try {
+    // Remover formatação do CPF
+    const cpfLimpo = cpf.replace(/\D/g, '');
+    
+    if (cpfLimpo.length !== 11) {
+      throw new Error("CPF inválido. Informe um CPF com 11 dígitos.");
     }
-  };
+    
+	
+    // Garantir que estamos usando o método correto
+    await login(cpfLimpo, password);
+    
+    toast({
+      title: "Login bem-sucedido",
+      description: "Bem-vindo de volta à Intranet Super Nosso!",
+    });
+  } catch (error) {
+    console.error('Erro de login:', error);
+    toast({
+      title: "Erro de autenticação",
+      description: error instanceof Error ? error.message : "Falha no login. Verifique suas credenciais.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-supernosso-lightgray">

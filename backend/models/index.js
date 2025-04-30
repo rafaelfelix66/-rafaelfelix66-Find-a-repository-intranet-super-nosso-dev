@@ -37,7 +37,29 @@ UserSchema.pre('save', async function(next) {
 
 // Método para comparar senha
 UserSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+  try {
+    // Para debugging
+    console.log('Comparando senhas:', {
+      fornecida: candidatePassword,
+      armazenada: this.password.substring(0, 10) + '...'
+    });
+    
+    // Verificar se a senha está hasheada
+    if (!this.password.startsWith('$2')) {
+      // Se não estiver hasheada, comparar diretamente
+      const isMatch = this.password === candidatePassword;
+      console.log('Comparação direta:', isMatch);
+      return isMatch;
+    }
+    
+    // Se estiver hasheada, usar bcrypt
+    const isMatch = await bcrypt.compare(candidatePassword, this.password);
+    console.log('Resultado da comparação bcrypt:', isMatch);
+    return isMatch;
+  } catch (error) {
+    console.error('Erro ao comparar senhas:', error);
+    return false;
+  }
 };
 
 // Método para verificar permissões

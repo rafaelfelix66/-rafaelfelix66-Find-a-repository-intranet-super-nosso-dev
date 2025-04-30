@@ -313,12 +313,16 @@ async function atualizarOuCriarUsuario(dados) {
       // Criar novo usuário com senha padrão (últimos 6 dígitos do CPF)
       const senhaInicial = dados.CPF.slice(-6);
       
-      const novoUsuario = new User({
-        ...userData,
-        email: `${dados.CPF}@supernosso.intranet`, // Email padrão
-        password: senhaInicial,
-        roles: ['user'] // Papel padrão para novos usuários
-      });
+// Usar bcrypt para hash da senha
+const salt = await bcrypt.genSalt(10);
+const senhaHash = await bcrypt.hash(senhaInicial, salt);
+
+const novoUsuario = new User({
+  ...userData,
+  email: `${dados.CPF}@supernosso.intranet`,
+  password: senhaHash, // Usar a senha hasheada
+  roles: ['user']
+});
       
       await novoUsuario.save();
       console.log(`Novo usuário criado: ${dados.NOME} (${dados.CPF})`);

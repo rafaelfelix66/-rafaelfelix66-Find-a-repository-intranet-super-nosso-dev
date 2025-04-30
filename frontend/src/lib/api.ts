@@ -1,30 +1,6 @@
 // src/lib/api.ts
 import axios from 'axios';
 
-// Função auxiliar para login
-const loginUser = async (cpf: string, password: string) => {
-  try {
-    // Verificar qual é a estrutura esperada pelo backend
-    const requestBody = { 
-      cpf, 
-      senha: password  // "senha" em vez de "password"
-    };
-    
-    console.log('Enviando requisição de login:', requestBody);
-    
-    const response = await api.post('/auth/login', requestBody);
-    
-    if (response && response.token) {
-      localStorage.setItem('token', response.token);
-      return { success: true, data: response };
-    }
-    
-    return { success: false, message: 'Resposta inválida do servidor' };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erro ao fazer login';
-    return { success: false, message };
-  }
-};
 // Determinar a URL base da API com base no ambiente
 const getBaseUrl = () => {
   // Em produção, usamos a mesma origem (ou outra URL conforme necessário)
@@ -85,3 +61,28 @@ api.interceptors.response.use(
     }
   }
 );
+
+// Função auxiliar para login
+export const loginUser = async (cpf: string, password: string) => {
+  try {
+    // Verificar qual é a estrutura esperada pelo backend
+    const requestBody = { 
+      cpf, 
+      senha: password  // "senha" em vez de "password"
+    };
+    
+    console.log('Enviando requisição de login:', requestBody);
+    
+    const response = await api.post('/auth/login', requestBody);
+    
+    if (response && response.token) {
+      localStorage.setItem('token', response.token);
+      return { success: true, data: response };
+    }
+    
+    return { success: false, message: 'Resposta inválida do servidor' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erro ao fazer login';
+    return { success: false, message };
+  }
+};
