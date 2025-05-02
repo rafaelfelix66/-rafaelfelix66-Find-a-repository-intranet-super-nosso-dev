@@ -11,11 +11,15 @@ const PostSchema = new mongoose.Schema({
     type: String,
     default: ""
   },
-  attachments: [{
-    type: String, // caminho do arquivo
-    contentType: String, // tipo de conteúdo (imagem, vídeo, etc.)
-    name: String // nome original do arquivo
-  }],
+  targetAudience: {
+    type: String,
+    enum: ['TODOS', 'A CLASSIFICAR', 'ADMINISTRATIVA', 'ADMINISTRATIVO', 'LIDERANÇA', 'OPERACIONAL'],
+    default: 'TODOS'
+  },
+  attachments: [String], 
+  // Adicionar campo de imagens
+  images: [String],
+  
   eventData: {
     type: mongoose.Schema.Types.Mixed, // Para armazenar dados de evento (título, data, local)
     default: null

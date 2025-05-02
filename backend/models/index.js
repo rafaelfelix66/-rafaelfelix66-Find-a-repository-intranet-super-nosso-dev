@@ -123,6 +123,16 @@ const PostSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed, // Para armazenar dados de evento (título, data, local)
     default: null
   },
+  departamentoVisibilidade: {
+  type: [String],
+  default: ['TODOS'],
+  validate: {
+    validator: function(v) {
+      return Array.isArray(v);
+    },
+    message: props => `${props.value} não é um array válido!`
+  }
+},
   likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   comments: [{
     text: String,

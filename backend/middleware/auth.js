@@ -4,11 +4,11 @@ const jwt = require('jsonwebtoken');
 // Middleware melhorado para verificação de token
 const auth = (req, res, next) => {
   // Debug para verificar cabeçalhos
-  console.log('Auth middleware: Verificando token de autenticação');
-  console.log('Headers:', {
-    authorization: req.headers.authorization,
-    'x-auth-token': req.headers['x-auth-token']
-  });
+  //console.log('Auth middleware: Verificando token de autenticação');
+  //console.log('Headers:', {
+  //  authorization: req.headers.authorization,
+  //  'x-auth-token': req.headers['x-auth-token']
+ // });
   
   // Obter token do cabeçalho
   const token = req.headers['x-auth-token'] || 
@@ -25,11 +25,11 @@ const auth = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Debug detalhado
-    console.log('Auth middleware: Token validado com sucesso:', {
-      id: decoded.id,
-      email: decoded.email,
-      nome: decoded.nome
-    });
+    //console.log('Auth middleware: Token validado com sucesso:', {
+   //   id: decoded.id,
+    //  email: decoded.email,
+   //   nome: decoded.nome
+   // });
     
     // Atribuir dados do usuário ao objeto req
     req.usuario = {

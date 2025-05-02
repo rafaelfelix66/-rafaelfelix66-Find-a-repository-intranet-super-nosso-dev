@@ -4,8 +4,8 @@ const { User, Role } = require('../models');
 // Middleware para verificar permissão específica
 const hasPermission = (requiredPermission) => {
   return async (req, res, next) => {
-	console.log('Verificando permissão:', requiredPermission);
-    console.log('Usuário na requisição:', req.usuario);
+	//console.log('Verificando permissão:', requiredPermission);
+    //console.log('Usuário na requisição:', req.usuario);
     try {
       // Verificar se o usuário está autenticado
       if (!req.usuario || !req.usuario.id) {

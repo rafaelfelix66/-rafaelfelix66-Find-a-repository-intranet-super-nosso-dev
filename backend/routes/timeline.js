@@ -5,6 +5,7 @@ const router = express.Router();
 const timelineController = require('../controllers/timelineController');
 const auth = require('../middleware/auth');
 const { hasPermission, isOwnerOrHasPermission } = require('../middleware/permissions');
+const { filterPostsByDepartment } = require('../middleware/departamento');
 const { Post } = require('../models');
 const multer = require('multer');
 const path = require('path');
@@ -50,6 +51,10 @@ console.log('Registrando rotas da timeline...');
 // @desc    Obter todas as publicações
 // @access  Private
 router.get('/', auth, timelineController.getPosts);
+// @route   GET api/timeline
+// @desc    Obter todas as publicações (filtrado por departamento)
+// @access  Private
+router.get('/', auth, filterPostsByDepartment, timelineController.getPosts); // Adicionar middleware
 // @route   POST api/timeline
 // @desc    Criar uma publicação
 // @access  Private

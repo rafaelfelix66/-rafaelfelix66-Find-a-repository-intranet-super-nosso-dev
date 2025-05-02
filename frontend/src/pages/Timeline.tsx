@@ -5,6 +5,7 @@ import { Layout } from "@/components/layout/Layout";
 import { ImageModal } from "@/components/ui/image-modal";
 import { VideoModal } from "@/components/ui/video-modal";
 import { VideoRenderer } from "@/components/ui/video-renderer";
+import DepartamentoSelector from "@/components/timeline/DepartamentoSelector";
 import { 
   Card, 
   CardContent, 
@@ -56,6 +57,7 @@ import { api } from '@/services/api';
 import { PermissionGuard } from '@/components/auth/PermissionGuard';
 import { OwnershipGuard } from '@/components/auth/OwnershipGuard';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from "@/hooks/use-toast";
 
 // Interfaces
 interface PostComment {
@@ -510,7 +512,8 @@ const fetchPosts = async () => {
 const createNewPostApi = async (
   text: string, 
   files: File[], 
-  eventData?: { title: string; date: string; location: string }
+  eventData?: { title: string; date: string; location: string },
+  departamentoVisibilidade: string[] = ['TODOS'] 
 ) => {
   try {
     const formData = new FormData();
@@ -519,6 +522,8 @@ const createNewPostApi = async (
     if (text) {
       formData.append('text', text);
     }
+	// Adicionar departamentos à requisição
+      formData.append('departamentoVisibilidade', JSON.stringify(departamentoVisibilidade));
     
     // Adicionar arquivos se existirem
     if (files.length > 0) {
@@ -682,7 +687,8 @@ const Timeline = () => {
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const { currentUser, hasPermission } = useAuth();
-
+  const { toast } = useToast();
+  const [departamentoVisibilidade, setDepartamentoVisibilidade] = useState(['TODOS']);
   const diagnosticAllImages = async () => {
     if (posts.length === 0) {
       toast({
@@ -868,7 +874,7 @@ const Timeline = () => {
       description: "Aguarde enquanto processamos sua publicação..."
     });
 
-    const newPost = await createNewPostApi(newPostContent, files, eventData);
+    const newPost = await createNewPostApi(newPostContent, files, eventData, departamentoVisibilidade);
     
     setPosts(prevPosts => [newPost, ...prevPosts]);
 
@@ -888,6 +894,7 @@ const Timeline = () => {
     setEventLocation("");
     setEventDate(undefined);
     setNewPostDialog(false);
+	setDepartamentoVisibilidade(['TODOS']);
   } catch (error) {
     console.error('Erro ao enviar post:', error);
     toast({ 
@@ -1210,6 +1217,9 @@ const deletePost = async (postId: string) => {
                           value={newPostContent}
                           onChange={(e) => setNewPostContent(e.target.value)}
                         />
+						   <DepartamentoSelector 
+							 onChange={setDepartamentoVisibilidade}
+                           />
                       </div>
                     </div>
 

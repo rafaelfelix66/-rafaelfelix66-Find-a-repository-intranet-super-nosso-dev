@@ -19,11 +19,39 @@ const normalizePath = (filePath) => {
   return `/uploads/timeline/${filename}`;
 };
 
+ // Validar departamentos se fornecidos
+    const departamentosValidos = [
+      'TODOS',
+      'A CLASSIFICAR',
+      'ADMINISTRATIVA', 
+      'ADMINISTRATIVO', 
+      'LIDERANÇA', 
+      'OPERACIONAL'
+    ];
+
 // Obter todas as publicações
 const getPosts = async (req, res) => {
   try {
+    // Buscar usuário com suas informações de departamento
+    const user = await User.findById(req.usuario.id);
+    if (!user) {
+      return res.status(404).json({ mensagem: 'Usuário não encontrado' });
+    }
+    
+	console.log('Buscando posts para usuário:', req.usuario.id, 'Departamento:', user.departamento);
+	
+    // Construir query para posts
+	const query = {
+	  $or: [
+		{ departamentoVisibilidade: 'TODOS' },
+		{ departamentoVisibilidade: user.departamento }
+	  ]
+	};
+
+	console.log('Query de busca:', JSON.stringify(query));
+		
     //console.log('Buscando posts para o usuário:', req.usuario.id);
-    const posts = await Post.find()
+    const posts = await Post.find(query)
       .sort({ createdAt: -1 })
       .populate('user', ['nome'])
       .populate('comments.user', ['nome']);
@@ -119,14 +147,33 @@ const getPosts = async (req, res) => {
 // Criar uma publicação
 const createPost = async (req, res) => {
   try {
-    const { text, eventData } = req.body;
+    const { text, eventData, departamentoVisibilidade  } = req.body;
     console.log('Tentativa de criar post:', { 
       text, 
       user: req.usuario.id, 
       files: req.files ? req.files.length : 0,
-      eventData: typeof eventData === 'string' ? eventData.substring(0, 50) + '...' : (eventData ? JSON.stringify(eventData).substring(0, 50) + '...' : 'undefined')
+      eventData: typeof eventData === 'string' ? eventData.substring(0, 50) + '...' : (eventData ? JSON.stringify(eventData).substring(0, 50) + '...' : 'undefined'),
+	  departamentoVisibilidade
     });
     
+	// Processar departamentos de visibilidade
+let departamentosProcessados = ['TODOS']; // Valor padrão
+
+if (departamentoVisibilidade) {
+  try {
+    // Se for string, tenta fazer o parse para obter array
+    if (typeof departamentoVisibilidade === 'string') {
+      departamentosProcessados = JSON.parse(departamentoVisibilidade);
+    } else {
+      departamentosProcessados = departamentoVisibilidade;
+    }
+    console.log('Departamentos processados:', departamentosProcessados);
+  } catch (error) {
+    console.error('Erro ao processar departamentos:', error);
+  }
+}
+	
+	
     // Validação - permitir posts vazios se existir eventData ou anexos
     if (!text && !eventData && (!req.files || req.files.length === 0)) {
       console.log('Post vazio rejeitado: sem texto, evento ou anexos');
@@ -189,24 +236,47 @@ const createPost = async (req, res) => {
     // Criar o objeto Post com os caminhos normalizados
     const normalizedAttachments = attachments.map(att => att.path);
     
+	console.log('Antes do newPost:', {
+      id: req.usuario.id,
+      text: req.text ? req.text.substring(0, 30) : '',
+	  departamentoVisibilidade: departamentosProcessados
+      });
+	
     const newPost = new Post({
       text: text || '',
       user: req.usuario.id,
+	  departamentoVisibilidade: departamentosProcessados,
       attachments: normalizedAttachments,
       eventData: parsedEventData,
       images: normalizedAttachments
     });
     
-    console.log('Salvando post com eventData:', newPost.eventData);
+	//console.log('Tem departamentoVisibilidade no schema?', 'departamentoVisibilidade' in newPost);
+	//console.log('Modelo antes de salvar:', newPost);
+	
+	console.log('Depois do newPost:', {
+      id: newPost._id,
+      text: newPost.text ? newPost.text.substring(0, 30) : '',
+	  departamentoVisibilidade: newPost.departamentoVisibilidade
+      });
+    
+	//newPost.targetAudience = validatedAudience;
+    //console.log('Após forçar targetAudience:', newPost.targetAudience);
+	
+	console.log('Salvando post com eventData:', newPost.eventData);
     
     const post = await newPost.save();
     console.log('Post salvo com sucesso:', {
       id: post._id,
+	  departamentoVisibilidade: post.departamentoVisibilidade,
       text: post.text ? post.text.substring(0, 30) : '',
       attachmentsLength: post.attachments ? post.attachments.length : 0,
       imagesLength: post.images ? post.images.length : 0,
       eventData: post.eventData ? JSON.stringify(post.eventData) : 'ausente'
     });
+	
+	const postFromDB = await Post.findById(post._id).lean();
+console.log('Post recuperado do DB:', postFromDB);
     
     // Carregar informações do usuário para a resposta
     const populatedPost = await Post.findById(post._id)

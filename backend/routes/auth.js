@@ -34,8 +34,8 @@ router.get('/user', verificarToken, async (req, res) => {
 // @access  Private
 router.get('/user-permissions', verificarToken, async (req, res) => {
   try {
-    console.log('Rota de permissões de usuário acessada');
-    console.log('ID do usuário:', req.usuario.id);
+    //console.log('Rota de permissões de usuário acessada');
+    //console.log('ID do usuário:', req.usuario.id);
 	
     const { User, Role } = require('../models');
 
@@ -62,9 +62,9 @@ router.get('/user-permissions', verificarToken, async (req, res) => {
     // Se o usuário tem papéis, buscar permissões associadas
     if (user.roles && user.roles.length > 0) {
       try {
-        console.log('Buscando papéis para:', user.roles);
+        //console.log('Buscando papéis para:', user.roles);
         const userRoles = await Role.find({ name: { $in: user.roles } });
-        console.log('Papéis encontrados:', userRoles.length);
+        //console.log('Papéis encontrados:', userRoles.length);
         
         for (const role of userRoles) {
           if (role.permissions && role.permissions.length > 0) {
@@ -82,7 +82,7 @@ router.get('/user-permissions', verificarToken, async (req, res) => {
       }
     }
     
-    console.log('Permissões atribuídas:', userResponse.permissions);
+    //console.log('Permissões atribuídas:', userResponse.permissions);
     
     res.json(userResponse);
   } catch (err) {
