@@ -1,1 +1,3 @@
-PS C:\intranet-super-nosso> docker exec -it intranet-mongodb mongosh -u admin -p senhasegura123 --authenticationDatabase admin
+docker exec -it intranet-mongodb mongosh -u admin -p senhasegura123 --authenticationDatabase admin
+use intranet
+db.posts.find() --achar posts

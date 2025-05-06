@@ -9,6 +9,7 @@ const socketIo = require('socket.io');
 require('dotenv').config();
 const fs = require('fs');
 
+
 // Importar modelos
 const { User, File, Message, Chat, Folder } = require('./models');
 
@@ -27,6 +28,7 @@ const uploadsPath = path.join(__dirname, 'uploads');
 const uploadsTimelinePath = path.join(uploadsPath, 'timeline');
 const uploadsDir = path.join(__dirname, 'uploads');
 const publicPath = path.join(__dirname, 'public');
+
 
 // Garantir que o diretório public existe para placeholder
 if (!fs.existsSync(publicPath)) {
@@ -375,12 +377,14 @@ fs.readdir(uploadsPath, (err, files) => {
 app.options('/api/files/upload', cors(corsOptions));
 
 // Rotas
+const llmRoutes = require('./routes/llm');
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/timeline', require('./routes/timeline'));
 app.use('/api/knowledge', require('./routes/knowledge'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/banners', require('./routes/banners'));
+app.use('/api/llm', llmRoutes);
 
 // Rotas de autenticação
 app.post('/api/auth/register', async (req, res) => {

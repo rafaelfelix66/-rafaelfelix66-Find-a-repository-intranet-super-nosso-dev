@@ -24,6 +24,7 @@ import ArticlePage from "./pages/ArticlePage";
 import NewArticlePage from "./pages/NewArticlePage";
 import BannerAdmin from "./pages/BannerAdmin";
 import Unauthorized from "./pages/Unauthorized";
+import Chat from "./pages/Chat";
 
 // Update Tailwind CSS variables to include the new red color
 import { useEffect } from "react";

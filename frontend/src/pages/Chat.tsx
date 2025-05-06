@@ -1,214 +1,397 @@
-
+// src/pages/Chat.tsx
 import { useState, useRef, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { 
   Card, 
-  CardContent, 
-  CardHeader, 
-  CardTitle 
+  CardContent
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search, Send, Paperclip, MoreVertical, Phone, Video, Info, MessageCircle } from "lucide-react";
+import { 
+  Search, 
+  Send, 
+  Paperclip, 
+  FileText,
+  MessageCircle, 
+  AlertCircle, 
+  Loader2,
+  FileQuestion,
+  Database
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-interface ChatUser {
-  id: string;
-  name: string;
-  avatar?: string;
-  initials: string;
-  lastMessage?: string;
-  lastMessageTime?: string;
-  online: boolean;
-}
-
-interface ChatMessage {
-  id: string;
-  text: string;
-  sent: boolean;
-  timestamp: string;
-  read: boolean;
-}
-
-interface ChatConversation {
-  userId: string;
-  messages: ChatMessage[];
-}
-
-const sampleUsers: ChatUser[] = [
-  {
-    id: "1",
-    name: "Maria Silva",
-    initials: "MS",
-    lastMessage: "Você viu o novo relatório?",
-    lastMessageTime: "10:25",
-    online: true
-  },
-  {
-    id: "2",
-    name: "João Oliveira",
-    initials: "JO",
-    lastMessage: "Precisamos marcar uma reunião",
-    lastMessageTime: "Ontem",
-    online: false
-  },
-  {
-    id: "3",
-    name: "Ana Santos",
-    initials: "AS",
-    lastMessage: "Ok, vou verificar isso",
-    lastMessageTime: "Seg",
-    online: true
-  },
-  {
-    id: "4",
-    name: "Pedro Costa",
-    initials: "PC",
-    lastMessage: "Obrigado pela ajuda!",
-    lastMessageTime: "Seg",
-    online: false
-  },
-  {
-    id: "5",
-    name: "Carla Martins",
-    initials: "CM",
-    lastMessage: "Documento enviado para análise",
-    lastMessageTime: "23/05",
-    online: false
-  }
-];
-
-const sampleConversations: Record<string, ChatConversation> = {
-  "1": {
-    userId: "1",
-    messages: [
-      {
-        id: "1-1",
-        text: "Olá, tudo bem?",
-        sent: false,
-        timestamp: "10:15",
-        read: true
-      },
-      {
-        id: "1-2",
-        text: "Tudo ótimo, e você?",
-        sent: true,
-        timestamp: "10:17",
-        read: true
-      },
-      {
-        id: "1-3",
-        text: "Estou bem também! Você viu o novo relatório?",
-        sent: false,
-        timestamp: "10:25",
-        read: true
-      }
-    ]
-  },
-  "2": {
-    userId: "2",
-    messages: [
-      {
-        id: "2-1",
-        text: "Bom dia!",
-        sent: false,
-        timestamp: "09:30",
-        read: true
-      },
-      {
-        id: "2-2",
-        text: "Bom dia, João! Como posso ajudar?",
-        sent: true,
-        timestamp: "09:35",
-        read: true
-      },
-      {
-        id: "2-3",
-        text: "Precisamos marcar uma reunião para discutir o projeto",
-        sent: false,
-        timestamp: "09:40",
-        read: true
-      }
-    ]
-  }
-};
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { llmService, ChatMessage, LLMStatus } from "@/services/llmService";
+import ReactMarkdown from 'react-markdown';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle 
+} from "@/components/ui/dialog";
+import { fileService } from "@/services/fileService";
+import { FileItem } from "@/contexts/FileContext";
+import { ConversationList } from '@/components/chat/ConversationList';
+import { conversationService, Conversation } from '@/services/conversationService';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const Chat = () => {
-  const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null);
-  const [conversations, setConversations] = useState<Record<string, ChatConversation>>(sampleConversations);
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredMessages, setFilteredMessages] = useState<ChatMessage[]>([]);
+  const [isStatusChecking, setIsStatusChecking] = useState(false);
+  const [showSourceDetails, setShowSourceDetails] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [userFiles, setUserFiles] = useState<FileItem[]>([]);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
+  // Estados para gerenciamento de conversas
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [conversationSearchQuery, setConversationSearchQuery] = useState("");
+  const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
+  
+  // Atualizar conversas filtradas quando o termo de busca mudar
+  useEffect(() => {
+    if (!conversationSearchQuery.trim()) {
+      setFilteredConversations(conversations);
+      return;
+    }
+    
+    const filtered = conversations.filter(conv => 
+      conv.title.toLowerCase().includes(conversationSearchQuery.toLowerCase())
+    );
+    
+    setFilteredConversations(filtered);
+  }, [conversationSearchQuery, conversations]);
+
+  // Criar nova conversa
+  const handleNewConversation = () => {
+    // Título padrão com data
+    const today = format(new Date(), "dd 'de' MMMM', às' HH:mm", { locale: ptBR });
+    const title = `Conversa em ${today}`;
+    
+    // Criar conversa com mensagem inicial do sistema
+    const systemMessage: ChatMessage = {
+      id: `system-${Date.now()}`,
+      sender: "system",
+      text: "Bem-vindo à nova conversa. Como posso ajudar?",
+      timestamp: new Date()
+    };
+    
+    const newConversation = conversationService.createConversation(title, [systemMessage]);
+    
+    // Atualizar estados
+    setConversations([newConversation, ...conversations]);
+    setActiveConversationId(newConversation.id);
+    setMessages([systemMessage]);
+    setMessageInput("");
+  };
+
+  // Selecionar conversa existente
+  const handleSelectConversation = (conversationId: string) => {
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (!conversation) return;
+    
+    setActiveConversationId(conversationId);
+    setMessages(conversation.messages);
+  };
+
+  // Excluir conversa
+  const handleDeleteConversation = (conversationId: string) => {
+    // Perguntar para confirmar
+    if (!window.confirm("Tem certeza que deseja excluir esta conversa?")) {
+      return;
+    }
+    
+    const deleted = conversationService.deleteConversation(conversationId);
+    
+    if (deleted) {
+      const updatedConversations = conversations.filter(c => c.id !== conversationId);
+      setConversations(updatedConversations);
+      
+      // Se a conversa ativa foi excluída, limpar mensagens
+      if (activeConversationId === conversationId) {
+        setActiveConversationId(null);
+        setMessages([]);
+      }
+    }
+  };
+
+  // Salvar mensagem na conversa ativa
+  const saveMessageToConversation = (message: ChatMessage) => {
+    if (!activeConversationId) return;
+    
+    conversationService.addMessageToConversation(activeConversationId, message);
+    
+    // Atualizar lista de conversas
+    const updatedConversations = conversationService.getAllConversations();
+    setConversations(updatedConversations);
+  };
+  
+  // Verificar status do LLM ao carregar o componente
+  useEffect(() => {
+    checkLLMStatus();
+    
+    // Adicionar mensagem inicial do sistema
+    setMessages([
+      {
+        id: "system-1",
+        sender: "system",
+        text: "Bem-vindo ao Chat da Intranet Super Nosso, integrado com o sistema RAG. " +
+              "Faça perguntas sobre documentos da sua biblioteca de arquivos e o assistente " +
+              "responderá com base nesse conteúdo.",
+        timestamp: new Date()
+      }
+    ]);
+    
+    // Carregar arquivos do usuário
+    fetchUserFiles();
+  }, []);
+  
+  // Carregar conversas salvas
+  useEffect(() => {
+    const savedConversations = conversationService.getAllConversations();
+    setConversations(savedConversations);
+    setFilteredConversations(savedConversations);
+  }, []);
+  
+  // Atualizar mensagens filtradas quando o filtro mudar
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredMessages(messages);
+      return;
+    }
+    
+    const filtered = messages.filter(msg => 
+      msg.text.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    
+    setFilteredMessages(filtered);
+  }, [searchQuery, messages]);
+  
+  // Rolar para a última mensagem
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [selectedUser, conversations]);
+  }, [filteredMessages]);
   
-  const filteredUsers = sampleUsers.filter(user => 
-    user.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  
-  const handleSendMessage = () => {
-    if (!selectedUser || !messageInput.trim()) return;
-    
-    const newMessage: ChatMessage = {
-      id: `${selectedUser.id}-${Date.now()}`,
-      text: messageInput,
-      sent: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      read: false
-    };
-    
-    const currentConversation = conversations[selectedUser.id] || {
-      userId: selectedUser.id,
-      messages: []
-    };
-    
-    setConversations({
-      ...conversations,
-      [selectedUser.id]: {
-        ...currentConversation,
-        messages: [...currentConversation.messages, newMessage]
-      }
-    });
-    
-    setMessageInput("");
-    
-    // Simulate reply after a delay
-    if (Math.random() > 0.5) {
-      setTimeout(() => {
-        const replyMessage: ChatMessage = {
-          id: `${selectedUser.id}-${Date.now() + 1}`,
-          text: "Obrigado pela mensagem! Vou analisar e retorno em breve.",
-          sent: false,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          read: true
-        };
-        
-        setConversations(prev => ({
-          ...prev,
-          [selectedUser.id]: {
-            ...prev[selectedUser.id],
-            messages: [...prev[selectedUser.id].messages, replyMessage]
-          }
-        }));
-      }, 2000);
+  // Carregar arquivos do usuário
+  const fetchUserFiles = async () => {
+    try {
+      const files = await fileService.getFiles();
+      setUserFiles(files);
+    } catch (error) {
+      console.error("Erro ao carregar arquivos:", error);
     }
   };
   
-  const formatMessageDate = (message: ChatMessage, index: number, messages: ChatMessage[]) => {
-    // Check if this is the first message or if the previous message was on a different day
-    if (index === 0) {
-      return new Date().toLocaleDateString();
+  // Verificar status do LLM
+  const checkLLMStatus = async () => {
+    setIsStatusChecking(true);
+    try {
+      const status = await llmService.checkStatus();
+      setLlmStatus(status);
+      
+      if (status.status === 'offline') {
+        toast({
+          title: "Serviço LLM Indisponível",
+          description: status.message || "O serviço de IA está temporariamente indisponível.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao verificar status do LLM:", error);
+      setLlmStatus({
+        status: 'offline',
+        message: "Não foi possível verificar o status do serviço LLM."
+      });
+    } finally {
+      setIsStatusChecking(false);
+    }
+  };
+  
+  // Enviar mensagem para o LLM
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || isLoading) return;
+    
+    // Adicionar mensagem do usuário
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      sender: "user",
+      text: messageInput,
+      timestamp: new Date()
+    };
+    
+    // Gerenciar conversa atual
+    if (activeConversationId) {
+      // Adicionar à conversa existente
+      saveMessageToConversation(userMessage);
+    } else {
+      // Criar nova conversa com esta mensagem
+      const today = format(new Date(), "dd 'de' MMMM', às' HH:mm", { locale: ptBR });
+      const title = `Conversa em ${today}`;
+      
+      const systemMessage: ChatMessage = {
+        id: `system-${Date.now() - 1}`,
+        sender: "system",
+        text: "Bem-vindo à nova conversa. Como posso ajudar?",
+        timestamp: new Date(Date.now() - 1000)
+      };
+      
+      const newConversation = conversationService.createConversation(
+        title, 
+        [systemMessage, userMessage]
+      );
+      
+      setConversations([newConversation, ...conversations]);
+      setActiveConversationId(newConversation.id);
     }
     
-    // In a real app, you would compare actual dates
-    // For simplicity, we'll just show the date for the first message
-    return null;
+    // Preparar mensagem de espera (loading)
+    const loadingMessage: ChatMessage = {
+      id: `assistant-${Date.now()}`,
+      sender: "assistant",
+      text: "Processando sua consulta...",
+      timestamp: new Date(),
+      isLoading: true
+    };
+    
+    setMessages(prev => [...prev, userMessage, loadingMessage]);
+    setMessageInput("");
+    setIsLoading(true);
+    
+    try {
+      // Verificar status do LLM antes de enviar
+      if (llmStatus?.status !== 'online') {
+        const status = await llmService.checkStatus();
+        setLlmStatus(status);
+        
+        if (status.status !== 'online') {
+          throw new Error("O serviço LLM não está disponível no momento.");
+        }
+      }
+      
+      // Enviar mensagem para o LLM (excluindo a mensagem de loading)
+      const historyForLLM = messages.filter(msg => !msg.isLoading);
+      const response = await llmService.sendMessage(
+        userMessage.text, 
+        [...historyForLLM, userMessage]
+      );
+      
+      // Remover mensagem de loading e adicionar resposta real
+      setMessages(prev => {
+        const withoutLoading = prev.filter(msg => !msg.isLoading);
+        
+        const assistantMessage: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          sender: "assistant",
+          text: response.message,
+          timestamp: new Date(),
+          sources: response.sources
+        };
+        
+        // Salvar mensagem do assistente na conversa
+        if (activeConversationId) {
+          saveMessageToConversation(assistantMessage);
+        }
+        
+        return [...withoutLoading, assistantMessage];
+      });
+      
+    } catch (error) {
+      console.error("Erro ao enviar mensagem:", error);
+      
+      // Remover mensagem de loading e adicionar mensagem de erro
+      setMessages(prev => {
+        const withoutLoading = prev.filter(msg => !msg.isLoading);
+        
+        const errorMessage: ChatMessage = {
+          id: `system-${Date.now()}`,
+          sender: "system",
+          text: `Erro: ${error instanceof Error ? error.message : "Falha ao processar mensagem"}`,
+          timestamp: new Date()
+        };
+        
+        // Salvar mensagem de erro na conversa
+        if (activeConversationId) {
+          saveMessageToConversation(errorMessage);
+        }
+        
+        return [...withoutLoading, errorMessage];
+      });
+      
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Falha ao processar mensagem",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Exibir detalhes de uma fonte
+  const showSourceInfo = (sourceId: string) => {
+    setSelectedSource(sourceId);
+    setShowSourceDetails(true);
+  };
+  
+  // Formatar mensagem para exibição (com suporte a markdown)
+  const formatMessage = (message: ChatMessage) => {
+    if (message.isLoading) {
+      return (
+        <div className="flex items-center space-x-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>{message.text}</span>
+        </div>
+      );
+    }
+    
+    // Renderizar markdown para mensagens do assistente
+    if (message.sender === "assistant") {
+      return (
+        <div className="markdown-content">
+          <ReactMarkdown>
+            {message.text}
+          </ReactMarkdown>
+          
+          {/* Exibir fontes utilizadas */}
+          {message.sources && message.sources.length > 0 && (
+            <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+              <p className="text-xs text-gray-500 mb-1">Fontes utilizadas:</p>
+              <div className="flex flex-wrap gap-1">
+                {message.sources.map(source => (
+                  <Badge 
+                    key={source.id} 
+                    variant="outline" 
+                    className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                    onClick={() => showSourceInfo(source.id)}
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    {source.name}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    // Texto simples para outras mensagens
+    return message.text;
   };
   
   return (
@@ -216,206 +399,303 @@ const Chat = () => {
       <div className="h-[calc(100vh-9rem)]">
         <Card className="h-full flex flex-col overflow-hidden">
           <div className="grid grid-cols-1 md:grid-cols-3 h-full">
-            {/* Sidebar - User List */}
+            {/* Sidebar - Conversas */}
             <div className="border-r md:col-span-1 flex flex-col">
-              <CardHeader className="pb-2">
-                <div className="relative">
+              <ConversationList
+                conversations={filteredConversations}
+                activeConversationId={activeConversationId}
+                onSelectConversation={handleSelectConversation}
+                onNewConversation={handleNewConversation}
+                onDeleteConversation={handleDeleteConversation}
+                searchQuery={conversationSearchQuery}
+                setSearchQuery={setConversationSearchQuery}
+              />
+              
+              {/* Status do LLM */}
+              <div className="px-4 py-3">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-3 mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium">Status do Serviço:</p>
+                    
+                    <Badge variant={llmStatus?.status === 'online' ? "default" : "destructive"}>
+                      {llmStatus?.status === 'online' ? 'Online' : 'Offline'}
+                    </Badge>
+                  </div>
+                  
+                  {llmStatus?.status === 'online' && llmStatus.model && (
+                    <div className="text-xs text-gray-500">
+                      Modelo: {llmStatus.model}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Arquivos disponíveis */}
+                <div className="mt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-medium text-sm">Arquivos Disponíveis</h3>
+                    <Badge variant="outline" className="text-xs">
+                      {userFiles.length}
+                    </Badge>
+                  </div>
+                  
+                  <div className="max-h-64 overflow-y-auto border rounded-md p-2">
+                    {userFiles.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center text-gray-500">
+                        <Database className="h-10 w-10 mb-2 text-gray-400" />
+                        <p className="text-sm">Nenhum arquivo disponível</p>
+                        <p className="text-xs mt-1">
+                          Adicione arquivos na página "Arquivos" para usar no RAG
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {userFiles.map(file => (
+                          <div 
+                            key={file.id}
+                            className="flex items-center p-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md"
+                          >
+                            <FileText className="h-4 w-4 mr-2 text-gray-500" />
+                            <span className="truncate">{file.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Barra de busca */}
+                <div className="relative mt-4">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input 
-                    placeholder="Buscar contatos..." 
+                    placeholder="Buscar nas mensagens..." 
                     className="pl-8 focus-visible:ring-supernosso-red"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
-              </CardHeader>
+              </div>
               
-              <CardContent className="flex-1 overflow-auto p-0">
-                {filteredUsers.map(user => (
-                  <div 
-                    key={user.id}
-                    className={cn(
-                      "flex items-center p-3 gap-3 cursor-pointer transition-colors border-b",
-                      selectedUser?.id === user.id 
-                        ? "bg-supernosso-light-red"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-800"
-                    )}
-                    onClick={() => setSelectedUser(user)}
-                  >
-                    <div className="relative">
-                      <Avatar>
-                        <AvatarImage src={user.avatar} />
-                        <AvatarFallback className="bg-[#e60909] text-white">
-                          {user.initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      {user.online && (
-                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-white"></span>
-                      )}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center">
-                        <p className="font-medium truncate">{user.name}</p>
-                        {user.lastMessageTime && (
-                          <span className="text-xs text-gray-500">{user.lastMessageTime}</span>
-                        )}
-                      </div>
-                      {user.lastMessage && (
-                        <p className="text-sm text-gray-500 truncate">
-                          {user.lastMessage}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                
-                {filteredUsers.length === 0 && (
-                  <div className="text-center py-8">
-                    <p className="text-gray-500">Nenhum contato encontrado</p>
-                  </div>
-                )}
-              </CardContent>
+              {/* Instruções */}
+              <div className="px-4 py-3 mt-2">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-3">
+                  <h3 className="text-sm font-medium mb-2 flex items-center">
+                    <FileQuestion className="h-4 w-4 mr-1" />
+                    Como usar:
+                  </h3>
+                  <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 list-disc pl-4">
+                    <li>Faça perguntas sobre os documentos armazenados</li>
+                    <li>O assistente buscará informações relevantes</li>
+                    <li>Você pode verificar as fontes de cada resposta</li>
+                    <li>As conversas são salvas automaticamente</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <div className="flex-1"></div>
             </div>
             
             {/* Chat Area */}
             <div className="md:col-span-2 flex flex-col h-full">
-              {selectedUser ? (
-                <>
-                  {/* Chat Header */}
-                  <div className="border-b p-3 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={selectedUser.avatar} />
-                        <AvatarFallback className="bg-[#e60909] text-white">
-                          {selectedUser.initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{selectedUser.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {selectedUser.online ? 'Online' : 'Offline'}
-                        </p>
+              {/* Chat Messages */}
+              <div className="flex-1 overflow-auto p-4 space-y-3">
+                {filteredMessages.length === 0 ? (
+                  <div className="flex items-center justify-center h-full flex-col">
+                    <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-6 mb-4">
+                      <MessageCircle className="h-12 w-12 text-gray-400" />
+                    </div>
+                    <h3 className="text-xl font-medium">Nenhuma mensagem encontrada</h3>
+                    {searchQuery ? (
+                      <p className="text-gray-500 mt-2">
+                        Tente uma busca diferente
+                      </p>
+                    ) : (
+                      <p className="text-gray-500 mt-2">
+                        Comece uma conversa com o assistente
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  filteredMessages.map((message) => (
+                    <div 
+                      key={message.id}
+                      className={cn(
+                        "flex flex-col max-w-[80%]",
+                        message.sender === "user" 
+                          ? "ml-auto items-end" 
+                          : message.sender === "system"
+                            ? "mx-auto items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg max-w-full"
+                            : "mr-auto items-start"
+                      )}
+                    >
+                      {/* Cabeçalho da mensagem com avatar e info do remetente */}
+                      <div className="flex items-center mb-1 gap-2">
+                        {message.sender === "user" ? (
+                          <>
+                            <div className="text-xs text-gray-500 mr-2">
+                              {new Date(message.timestamp).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                            <div className="font-medium text-sm">Você</div>
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="bg-blue-100 text-blue-900 text-xs">
+                                {user?.name?.substring(0, 2).toUpperCase() || "VC"}
+                              </AvatarFallback>
+                            </Avatar>
+                          </>
+                        ) : message.sender === "assistant" ? (
+                          <>
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="bg-supernosso-red text-white text-xs">
+                                AI
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="font-medium text-sm">Assistente</div>
+                            <div className="text-xs text-gray-500 ml-2">
+                              {new Date(message.timestamp).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="bg-gray-200 text-gray-700 text-xs">
+                                SN
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="font-medium text-sm">Sistema</div>
+                          </>
+                        )}
+                      </div>
+                      
+                      {/* Conteúdo da mensagem */}
+                      <div 
+                        className={cn(
+                          "rounded-lg py-2 px-3",
+                          message.sender === "user"
+                            ? "bg-blue-100 text-gray-900 dark:bg-blue-800 dark:text-gray-50"
+                            : message.sender === "system"
+                              ? "bg-transparent" 
+                              : "bg-white border text-gray-900 dark:bg-gray-800 dark:text-gray-50"
+                        )}
+                      >
+                        {formatMessage(message)}
                       </div>
                     </div>
-                    
-                    <div className="flex items-center">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <Phone className="h-5 w-5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Chamada de voz</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <Video className="h-5 w-5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Chamada de vídeo</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <Info className="h-5 w-5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Informações do contato</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </div>
-                  
-                  {/* Chat Messages */}
-                  <div className="flex-1 overflow-auto p-4 space-y-3">
-                    {conversations[selectedUser.id]?.messages.map((message, index, array) => {
-                      const dateHeader = formatMessageDate(message, index, array);
-                      return (
-                        <div key={message.id}>
-                          {dateHeader && (
-                            <div className="text-center my-4">
-                              <span className="text-xs bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-gray-500">
-                                {dateHeader}
-                              </span>
-                            </div>
-                          )}
-                          <div className={cn(
-                            "flex flex-col max-w-[70%]",
-                            message.sent ? "ml-auto items-end" : "mr-auto items-start"
-                          )}>
-                            <div className={cn(
-                              "rounded-lg py-2 px-3 text-sm message-sent",
-                              message.sent 
-                                ? "bg-[#e60909] text-white rounded-br-none" 
-                                : "bg-gray-100 dark:bg-gray-800 rounded-bl-none message-received"
-                            )}>
-                              {message.text}
-                            </div>
-                            <div className="flex items-center mt-1 text-xs text-gray-500 space-x-1">
-                              <span>{message.timestamp}</span>
-                              {message.sent && (
-                                <span>
-                                  {message.read ? "✓✓" : "✓"}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div ref={messagesEndRef} />
-                  </div>
-                  
-                  {/* Message Input */}
-                  <div className="border-t p-3 flex gap-2">
-                    <Button variant="ghost" size="icon" className="text-gray-500">
-                      <Paperclip className="h-5 w-5" />
-                    </Button>
-                    <Input 
-                      placeholder="Digite uma mensagem..." 
-                      className="focus-visible:ring-[#e60909]"
-                      value={messageInput}
-                      onChange={(e) => setMessageInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleSendMessage();
-                        }
-                      }}
-                    />
-                    <Button 
-                      className="bg-[#e60909] hover:bg-[#e60909]/90" 
-                      size="icon"
-                      onClick={handleSendMessage}
-                      disabled={!messageInput.trim()}
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-center h-full flex-col">
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-6 mb-4">
-                    <MessageCircle className="h-12 w-12 text-gray-400" />
-                  </div>
-                  <h3 className="text-xl font-medium">Selecione um contato</h3>
-                  <p className="text-gray-500 mt-2">
-                    Escolha um contato da lista para iniciar uma conversa
-                  </p>
-                </div>
-              )}
+                  ))
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+              
+              {/* Message Input */}
+              <div className="border-t p-3 flex gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-gray-500"
+                        disabled={isLoading}
+                      >
+                        <Paperclip className="h-5 w-5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Anexar arquivo (Em breve)</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <Input 
+                  placeholder="Digite uma mensagem..." 
+                  className="focus-visible:ring-supernosso-red"
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  disabled={isLoading || llmStatus?.status !== 'online'}
+                />
+                
+                <Button 
+                  className="bg-supernosso-red hover:bg-supernosso-red/90" 
+                  size="icon"
+                  onClick={handleSendMessage}
+                  disabled={isLoading || !messageInput.trim() || llmStatus?.status !== 'online'}
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </Card>
       </div>
+      
+      {/* Diálogo para exibir detalhes da fonte */}
+      <Dialog open={showSourceDetails} onOpenChange={setShowSourceDetails}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Detalhes da Fonte</DialogTitle>
+          </DialogHeader>
+          
+          {selectedSource && (
+            <div className="mt-4 space-y-4">
+              {userFiles.find(file => file.id === selectedSource) ? (
+                <div>
+                  <div className="flex items-center mb-4">
+                    <FileText className="h-10 w-10 mr-3 text-supernosso-red" />
+                    <div>
+                      <h3 className="font-medium">
+                        {userFiles.find(file => file.id === selectedSource)?.name}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {userFiles.find(file => file.id === selectedSource)?.size || 'Tamanho desconhecido'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end mt-4">
+                    <Button
+                      variant="outline"
+                      className="mr-2"
+                      onClick={() => setShowSourceDetails(false)}
+                    >
+                      Fechar
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        fileService.downloadFile(selectedSource);
+                        setShowSourceDetails(false);
+                      }}
+                    >
+                      Baixar Arquivo
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-8 text-center text-gray-500">
+                  <div className="text-center">
+                    <AlertCircle className="h-10 w-10 mb-2 mx-auto text-gray-400" />
+                    <p>Arquivo não encontrado</p>
+                    <p className="text-sm mt-1">
+                      Este arquivo pode ter sido excluído ou movido
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

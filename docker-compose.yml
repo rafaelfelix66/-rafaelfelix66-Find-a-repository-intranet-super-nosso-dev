@@ -24,6 +24,7 @@ services:
   backend:
     build: ./backend
     container_name: intranet-backend
+    network_mode: "host"  # Usar a rede do host
     ports:
       - "3000:3000"
     volumes:
@@ -35,8 +36,6 @@ services:
         condition: service_healthy
     env_file:
       - .env  # Carrega variáveis do .env
-    networks:
-      - intranet-network  
     restart: always
 
   # Frontend - Servidor Web Nginx
