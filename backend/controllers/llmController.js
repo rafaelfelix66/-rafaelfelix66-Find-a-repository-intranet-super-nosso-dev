@@ -12,6 +12,9 @@ const OLLAMA_NUM_CTX = 2048;
 const OLLAMA_TOP_K = 50;
 const STOP_TOKENS = ["|<|assistant|>", "|<|user|>", "|<|system|>"];
 
+// Para debug - adicionamos um log ao iniciar
+console.log(`LLM Controller inicializado com OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}`);
+
 // Configuração de caminhos para arquivos
 const BASE_UPLOAD_PATH = process.env.NODE_ENV === 'production' 
   ? '/uploads/files'
@@ -187,6 +190,8 @@ const getResponseWithContext = async (query, context) => {
     // Montar o prompt final
     const prompt = `${systemPrompt}\n\n${contextPrompt}\n\nPergunta: ${query}\n\nResposta:`;
     
+	console.log(`Enviando prompt para o LLM (${prompt.length} caracteres)`);
+	
     // Enviar para o Ollama
     const response = await axios.post(`${OLLAMA_BASE_URL}/api/generate`, {
       model: OLLAMA_MODEL,
@@ -194,19 +199,81 @@ const getResponseWithContext = async (query, context) => {
       temperature: OLLAMA_TEMPERATURE,
       num_ctx: OLLAMA_NUM_CTX,
       top_k: OLLAMA_TOP_K,
-      stop: STOP_TOKENS
+      stop: STOP_TOKENS,
+	  stream: false // Desabilitar streaming explicitamente
+    }, {
+      timeout: 600000 // Aumentar para 60 segundos
     });
+	
+	console.log('Resposta recebida do LLM, status:', response.status);
     
+    // Processar a resposta não-streaming
     if (response.data && response.data.response) {
       return response.data.response;
     }
     
-    throw new Error('Resposta inválida do modelo LLM');
+    // Alternativa: processar respostas em formato streaming
+    // Se a resposta vier como uma string contendo múltiplos JSONs
+    if (typeof response.data === 'string' && response.data.includes('{"model"')) {
+      try {
+        // Extrair todas as partes da resposta em streaming
+        const lines = response.data.split('\n')
+          .filter(line => line.trim() !== '');
+          
+        let fullResponse = '';
+        
+        // Processar cada linha como um objeto JSON separado
+        for (const line of lines) {
+          try {
+            const chunk = JSON.parse(line);
+            if (chunk.response) {
+              fullResponse += chunk.response;
+            }
+            // Se for a última parte e estiver marcada como done
+            if (chunk.done === true) {
+              console.log('Resposta completa recebida.');
+            }
+          } catch (e) {
+            console.warn('Erro ao processar chunk de resposta:', e.message);
+          }
+        }
+        
+        if (fullResponse) {
+          console.log(`Resposta LLM reconstruída: ${fullResponse.substring(0, 50)}...`);
+          return fullResponse;
+        }
+      } catch (e) {
+        console.error('Erro ao processar resposta em formato streaming:', e);
+      }
+    }
+    
+    // Log detalhado da estrutura da resposta
+    console.error('Estrutura da resposta do LLM inesperada:', 
+      typeof response.data === 'string' 
+        ? response.data.substring(0, 500) + '...'
+        : JSON.stringify(response.data));
+    
+    throw new Error('Resposta inválida do modelo LLM: formato inesperado');
+    
   } catch (error) {
-    console.error('Erro ao obter resposta do LLM:', error.message);
-    return "Desculpe, houve um erro ao processar sua consulta. Por favor, tente novamente.";
+    console.error('Erro detalhado ao obter resposta do LLM:', error);
+    
+    if (error.response) {
+      // O servidor respondeu com um código de erro
+      console.error('Status do erro:', error.response.status);
+      console.error('Resposta de erro:', error.response.data);
+    } else if (error.request) {
+      // A requisição foi feita mas não houve resposta
+      console.error('Sem resposta do servidor LLM');
+    }
+    
+    throw error;
   }
 };
+
+
+
+
 
 // Verificar se o LLM está disponível
 const checkLLMStatus = async (req, res) => {
@@ -234,6 +301,13 @@ const checkLLMStatus = async (req, res) => {
 // Enviar mensagem para o LLM com RAG
 const sendMessage = async (req, res) => {
   try {
+	   // Log detalhado do que está sendo recebido
+    console.log('Requisição LLM recebida:');
+    console.log('- Body:', JSON.stringify(req.body));
+    console.log('- Message:', req.body.message);
+    console.log('- History:', req.body.conversationHistory ? 
+                 `${req.body.conversationHistory.length} mensagens` : 'undefined');
+	  
     const { message, conversationHistory = [] } = req.body;
     
     if (!message) {

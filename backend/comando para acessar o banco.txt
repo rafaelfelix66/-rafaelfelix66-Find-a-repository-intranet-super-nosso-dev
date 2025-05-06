@@ -1,3 +1,5 @@
 docker exec -it intranet-mongodb mongosh -u admin -p senhasegura123 --authenticationDatabase admin
 use intranet
+db.getCollectionInfos() --acha todas as tabelas/coleções
 db.posts.find() --achar posts
+db.posts.deleteMany({}) -- deletar todos

@@ -7,6 +7,10 @@ RUN apt-get update && apt-get install -y \
     libaio1 \
     wget \
     unzip \
+	iputils-ping \
+    net-tools \
+    curl \
+    traceroute \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar Oracle Instant Client

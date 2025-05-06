@@ -24,7 +24,6 @@ services:
   backend:
     build: ./backend
     container_name: intranet-backend
-    network_mode: "host"  # Usar a rede do host
     ports:
       - "3000:3000"
     volumes:
@@ -36,6 +35,12 @@ services:
         condition: service_healthy
     env_file:
       - .env  # Carrega variáveis do .env
+    environment:
+      - LLM_SERVER_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - intranet-network  
     restart: always
 
   # Frontend - Servidor Web Nginx
@@ -55,8 +60,8 @@ services:
     restart: always
 networks:
   intranet-network:
-    driver: bridge    
-
+    driver: bridge
+  
 volumes:
   mongodb_data:
   uploads_data:

@@ -57,7 +57,9 @@ export const llmService = {
       const response: LLMResponse = await api.post('/llm/chat', {
         message,
         conversationHistory: history
-      });
+      },{
+	    timeout : 600000
+	  });
       
       return response;
     } catch (error) {
