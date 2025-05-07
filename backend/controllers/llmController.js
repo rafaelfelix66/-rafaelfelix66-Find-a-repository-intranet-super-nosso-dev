@@ -200,9 +200,10 @@ const getResponseWithContext = async (query, context) => {
       num_ctx: OLLAMA_NUM_CTX,
       top_k: OLLAMA_TOP_K,
       stop: STOP_TOKENS,
-	  stream: false // Desabilitar streaming explicitamente
+	  stream: true // Habilita streaming 
     }, {
-      timeout: 600000 // Aumentar para 60 segundos
+      timeout: 600000, // Aumentar para 60 segundos
+	  responseType: 'stream' // Configurar para streaming
     });
 	
 	console.log('Resposta recebida do LLM, status:', response.status);
@@ -301,13 +302,13 @@ const checkLLMStatus = async (req, res) => {
 // Enviar mensagem para o LLM com RAG
 const sendMessage = async (req, res) => {
   try {
-	   // Log detalhado do que está sendo recebido
+    // Log detalhado do que está sendo recebido
     console.log('Requisição LLM recebida:');
     console.log('- Body:', JSON.stringify(req.body));
     console.log('- Message:', req.body.message);
     console.log('- History:', req.body.conversationHistory ? 
                  `${req.body.conversationHistory.length} mensagens` : 'undefined');
-	  
+    
     const { message, conversationHistory = [] } = req.body;
     
     if (!message) {
@@ -322,23 +323,117 @@ const sendMessage = async (req, res) => {
       `Documento: ${doc.file.name}\nConteúdo: ${doc.content.substring(0, 1000)}`
     );
     
-    // Obter resposta do LLM
-    const llmResponse = await getResponseWithContext(message, context);
+    // Configurar cabeçalhos para streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Para Nginx
     
-    // Salvar informações dos documentos usados
-    const usedDocuments = relevantDocs.map(doc => ({
+    // Enviar informações sobre os documentos usados primeiro
+    const sources = relevantDocs.map(doc => ({
       id: doc.file._id,
       name: doc.file.name,
       similarity: doc.similarity
     }));
     
-    res.json({
-      message: llmResponse,
-      sources: usedDocuments
+    res.write(`data: ${JSON.stringify({
+      type: 'metadata',
+      sources: sources
+    })}\n\n`);
+    
+    // Construir o prompt com contexto
+    const systemPrompt = "Você é um assistente da Intranet Super Nosso que responde perguntas com base nos documentos disponíveis. Seja claro, objetivo e útil.";
+    
+    const contextPrompt = context.length > 0 
+      ? `Contexto extraído dos documentos:\n\n${context.join('\n\n')}\n\nResponda com base no contexto acima.`
+      : "Não foram encontrados documentos relevantes para esta consulta. Por favor, responda com seu conhecimento geral.";
+    
+    const prompt = `${systemPrompt}\n\n${contextPrompt}\n\nPergunta: ${message}\n\nResposta:`;
+    
+    console.log(`Enviando prompt para o LLM (${prompt.length} caracteres)`);
+    
+    // Fazer requisição para o Ollama com streaming habilitado
+    const response = await axios({
+      method: 'post',
+      url: `${OLLAMA_BASE_URL}/api/generate`,
+      data: {
+        model: OLLAMA_MODEL,
+        prompt: prompt,
+        temperature: OLLAMA_TEMPERATURE,
+        num_ctx: OLLAMA_NUM_CTX,
+        top_k: OLLAMA_TOP_K,
+        stop: STOP_TOKENS,
+        stream: true // Habilitar streaming
+      },
+      responseType: 'stream',
+      timeout: 600000 // 10 minutos
     });
+    
+    // Processar o stream de resposta
+    response.data.on('data', (chunk) => {
+      const chunkStr = chunk.toString('utf8');
+      
+      // Processar cada linha (pode haver múltiplas linhas em um chunk)
+      const lines = chunkStr.split('\n').filter(line => line.trim() !== '');
+      
+      for (const line of lines) {
+        try {
+          const data = JSON.parse(line);
+          
+          // Enviar cada parte da resposta para o cliente
+          if (data.response) {
+            res.write(`data: ${JSON.stringify({
+              type: 'token',
+              content: data.response
+            })}\n\n`);
+          }
+          
+          // Se for o final da resposta, enviar um evento de conclusão
+          if (data.done) {
+            res.write(`data: ${JSON.stringify({
+              type: 'done'
+            })}\n\n`);
+          }
+        } catch (e) {
+          console.error('Erro ao processar chunk do stream:', e.message);
+        }
+      }
+    });
+    
+    // Quando o stream terminar
+    response.data.on('end', () => {
+      // Garantir que enviamos um evento de conclusão
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      res.end();
+    });
+    
+    // Tratar erros no stream
+    response.data.on('error', (err) => {
+      console.error('Erro no stream:', err);
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error', 
+        message: 'Erro ao processar stream: ' + err.message 
+      })}\n\n`);
+      res.end();
+    });
+    
   } catch (error) {
     console.error('Erro ao processar mensagem:', error.message);
-    res.status(500).json({ mensagem: 'Erro ao processar mensagem', error: error.message });
+    
+    // Se os cabeçalhos ainda não foram enviados, responder com JSON
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        mensagem: 'Erro ao processar mensagem', 
+        error: error.message 
+      });
+    } else {
+      // Se já iniciamos o streaming, enviar erro como evento
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error', 
+        message: 'Erro ao processar mensagem: ' + error.message 
+      })}\n\n`);
+      res.end();
+    }
   }
 };
 

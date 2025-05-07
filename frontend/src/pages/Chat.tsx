@@ -53,6 +53,9 @@ const Chat = () => {
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [userFiles, setUserFiles] = useState<FileItem[]>([]);
   
+  // Novo estado para controlar streaming
+  const [isStreaming, setIsStreaming] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Estados para gerenciamento de conversas
@@ -259,18 +262,19 @@ const Chat = () => {
       setActiveConversationId(newConversation.id);
     }
     
-    // Preparar mensagem de espera (loading)
-    const loadingMessage: ChatMessage = {
+	const streamingMessage: ChatMessage = {
       id: `assistant-${Date.now()}`,
       sender: "assistant",
-      text: "Processando sua consulta...",
+      text: "", // Texto inicial vazio
       timestamp: new Date(),
-      isLoading: true
+      isStreaming: true // Marcar como streaming
     };
+	
     
-    setMessages(prev => [...prev, userMessage, loadingMessage]);
+    setMessages(prev => [...prev, userMessage, streamingMessage]);
     setMessageInput("");
     setIsLoading(true);
+	setIsStreaming(true);
     
     try {
       // Verificar status do LLM antes de enviar
@@ -283,31 +287,46 @@ const Chat = () => {
         }
       }
       
-      // Enviar mensagem para o LLM (excluindo a mensagem de loading)
-      const historyForLLM = messages.filter(msg => !msg.isLoading);
+       // Enviar mensagem para o LLM com callback de streaming
+      const historyForLLM = messages.filter(msg => !msg.isLoading && !msg.isStreaming);
       const response = await llmService.sendMessage(
         userMessage.text, 
-        [...historyForLLM, userMessage]
+        [...historyForLLM, userMessage],
+        // Callback de progresso para atualizar mensagem em streaming
+        (updatedText) => {
+          setMessages(prev => prev.map(msg => 
+            msg.isStreaming ? { ...msg, text: updatedText } : msg
+          ));
+        }
       );
       
-      // Remover mensagem de loading e adicionar resposta real
+      // Quando a resposta estiver completa, finalizar a mensagem de streaming
       setMessages(prev => {
         const withoutLoading = prev.filter(msg => !msg.isLoading);
         
-        const assistantMessage: ChatMessage = {
-          id: `assistant-${Date.now()}`,
-          sender: "assistant",
-          text: response.message,
-          timestamp: new Date(),
-          sources: response.sources
-        };
+        // Transformar a mensagem de streaming em mensagem final
+        const finalMessages = withoutLoading.map(msg => {
+          if (msg.isStreaming) {
+            return {
+              ...msg,
+              text: response.message,
+              isStreaming: false,
+              sources: response.sources
+            };
+          }
+          return msg;
+        });
+		
+		// Salvar mensagem final do assistente na conversa
+        const assistantMessage = finalMessages.find(msg => 
+          msg.id === `assistant-${Date.now()}`.split('-')[0]
+        );
         
-        // Salvar mensagem do assistente na conversa
-        if (activeConversationId) {
+        if (assistantMessage && activeConversationId) {
           saveMessageToConversation(assistantMessage);
         }
         
-        return [...withoutLoading, assistantMessage];
+        return finalMessages;
       });
       
     } catch (error) {
@@ -315,7 +334,7 @@ const Chat = () => {
       
       // Remover mensagem de loading e adicionar mensagem de erro
       setMessages(prev => {
-        const withoutLoading = prev.filter(msg => !msg.isLoading);
+        const withoutStreamingOrLoading = prev.filter(msg => !msg.isLoading && !msg.isStreaming);
         
         const errorMessage: ChatMessage = {
           id: `system-${Date.now()}`,
@@ -329,7 +348,7 @@ const Chat = () => {
           saveMessageToConversation(errorMessage);
         }
         
-        return [...withoutLoading, errorMessage];
+        return [...withoutStreamingOrLoading, errorMessage];
       });
       
       toast({
@@ -339,6 +358,7 @@ const Chat = () => {
       });
     } finally {
       setIsLoading(false);
+	  setIsStreaming(false);
     }
   };
   
@@ -348,7 +368,7 @@ const Chat = () => {
     setShowSourceDetails(true);
   };
   
-  // Formatar mensagem para exibição (com suporte a markdown)
+  // Função formatMessage modificada para mostrar o cursor piscante
   const formatMessage = (message: ChatMessage) => {
     if (message.isLoading) {
       return (
@@ -366,6 +386,11 @@ const Chat = () => {
           <ReactMarkdown>
             {message.text}
           </ReactMarkdown>
+          
+           {/* Mostrar cursor piscante durante streaming */}
+          {message.isStreaming && (
+            <span className="inline-block w-2 h-4 bg-current animate-cursor-blink ml-0.5"></span>
+          )}
           
           {/* Exibir fontes utilizadas */}
           {message.sources && message.sources.length > 0 && (

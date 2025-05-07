@@ -48,8 +48,8 @@ export function QuickAccess() {
         bgColor="#FDE1D3"
       />
       <QuickAccessItem
-        title="Chat"
-        description="Comunique-se com a equipe"
+        title="ChatBot"
+        description="Posso ajudar?"
         icon={<MessageSquare size={24} className="text-supernosso-red" />}
         to="/chat"
         color="#EA384C"
