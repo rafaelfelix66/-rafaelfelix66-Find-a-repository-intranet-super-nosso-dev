@@ -179,7 +179,7 @@ export function Sidebar() {
           <SidebarItem 
             icon={MessageSquare} 
             to="/chat" 
-            label="Chat" 
+            label="ChatBot" 
             active={getActivePath("/chat")} 
             isOpen={isOpen}
           />
