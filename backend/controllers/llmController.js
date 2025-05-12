@@ -2,8 +2,36 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const pdfParse = require('pdf-parse');
 const { File } = require('../models');
+
+
+let pdfParseAvailable = false;
+let pdfParse;
+
+try {
+  pdfParse = require('pdf-parse');
+  pdfParseAvailable = true;
+  console.log('Módulo pdf-parse carregado com sucesso');
+} catch (error) {
+  console.warn('Módulo pdf-parse não encontrado, tentando instalar...');
+  
+  // Tentar instalar o módulo dinamicamente
+  try {
+    const { execSync } = require('child_process');
+    execSync('npm install pdf-parse@1.1.1 --no-save', { stdio: 'inherit' });
+    
+    // Tentar carregar após instalação
+    try {
+      pdfParse = require('pdf-parse');
+      pdfParseAvailable = true;
+      console.log('Módulo pdf-parse instalado e carregado com sucesso');
+    } catch (loadError) {
+      console.error('Falha ao carregar pdf-parse após instalação:', loadError.message);
+    }
+  } catch (installError) {
+    console.error('Falha ao instalar pdf-parse:', installError.message);
+  }
+}
 
 
 // Configuração do Ollama LLM
@@ -122,35 +150,37 @@ const extractTextFromFile = async (filePath, mimeType, extension) => {
       return fs.readFileSync(filePath, 'utf8').substring(0, 10000);
     }
     
-    // Para PDFs, seria ideal ter uma biblioteca como pdf.js
-    if (mimeType === 'application/pdf' || extension?.toLowerCase() === 'pdf') {
-	  try {
-		// Ler o arquivo PDF como um buffer
-		const dataBuffer = fs.readFileSync(filePath);
-		// Extrair texto do PDF
-		const pdfData = await pdfParse(dataBuffer);
-		// Retornar o texto extraído, limitado a 10000 caracteres
-		return pdfData.text.substring(0, 10000);
-	  } catch (pdfError) {
-		console.error(`Erro ao extrair texto do PDF ${filePath}:`, pdfError.message);
-		return `[Não foi possível extrair o conteúdo do PDF: ${path.basename(filePath)}]`;
-	  }
-	}
-    
-    // Para documentos Word/Office
+       // Para PDFs, seria ideal ter uma biblioteca como pdf.js
+   if (mimeType === 'application/pdf' || extension?.toLowerCase() === 'pdf') {
+  if (pdfParseAvailable) {
+    try {
+      const dataBuffer = fs.readFileSync(filePath);
+      const pdfData = await pdfParse(dataBuffer);
+      console.log(`PDF extraído com sucesso: ${path.basename(filePath)} (${pdfData.text.length} caracteres)`);
+      return pdfData.text.substring(0, 10000);
+    } catch (pdfErr) {
+      console.error(`Erro ao extrair PDF ${filePath}:`, pdfErr.message);
+    }
+  }
+  
+  // Fallback para quando pdf-parse não está disponível
+  console.warn(`Usando extração simulada para PDF ${filePath}`);
+  return `[Não foi possível extrair o conteúdo do PDF: ${path.basename(filePath)}. O módulo pdf-parse não está disponível.]`;
+}    // Para documentos Word/Office, seria necessÃ¡rio uma biblioteca especÃ­fica
     if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(extension?.toLowerCase()) ||
         mimeType?.includes('officedocument')) {
-      // Simulação - em um cenário real, usaríamos uma biblioteca adequada
-      return `[Conteúdo extraído do documento Office: ${path.basename(filePath)}]`;
+      // SimulaÃ§Ã£o - em um cenÃ¡rio real, usarÃ­amos uma biblioteca adequada
+      return `[ConteÃºdo extraÃ­do do documento Office: ${path.basename(filePath)}]`;
     }
     
-    // Para outros tipos, retornar informação básica
-    return `[Este arquivo é do tipo ${mimeType || extension} e não foi possível extrair texto diretamente]`;
+    // Para outros tipos, retornar informaÃ§Ã£o bÃ¡sica
+    return `[Este arquivo Ã© do tipo ${mimeType || extension} e nÃ£o foi possÃ­vel extrair texto diretamente]`;
   } catch (error) {
     console.error(`Erro ao extrair texto do arquivo ${filePath}:`, error.message);
     return null;
   }
 };
+
 
 // Função para gerar embedding de um texto
 const generateEmbedding = async (text) => {

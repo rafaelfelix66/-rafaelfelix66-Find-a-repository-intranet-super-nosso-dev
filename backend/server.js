@@ -9,6 +9,8 @@ const socketIo = require('socket.io');
 require('dotenv').config();
 const fs = require('fs');
 
+const { startBackupScheduler } = require('./jobs/backupScheduler');
+
 
 // Importar modelos
 const { User, File, Message, Chat, Folder } = require('./models');
@@ -625,6 +627,12 @@ app.put('/api/files/:itemType/:itemId/public', verificarToken, async (req, res) 
     res.status(500).send('Erro no servidor');
   }
 });
+
+// Iniciar agendador de backup de usuários
+if (process.env.NODE_ENV !== 'test') {
+  startBackupScheduler();
+}
+
 
 // Middleware para autenticação de socket
 io.use((socket, next) => {

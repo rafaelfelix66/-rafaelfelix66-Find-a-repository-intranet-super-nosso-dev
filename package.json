@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "bcryptjs": "^3.0.2",
+    "node-cron": "^4.0.3",
     "pdf-parse": "^1.1.1"
   }
 }

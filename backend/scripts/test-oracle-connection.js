@@ -27,7 +27,7 @@ async function testarConexao() {
     console.log('✅ Conexão estabelecida com sucesso!');
     
     // Testar consulta simples
-    const result = await connection.execute('SELECT NOME, CPF, FUNCAO, SETOR FROM CONSINCO.STAV_LOG_INTR');
+    const result = await connection.execute('SELECT NOME, CPF, FUNCAO, SETOR, DATAADMISSAO, DTNASCIMENTO FROM CONSINCO.STAV_LOG_INTR');
     console.log('Usuário conectado:', result.rows[0]);
 	
 	console.log('Configuração de conexão Oracle:', {
