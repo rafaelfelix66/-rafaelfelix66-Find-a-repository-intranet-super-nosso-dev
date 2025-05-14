@@ -14,6 +14,8 @@ export interface FileOwner {
 export interface FileItem {
   id: string;
   name: string;
+  description?: string;
+  coverImage?: string;  
   type: 'file' | 'folder';
   icon?: React.ReactNode; // Opcional - definido pelo componente
   iconType?: string;
@@ -48,7 +50,7 @@ interface FileContextType {
   setSearchQuery: (query: string) => void;
   navigateToFolder: (folder: FileItem) => void;
   navigateToBreadcrumb: (index: number) => void;
-  createNewFolder: (name: string) => Promise<void>;
+  createNewFolder: (name: string, description?: string, coverImage?: File | null) => Promise<void>;
   uploadFile: (file: File) => Promise<void>;
   downloadFile: (fileId: string) => Promise<void>;
   deleteItem: (id: string, type: 'file' | 'folder') => Promise<void>;
@@ -316,39 +318,32 @@ const closeFilePreview = () => {
   };
   
   // Criar nova pasta
-  const createNewFolder = async (name: string) => {
-    if (!name.trim()) {
-      toast({
-        title: "Nome inválido",
-        description: "O nome da pasta não pode estar vazio",
-        variant: "destructive"
-      });
-      return;
-    }
-    
+  const createNewFolder = async (name: string, description?: string, coverImage?: File | null) => {
+  try {
     setIsLoading(true);
-    setError(null);
     
-    try {
-      await fileService.createFolder(name, currentParentId);
-      toast({
-        title: "Pasta criada",
-        description: `Pasta "${name}" criada com sucesso`
-      });
-      await fetchFiles(currentParentId);
-    } catch (error) {
-      console.error('Erro ao criar pasta:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Erro ao criar pasta';
-      setError(errorMsg);
-      toast({
-        title: "Erro",
-        description: errorMsg,
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    // A função do serviço será criada no próximo arquivo
+    await fileService.createFolder(name, description, currentParentId, coverImage);
+    
+    toast({
+      title: "Pasta criada",
+      description: `A pasta "${name}" foi criada com sucesso.`
+    });
+    
+    // Atualizar a lista de arquivos
+    await fetchFiles(currentParentId);
+    setSearchQuery(''); // Limpa a busca ao criar nova pasta
+  } catch (error) {
+    console.error('Erro ao criar pasta:', error);
+    toast({
+      title: "Erro",
+      description: "Não foi possível criar a pasta.",
+      variant: "destructive"
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
   
   // Upload de arquivo
   const uploadFile = async (file: File) => {

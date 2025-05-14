@@ -24,7 +24,11 @@ const UserSchema = new mongoose.Schema({
   roles: [String],
   permissoes: [String],
   ativo: { type: Boolean, default: true },
-  ultimaSincronizacao: { type: Date, default: null }
+  ultimaSincronizacao: { type: Date, default: null },
+  chapa:  { type: String, default: null },
+  filial:  { type: String, default: null },
+  dataNascimento: { type: Date, default: null },
+  dataAdmissao: { type: Date, default: null },
 });
 
 // Hash de senha antes de salvar
@@ -197,6 +201,8 @@ const FileSchema = new mongoose.Schema({
 
 const FolderSchema = new mongoose.Schema({
   name: String,
+  description: { type: String, default: '' },
+  coverImage: { type: String, default: null },
   parentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null },
   owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   sharedWith: [{

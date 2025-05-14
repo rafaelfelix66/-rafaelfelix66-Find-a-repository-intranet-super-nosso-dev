@@ -14,6 +14,9 @@ import { ImageModal } from "@/components/ui/image-modal";
 import { VideoModal } from "@/components/ui/video-modal";
 import { VideoRenderer } from "@/components/ui/video-renderer";
 import DepartamentoSelector from "@/components/timeline/DepartamentoSelector";
+import { LinkifiedText } from "@/components/timeline/LinkifiedText";
+import { EmojiPicker } from "@/components/ui/emoji-picker";
+import { AniversariosWidget } from "@/components/home/AniversariosWidget";
 import { 
   Card, 
   CardContent, 
@@ -947,13 +950,22 @@ const Home = () => {
                       </Avatar>
                       <div className="flex-1">
                         <p className="font-medium">Você</p>
-                        <Textarea 
-                          placeholder="O que você deseja compartilhar?" 
-                          className="mt-2 focus-visible:ring-[#e60909] resize-none"
-                          rows={4}
-                          value={newPostContent}
-                          onChange={(e) => setNewPostContent(e.target.value)}
-                        />
+                        <div className="relative">
+						  <Textarea 
+							placeholder="O que você deseja compartilhar?" 
+							className="mt-2 focus-visible:ring-[#e60909] resize-none pr-10"
+							rows={4}
+							value={newPostContent}
+							onChange={(e) => setNewPostContent(e.target.value)}
+						  />
+						  <div className="absolute bottom-2 right-2">
+							<EmojiPicker 
+							  onEmojiSelect={(emoji) => {
+								setNewPostContent(prev => prev + emoji);
+							  }}
+							/>
+						  </div>
+						</div>
                         <DepartamentoSelector 
                           onChange={setDepartamentoVisibilidade}
                         />
@@ -1237,7 +1249,7 @@ const Home = () => {
                         </div>
                       </CardHeader>
                       <CardContent className="pb-3">
-                        <p className="mb-4 whitespace-pre-line">{post.content}</p>
+                        <LinkifiedText text={post.content} className="mb-4 whitespace-pre-line" />
                         
                         {/* Exibição de informações do evento */}
                         {post.event && post.event.title && (
@@ -1340,7 +1352,9 @@ const Home = () => {
                                 <div className="flex-1">
                                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 px-3">
                                     <div className="font-medium text-sm">{comment.user.name}</div>
-                                    <div className="text-sm">{comment.content}</div>
+                                    <div className="text-sm">
+									  <LinkifiedText text={comment.content} />
+									</div>
                                   </div>
                                   <div className="flex text-xs text-gray-500 mt-1 ml-2 space-x-3">
                                     <span>{comment.timestamp}</span>
@@ -1369,29 +1383,40 @@ const Home = () => {
                                 VC
                               </AvatarFallback>
                             </Avatar>
-                            <div className="flex-1 flex">
-                              <Input 
-                                placeholder="Escreva um comentário..." 
-                                className="rounded-r-none focus-visible:ring-0 border-r-0"
-                                value={commentInput[post.id] || ''}
-                                onChange={(e) => setCommentInput({
-                                  ...commentInput,
-                                  [post.id]: e.target.value
-                                })}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleComment(post.id);
-                                  }
-                                }}
-                              />
-                              <Button 
-                                className="rounded-l-none bg-[#e60909] hover:bg-[#e60909]/90 text-white"
-                                onClick={() => handleComment(post.id)}
-                                disabled={!commentInput[post.id]?.trim()}
-                              >
-                                Enviar
-                              </Button>
-                            </div>
+                            <div className="flex-1 flex relative">
+							  <Input 
+								placeholder="Escreva um comentário..." 
+								className="rounded-r-none focus-visible:ring-0 border-r-0 pr-10"
+								value={commentInput[post.id] || ''}
+								onChange={(e) => setCommentInput({
+								  ...commentInput,
+								  [post.id]: e.target.value
+								})}
+								onKeyDown={(e) => {
+								  if (e.key === 'Enter') {
+									handleComment(post.id);
+								  }
+								}}
+							  />
+							  <div className="absolute right-20 top-1/2 -translate-y-1/2 z-10">
+								<EmojiPicker 
+								  onEmojiSelect={(emoji) => {
+									const currentValue = commentInput[post.id] || '';
+									setCommentInput({
+									  ...commentInput,
+									  [post.id]: currentValue + emoji
+									});
+								  }}
+								/>
+							  </div>
+							  <Button 
+								className="rounded-l-none bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+								onClick={() => handleComment(post.id)}
+								disabled={!commentInput[post.id]?.trim()}
+							  >
+								Enviar
+							  </Button>
+							</div>
                           </div>
                         </PermissionGuard>
                       </CardFooter>
@@ -1438,10 +1463,16 @@ const Home = () => {
             </Tabs>
           </div>
           
-          {/* Calendário - Coluna da direita (1/3 do espaço) */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <EnhancedCalendarWidget />
-          </div>
+          {/* Calendário e Aniversários - Coluna da direita (1/3 do espaço) */}
+			<div className="space-y-6">
+			  {/* Widget do Calendário */}
+			  <div className="bg-white rounded-xl shadow-sm p-6">
+				<EnhancedCalendarWidget />
+			  </div>
+			  
+			  {/* Widget de Aniversários */}
+			  <AniversariosWidget />
+			</div>
         </div>
       </div>
     </Layout>

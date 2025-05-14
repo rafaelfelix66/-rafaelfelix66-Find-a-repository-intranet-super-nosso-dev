@@ -224,7 +224,7 @@ app.use('/uploads', (req, res, next) => {
 app.use('/uploads/timeline', express.static(path.join(__dirname, 'uploads/timeline')));
 app.use('/uploads/banners', express.static(path.join(__dirname, 'uploads/banners')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
+app.use('/uploads/folders', express.static(path.join(__dirname, 'uploads/folders')));
 // Rota de diagnóstico para verificar arquivos
 app.get('/api/check-file', (req, res) => {
   const filePath = req.query.path;
@@ -387,6 +387,7 @@ app.use('/api/chat', require('./routes/chat'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/banners', require('./routes/banners'));
 app.use('/api/llm', llmRoutes);
+app.use('/api/usuarios', require('./routes/usuarios'));
 
 // Rotas de autenticação
 app.post('/api/auth/register', async (req, res) => {

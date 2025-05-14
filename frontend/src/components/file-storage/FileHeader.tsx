@@ -19,8 +19,8 @@ export const FileHeader = () => {
   return (
     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
-        <h1 className="text-2xl font-bold">Arquivos</h1>
-        <p className="text-muted-foreground">Armazene e gerencie seus documentos</p>
+        <h1 className="text-2xl font-bold ml-6">Arquivos</h1>
+        <p className="text-muted-foreground ml-6">Armazene e gerencie seus documentos</p>
       </div>
       
       <div className="flex gap-2 w-full sm:w-auto">
@@ -46,7 +46,7 @@ export const FileHeader = () => {
         </Button>
         
         <Button 
-          className="bg-supernosso-red hover:bg-supernosso-red/90 text-white flex-shrink-0"
+          className="bg-[#e60909] hover:bg-[#e60909]/90 text-white flex-shrink-0"
           onClick={() => setIsUploadDialogOpen(true)}
         >
           <Upload className="h-4 w-4 mr-2" />

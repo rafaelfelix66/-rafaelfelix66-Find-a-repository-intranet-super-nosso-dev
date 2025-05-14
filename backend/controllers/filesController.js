@@ -58,7 +58,19 @@ const getFiles = async (req, res) => {
 
 const createFolder = async (req, res) => {
   try {
-    const { name, parentId } = req.body;
+	
+	console.log('=== CREATE FOLDER DEBUG ===');
+    console.log('Body recebido:', req.body);
+    console.log('Arquivo recebido:', req.file);
+	  
+    const { name, parentId, description } = req.body;
+	
+	console.log('Dados extraídos:', {
+      name,
+      description,
+      parentId,
+      hasFile: !!req.file
+    });
     
     // Verificar se já existe uma pasta com este nome no mesmo local
     const existingFolder = await Folder.findOne({
@@ -74,9 +86,18 @@ const createFolder = async (req, res) => {
       return res.status(400).json({ msg: 'Já existe uma pasta com este nome neste local' });
     }
     
+	// Processar a imagem de capa se foi enviada
+    let coverImageUrl = null;
+    if (req.file) {
+      // A imagem foi salva pelo multer, pegar o caminho
+      coverImageUrl = `/uploads/folders/${req.file.filename}`;
+    }
+	
     // Criar nova pasta - Por padrão, definir como pública para compartilhamento
     const newFolder = new Folder({
       name,
+	  description: description || '',
+	  coverImage: coverImageUrl,
       parentId: parentId || null,
       owner: req.usuario.id,
       isPublic: true // CORREÇÃO: Tornar pastas públicas por padrão
@@ -100,19 +121,33 @@ const uploadFile = async (req, res) => {
     const file = req.file;
     const fileExt = path.extname(file.originalname).substring(1);
     
+	console.log('--- DEBUG INFORMAÇÕES DO ARQUIVO RECEBIDO ---');
+    console.log('file.originalname:', file.originalname);
+    console.log('Nome original (charCodes):', [...file.originalname].map(c => c.charCodeAt(0)));
+    
+    // Corrigir encoding: o nome está vindo em UTF-8 mas sendo lido como Latin1
+    let fixedName = file.originalname;
+    
+    // Se contém "Ã¡" ou outros padrões UTF-8 mal interpretados
+    if (fixedName.includes('Ã¡') || fixedName.includes('Ã©') || fixedName.includes('Ã§')) {
+      // Converter de Latin1 para UTF-8
+      fixedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      console.log('Nome corrigido:', fixedName);
+    }
+	
     // CORREÇÃO: Arquivos são públicos por padrão para compartilhamento
     const newFile = new File({
-      name: path.basename(file.originalname, path.extname(file.originalname)),
+      name: path.basename(fixedName, path.extname(fixedName)),
       path: file.path,
-      originalName: file.originalname,
+      originalName: fixedName,
       mimeType: file.mimetype,
       size: file.size,
       extension: fileExt,
       folderId: folderId || null,
       owner: req.usuario.id,
-      isPublic: true // CORREÇÃO: Tornar arquivos públicos por padrão
+      isPublic: true
     });
-    
+ 
     const savedFile = await newFile.save();
     
     // Retornar arquivo com informações do proprietário
@@ -313,6 +348,7 @@ const deleteItem = async (req, res) => {
         return res.status(401).json({ msg: 'Não autorizado' });
       }
       
+      // Deletar arquivo físico
       if (fs.existsSync(item.path)) {
         fs.unlinkSync(item.path);
       }
@@ -328,7 +364,32 @@ const deleteItem = async (req, res) => {
         return res.status(401).json({ msg: 'Não autorizado' });
       }
       
+      // Função recursiva para deletar pasta e seu conteúdo
       const deleteFolder = async (folderId) => {
+        const folder = await Folder.findById(folderId);
+        if (!folder) return;
+        
+        // Se a pasta tem imagem de capa, deletar o arquivo físico
+        if (folder.coverImage) {
+          try {
+            // Extrair o caminho do arquivo da URL
+            const imagePath = folder.coverImage.replace(/^\/uploads\//, '');
+            const fullImagePath = path.join(__dirname, '..', 'uploads', imagePath);
+            
+            console.log(`Deletando imagem de capa: ${fullImagePath}`);
+            
+            if (fs.existsSync(fullImagePath)) {
+              fs.unlinkSync(fullImagePath);
+              console.log(`Imagem de capa deletada: ${fullImagePath}`);
+            } else {
+              console.log(`Imagem de capa não encontrada: ${fullImagePath}`);
+            }
+          } catch (err) {
+            console.error(`Erro ao deletar imagem de capa: ${err.message}`);
+          }
+        }
+        
+        // Deletar todos os arquivos da pasta
         const files = await File.find({ folderId });
         for (const file of files) {
           if (fs.existsSync(file.path)) {
@@ -337,11 +398,13 @@ const deleteItem = async (req, res) => {
           await file.deleteOne();
         }
         
+        // Deletar todas as subpastas recursivamente
         const subFolders = await Folder.find({ parentId: folderId });
         for (const subFolder of subFolders) {
           await deleteFolder(subFolder._id);
         }
         
+        // Finalmente, deletar a pasta
         await Folder.findByIdAndDelete(folderId);
       };
       

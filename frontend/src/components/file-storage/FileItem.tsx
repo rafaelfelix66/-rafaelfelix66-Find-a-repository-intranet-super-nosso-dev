@@ -11,7 +11,7 @@ import {
   File as FileIcon,
   Image,
   FileText,
-  FileType, // Substituído FilePdf por FileType
+  FileType,
   FileCode,
   FileSpreadsheet,
   FileVideo,
@@ -24,7 +24,7 @@ import {
   Share2,
   Copy,
   Eye,
-  User
+  ImageIcon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FileItem as FileItemType } from "@/contexts/FileContext";
@@ -57,6 +57,30 @@ export const FileItemComponent: React.FC<FileItemProps> = ({
   // Função para renderizar o ícone adequado com base no tipo
   const renderIcon = () => {
     if (item.type === 'folder') {
+      // Se a pasta tem capa, exibir a imagem
+      if (item.coverImage) {
+        return (
+          <div className="h-16 w-16 rounded overflow-hidden relative group">
+            <img 
+              src={item.coverImage} 
+              alt={`Capa de ${item.name}`}
+              className="h-full w-full object-cover"
+              onError={(e) => {
+                // Fallback para ícone se a imagem falhar
+                const img = e.target as HTMLImageElement;
+                const parent = img.parentElement;
+                if (parent) {
+                  parent.innerHTML = '<svg class="h-10 w-10 text-blue-500"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>';
+                }
+              }}
+            />
+            {/* Overlay com ícone de pasta no hover */}
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Folder className="h-5 w-5 text-white" />
+            </div>
+          </div>
+        );
+      }
       return <Folder className="h-10 w-10 text-blue-500" />;
     }
     
@@ -84,7 +108,7 @@ export const FileItemComponent: React.FC<FileItemProps> = ({
       default:
         // Baseado na extensão
         if (extension === 'pdf') {
-          return <FileType className="h-10 w-10 text-red-500" />; // Substituído FilePdf por FileType
+          return <FileType className="h-10 w-10 text-red-500" />;
         }
         
         return <FileIcon className="h-10 w-10 text-gray-500" />;
@@ -120,7 +144,7 @@ export const FileItemComponent: React.FC<FileItemProps> = ({
   
   return (
     <div 
-      className="flex items-center p-2 hover:bg-gray-50 rounded-md cursor-pointer border border-transparent hover:border-gray-200"
+      className="flex items-center p-3 hover:bg-gray-50 rounded-md cursor-pointer border border-transparent hover:border-gray-200 transition-all"
       onClick={handleItemClick}
     >
       <div className="flex-shrink-0 mr-4">
@@ -129,30 +153,53 @@ export const FileItemComponent: React.FC<FileItemProps> = ({
       
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between">
-          <div>
+          <div className="flex-1">
             <p className="font-medium text-gray-900 truncate">{item.name}</p>
+            {/* Adicionar descrição da pasta se existir */}
+            {item.type === 'folder' && item.description && (
+              <p className="text-sm text-gray-600 truncate mt-0.5">
+                {item.description}
+              </p>
+            )}
             <p className="text-sm text-gray-500">
               {item.type === 'file' && item.size ? `${item.size} • ` : ''}
               {item.modified}
             </p>
           </div>
           
-          {item.owner && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Avatar className="h-6 w-6">
-                    <AvatarFallback className="bg-gray-200 text-xs">
-                      {getOwnerInitials()}
-                    </AvatarFallback>
-                  </Avatar>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Proprietário: {item.owner.name}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+          <div className="ml-4 flex items-center gap-2">
+            {/* Indicador visual de pasta com capa */}
+            {item.type === 'folder' && item.coverImage && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <ImageIcon className="h-4 w-4 text-gray-400" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Pasta com capa personalizada</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            
+            {/* Avatar do proprietário */}
+            {item.owner && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="bg-gray-200 text-xs">
+                        {getOwnerInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Proprietário: {item.owner.name}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
         </div>
       </div>
       

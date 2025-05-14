@@ -27,6 +27,8 @@ export interface ApiFile {
 export interface ApiFolder {
   _id: string;
   name: string;
+  description?: string;
+  coverImage?: string
   parentId: string | null;
   owner: {
     _id: string;
@@ -122,6 +124,8 @@ const mapApiFolderToFileItem = (folder: ApiFolder): FileItem => {
   return {
     id: folder._id,
     name: folder.name,
+	description: folder.description,  
+    coverImage: folder.coverImage,    
     type: 'folder',
     iconType: 'folder',
     modified: formatDate(folder.updatedAt || folder.createdAt),
@@ -159,19 +163,43 @@ export const fileService = {
   },
   
   // Criar uma nova pasta
-  createFolder: async (name: string, parentId?: string | null): Promise<FileItem> => {
+  createFolder: async (
+    name: string, 
+	description?: string,  
+	parentId?: string | null, 
+	coverImage?: File | null
+  ): Promise<FileItem> => {
     try {
-      const data: ApiFolder = await api.post('/files/folder', { 
+    // Se tem imagem de capa, usar FormData
+    if (coverImage) {
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('description', description || '');
+      
+      if (parentId) {
+        formData.append('parentId', parentId);
+      }
+      
+      formData.append('coverImage', coverImage);
+      
+      // Usar upload para enviar FormData
+      const data: ApiFolder = await api.upload('/files/folders', formData);
+      return mapApiFolderToFileItem(data);
+    } else {
+      // Sem imagem, usar POST normal
+      const data: ApiFolder = await api.post('/files/folders', { 
         name, 
+        description: description || '',
         parentId: parentId || null 
       });
       
       return mapApiFolderToFileItem(data);
-    } catch (error) {
-      console.error('Erro ao criar pasta:', error);
-      throw error;
     }
-  },
+  } catch (error) {
+    console.error('Erro ao criar pasta:', error);
+    throw error;
+  }
+},
   
   // Fazer upload de arquivo
   uploadFile: async (file: File, folderId?: string | null): Promise<FileItem> => {

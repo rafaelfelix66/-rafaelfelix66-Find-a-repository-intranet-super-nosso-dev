@@ -169,13 +169,7 @@ export function Sidebar() {
             active={getActivePath("/arquivos")} 
             isOpen={isOpen}
           />
-          <SidebarItem 
-            icon={Image} 
-            to="/timeline" 
-            label="Timeline" 
-            active={getActivePath("/timeline")} 
-            isOpen={isOpen}
-          />
+		  {hasPermission('roles:manage') && (
           <SidebarItem 
             icon={MessageSquare} 
             to="/chat" 
@@ -183,6 +177,7 @@ export function Sidebar() {
             active={getActivePath("/chat")} 
             isOpen={isOpen}
           />
+		  )}
           <SidebarItem 
             icon={HelpCircle} 
             to="/base-conhecimento" 

@@ -6,6 +6,12 @@ const FolderSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  description: {
+    type: String, default: '' 
+  },
+  coverImage: { 
+    type: String, default: null 
+  },
   parentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Folder',

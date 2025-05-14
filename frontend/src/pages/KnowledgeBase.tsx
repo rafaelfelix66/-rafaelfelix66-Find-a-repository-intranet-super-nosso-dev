@@ -236,8 +236,8 @@ const KnowledgeBase = () => {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold">Base de Conhecimento</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl font-bold ml-6">Base de Conhecimento</h1>
+            <p className="text-muted-foreground ml-6">
               Acesse artigos, manuais e documentações para consulta rápida
             </p>
           </div>

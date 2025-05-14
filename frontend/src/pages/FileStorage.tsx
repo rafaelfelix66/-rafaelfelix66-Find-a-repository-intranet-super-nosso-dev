@@ -1,27 +1,20 @@
-// src/pages/FileStorage.tsx (Versão atualizada)
-import React, { useState } from "react";
+// src/pages/FileStorage.tsx (Versão corrigida com componentes modulares)
+import React from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { FileProvider, useFiles } from "@/contexts/FileContext";
+import { FileHeader } from "@/components/file-storage/FileHeader";
+import { FileItemComponent } from "@/components/file-storage/FileItem";
+import { FileViewer } from "@/components/file-storage/FileViewer";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
-  FilePlus, 
-  FolderPlus, 
-  Search, 
-  RefreshCw, 
   ChevronRight, 
   Home,
   AlertCircle,
-  Loader2
+  Loader2,
+  CornerUpLeft
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,13 +25,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label";
-import { FileProvider, useFiles } from "@/contexts/FileContext";
-import { FileItemComponent } from "@/components/file-storage/FileItem";
-import { FileViewer } from "@/components/file-storage/FileViewer";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useState } from "react";
 
-// Componente de navegação por breadcrumb
+// Mantenha o FileBreadcrumb como está (ou mova para arquivo separado)
 const FileBreadcrumb: React.FC = () => {
   const { currentPath, navigateToBreadcrumb } = useFiles();
   
@@ -57,6 +46,7 @@ const FileBreadcrumb: React.FC = () => {
               <div className="flex items-center">
                 <Home className="h-4 w-4 mr-1" />
                 <span>{path}</span>
+				<CornerUpLeft className="h-4 w-4 ml-1" />
               </div>
             ) : (
               path
@@ -68,198 +58,7 @@ const FileBreadcrumb: React.FC = () => {
   );
 };
 
-// Componente de cabeçalho com ações
-const FileHeader: React.FC = () => {
-  const { setSearchQuery, refreshFiles } = useFiles();
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
-  const [folderName, setFolderName] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [searchInput, setSearchInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const { createNewFolder, uploadFile } = useFiles();
-  
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSearchQuery(searchInput);
-  };
-  
-  const handleCreateFolder = async () => {
-    if (!folderName.trim()) return;
-    
-    setIsLoading(true);
-    try {
-      await createNewFolder(folderName);
-      setFolderName("");
-      setIsNewFolderDialogOpen(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-    
-    setIsLoading(true);
-    try {
-      await uploadFile(selectedFile);
-      setSelectedFile(null);
-      setIsUploadDialogOpen(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  return (
-    <div className="flex justify-between items-center mb-4">
-      <div>
-        <h2 className="text-2xl font-bold">Arquivos</h2>
-        <p className="text-muted-foreground">
-          Gerencie e compartilhe seus arquivos com a equipe
-        </p>
-      </div>
-      
-      <div className="flex items-center space-x-2">
-        <form onSubmit={handleSearch} className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar arquivos..."
-            className="pl-8 w-[200px] lg:w-[300px]"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-        </form>
-        
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => refreshFiles()}
-          title="Atualizar"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-        
-        <Button
-          variant="outline"
-          onClick={() => setIsNewFolderDialogOpen(true)}
-        >
-          <FolderPlus className="h-4 w-4 mr-2" />
-          Nova Pasta
-        </Button>
-        
-        <Button
-          onClick={() => setIsUploadDialogOpen(true)}
-        >
-          <FilePlus className="h-4 w-4 mr-2" />
-          Upload
-        </Button>
-      </div>
-      
-      {/* Diálogo para criar nova pasta */}
-      <Dialog open={isNewFolderDialogOpen} onOpenChange={setIsNewFolderDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nova Pasta</DialogTitle>
-            <DialogDescription>
-              Digite o nome da nova pasta que deseja criar.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <Label htmlFor="folder-name">Nome da pasta</Label>
-            <Input
-              id="folder-name"
-              value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
-              placeholder="Digite o nome da pasta"
-              className="mt-2"
-            />
-          </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsNewFolderDialogOpen(false)}
-              disabled={isLoading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleCreateFolder}
-              disabled={!folderName.trim() || isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Criando...
-                </>
-              ) : (
-                "Criar Pasta"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Diálogo para upload de arquivo */}
-      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Upload de Arquivo</DialogTitle>
-            <DialogDescription>
-              Selecione um arquivo para fazer upload na pasta atual.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <Label htmlFor="file-input">Arquivo</Label>
-            <Input
-              id="file-input"
-              type="file"
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  setSelectedFile(e.target.files[0]);
-                }
-              }}
-              className="mt-2"
-            />
-            {selectedFile && (
-              <p className="mt-2 text-sm text-gray-500">
-                Arquivo selecionado: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-              </p>
-            )}
-          </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsUploadDialogOpen(false)}
-              disabled={isLoading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleUpload}
-              disabled={!selectedFile || isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Enviando...
-                </>
-              ) : (
-                "Fazer Upload"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-};
-
-// Componente de grade de arquivos
+// Mantenha o FileGrid como está (ou mova para arquivo separado)
 const FileGrid: React.FC = () => {
   const { 
     filteredFiles, 
@@ -384,31 +183,6 @@ const FileGrid: React.FC = () => {
   );
 };
 
-// Componente principal
-const FileStorage: React.FC = () => {
-  return (
-    <Layout>
-      <FileProvider>
-        <div className="space-y-6">
-          <FileHeader />
-          
-          <Card>
-            <CardHeader className="pb-3">
-              <FileBreadcrumb />
-            </CardHeader>
-            <CardContent>
-              <FileGrid />
-            </CardContent>
-          </Card>
-          
-          {/* Componente de visualização de arquivo */}
-          <FileViewerWrapper />
-        </div>
-      </FileProvider>
-    </Layout>
-  );
-};
-
 // Wrapper para o componente de visualização de arquivo
 const FileViewerWrapper: React.FC = () => {
   const { previewFile, closeFilePreview, downloadFile } = useFiles();
@@ -419,6 +193,30 @@ const FileViewerWrapper: React.FC = () => {
       onClose={closeFilePreview} 
       onDownload={downloadFile} 
     />
+  );
+};
+
+// Componente principal - VERSÃO CORRIGIDA
+const FileStorage: React.FC = () => {
+  return (
+    <Layout>
+      <FileProvider>
+        <div className="space-y-6">
+          <FileHeader />  {/* Usando o FileHeader modular que importa NewFolderDialog */}
+          
+          <Card>
+            <CardHeader className="pb-3">
+              <FileBreadcrumb />
+            </CardHeader>
+            <CardContent>
+              <FileGrid />
+            </CardContent>
+          </Card>
+          
+          <FileViewerWrapper />
+        </div>
+      </FileProvider>
+    </Layout>
   );
 };
 
