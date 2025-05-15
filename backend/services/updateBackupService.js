@@ -69,9 +69,17 @@ async function updateUserBackup() {
     connection = await oracledb.getConnection(dbConfig);
     console.log('Conexão Oracle estabelecida com sucesso');
     
-    // Executar a query
+    // Executar a query atualizada com todos os campos necessários
     const query = `
-      SELECT NOME, CPF, FUNCAO, SETOR 
+      SELECT 
+        CHAPA,
+        NOME,
+        CPF,
+        FUNCAO,
+        SETOR,
+        FILIAL,
+        DATAADMISSAO,
+        DTNASCIMENTO
       FROM CONSINCO.STAV_LOG_INTR 
       WHERE CPF IS NOT NULL
     `;
@@ -83,36 +91,55 @@ async function updateUserBackup() {
     
     console.log(`Registros retornados do Oracle: ${result.rows.length}`);
     
-    // Filtrar apenas usuários novos (que não existem no backup)
-    const newUsers = result.rows.filter(row => {
-      return row.CPF && !existingCPFs.has(row.CPF);
+    // Processar todos os usuários (novos e existentes)
+    const updatedUsers = result.rows.filter(row => row.CPF).map(row => {
+      // Procurar usuário existente no backup
+      const existingUser = existingUsers.find(user => user.CPF === row.CPF);
+      
+      // Formatar datas
+      const formatDate = (date) => {
+        if (!date) return null;
+        try {
+          return date instanceof Date ? date.toISOString() : date;
+        } catch (e) {
+          return null;
+        }
+      };
+      
+      return {
+        CHAPA: row.CHAPA || existingUser?.CHAPA || null,
+        NOME: row.NOME || existingUser?.NOME || '',
+        CPF: row.CPF,
+        FUNCAO: row.FUNCAO || existingUser?.FUNCAO || '',
+        SETOR: row.SETOR || existingUser?.SETOR || '',
+        FILIAL: row.FILIAL || existingUser?.FILIAL || '',
+        DATAADMISSAO: formatDate(row.DATAADMISSAO) || existingUser?.DATAADMISSAO || null,
+        DTNASCIMENTO: formatDate(row.DTNASCIMENTO) || existingUser?.DTNASCIMENTO || null
+      };
     });
     
+    // Filtrar apenas usuários novos
+    const newUsers = updatedUsers.filter(user => !existingCPFs.has(user.CPF));
+    
     console.log(`Novos usuários encontrados: ${newUsers.length}`);
+    console.log(`Usuários atualizados: ${updatedUsers.length}`);
+    
+    // Atualizar o arquivo com todos os dados
+    await saveBackupFile(updatedUsers);
     
     if (newUsers.length > 0) {
-      // Adicionar novos usuários ao array existente
-      const updatedUsers = [...existingUsers, ...newUsers];
-      
-      // Ordenar por nome para manter organizado
-      updatedUsers.sort((a, b) => a.NOME.localeCompare(b.NOME));
-      
-      // Salvar arquivo atualizado
-      await saveBackupFile(updatedUsers);
-      
       console.log('Novos usuários adicionados ao backup:');
       newUsers.forEach(user => {
-        console.log(`- ${user.NOME} (CPF: ${user.CPF})`);
+        console.log(`- ${user.NOME} (CPF: ${user.CPF}, Chapa: ${user.CHAPA})`);
       });
-    } else {
-      console.log('Nenhum usuário novo encontrado');
     }
     
     return {
       success: true,
       existingCount: existingUsers.length,
       newCount: newUsers.length,
-      totalCount: existingUsers.length + newUsers.length
+      totalCount: updatedUsers.length,
+      updatedCount: updatedUsers.length - newUsers.length
     };
     
   } catch (err) {
@@ -145,6 +172,7 @@ async function runManualUpdate() {
     console.log(`✓ Atualização concluída com sucesso`);
     console.log(`• Usuários existentes: ${result.existingCount}`);
     console.log(`• Novos usuários: ${result.newCount}`);
+    console.log(`• Usuários atualizados: ${result.updatedCount}`);
     console.log(`• Total de usuários: ${result.totalCount}`);
   } else {
     console.log(`✗ Erro na atualização: ${result.error}`);

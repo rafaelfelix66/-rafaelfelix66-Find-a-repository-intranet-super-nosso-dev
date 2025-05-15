@@ -223,6 +223,7 @@ app.use('/uploads', (req, res, next) => {
 // Configuração para servir arquivos estáticos (após os middlewares)
 app.use('/uploads/timeline', express.static(path.join(__dirname, 'uploads/timeline')));
 app.use('/uploads/banners', express.static(path.join(__dirname, 'uploads/banners')));
+app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads/avatars')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads/folders', express.static(path.join(__dirname, 'uploads/folders')));
 // Rota de diagnóstico para verificar arquivos

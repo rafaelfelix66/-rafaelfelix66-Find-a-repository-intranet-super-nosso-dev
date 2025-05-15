@@ -17,6 +17,7 @@ import DepartamentoSelector from "@/components/timeline/DepartamentoSelector";
 import { LinkifiedText } from "@/components/timeline/LinkifiedText";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { AniversariosWidget } from "@/components/home/AniversariosWidget";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { 
   Card, 
   CardContent, 
@@ -68,9 +69,12 @@ import { OwnershipGuard } from '@/components/auth/OwnershipGuard';
 interface PostComment {
   id: string;
   user: {
+    id?: string;
     name: string;
     avatar?: string;
     initials: string;
+	cargo?: string; // Adicione cargo  
+    department?: string; // Adicione departamento
   };
   content: string;
   timestamp: string;
@@ -79,9 +83,12 @@ interface PostComment {
 interface Post {
   id: string;
   user: {
+    id?: string;
     name: string;
     avatar?: string;
     initials: string;
+	cargo?: string; // Adicione cargo
+    department?: string; // Adicione departamento
   };
   content: string;
   images?: string[];
@@ -370,7 +377,11 @@ const Home = () => {
           const formattedPost = {
             id: post._id,
             user: {
+			  id: post.user?._id,
               name: post.user?.nome || 'Usuário',
+			  avatar: post.user?.avatar, // Adicione o avatar
+              cargo: post.user?.cargo, // Adicione o cargo
+              department: post.user?.departamento, // Adicione o departamento
               initials: getInitials(post.user?.nome || 'Usuário')
             },
             content: post.text || "",
@@ -379,7 +390,11 @@ const Home = () => {
             comments: (post.comments || []).map(comment => ({
               id: comment._id,
               user: {
+			    id: comment.user?._id,
                 name: comment.user?.nome || 'Usuário',
+				avatar: comment.user?.avatar, // Adicione o avatar
+                cargo: comment.user?.cargo, // Adicione o cargo
+                department: comment.user?.departamento, // Adicione o departamento
                 initials: getInitials(comment.user?.nome || 'Usuário')
               },
               content: comment.text,
@@ -943,11 +958,7 @@ const Home = () => {
                   </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="flex items-start space-x-3">
-                      <Avatar>
-                        <AvatarFallback className="bg-[#e60909] text-white">
-                          VC
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar size="md" />
                       <div className="flex-1">
                         <p className="font-medium">Você</p>
                         <div className="relative">
@@ -1206,12 +1217,16 @@ const Home = () => {
                       <CardHeader className="pb-3">
                         <div className="flex justify-between items-start">
                           <div className="flex space-x-3">
-                            <Avatar>
-                              <AvatarImage src={post.user.avatar} />
-                              <AvatarFallback className="bg-[#e60909] text-white">
-                                {post.user.initials}
-                              </AvatarFallback>
-                            </Avatar>
+                            <UserAvatar 
+							  user={{
+								name: post.user.name,
+								avatar: post.user.avatar,
+								cargo: post.user.cargo,
+								department: post.user.department
+							  }}
+							  size="md"
+							  enableModal={true}
+							/>
                             <div>
                               <CardTitle className="text-base">{post.user.name}</CardTitle>
                               <CardDescription>{post.timestamp}</CardDescription>
@@ -1343,12 +1358,16 @@ const Home = () => {
                           <div className="space-y-3 w-full">
                             {post.comments.map((comment) => (
                               <div key={comment.id} className="flex space-x-3">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarImage src={comment.user.avatar} />
-                                  <AvatarFallback className="bg-[#e60909] text-white text-xs">
-                                    {comment.user.initials}
-                                  </AvatarFallback>
-                                </Avatar>
+                                <UserAvatar 
+									  user={{
+										name: comment.user.name,
+										avatar: comment.user.avatar,
+										cargo: comment.user.cargo,
+										department: comment.user.department
+									  }}
+									  size="sm"
+									  enableModal={true}
+									/>
                                 <div className="flex-1">
                                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 px-3">
                                     <div className="font-medium text-sm">{comment.user.name}</div>
@@ -1378,11 +1397,7 @@ const Home = () => {
                         )}
                         <PermissionGuard requiredPermission="timeline:comment">
                           <div className="flex space-x-3 w-full">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback className="bg-[#e60909] text-white text-xs">
-                                VC
-                              </AvatarFallback>
-                            </Avatar>
+                            <UserAvatar size="sm" />
                             <div className="flex-1 flex relative">
 							  <Input 
 								placeholder="Escreva um comentário..." 

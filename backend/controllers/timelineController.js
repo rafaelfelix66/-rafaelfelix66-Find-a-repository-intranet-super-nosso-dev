@@ -53,8 +53,8 @@ const getPosts = async (req, res) => {
     //console.log('Buscando posts para o usuário:', req.usuario.id);
     const posts = await Post.find(query)
       .sort({ createdAt: -1 })
-      .populate('user', ['nome'])
-      .populate('comments.user', ['nome']);
+      .populate('user', ['nome', 'avatar', 'cargo', 'departamento'])
+      .populate('comments.user', ['nome', 'avatar', 'cargo', 'departamento']);
     //console.log(`Encontrados ${posts.length} posts`);
     
     // Converter os posts para o formato esperado pelo frontend

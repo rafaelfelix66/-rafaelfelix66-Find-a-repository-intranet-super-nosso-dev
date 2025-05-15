@@ -18,10 +18,14 @@ if (!fs.existsSync(BACKUP_FILE_PATH)) {
   //console.log('Arquivo de backup não encontrado, criando um novo...');
   const dadosIniciais = [
     {
+      "CHAPA": "PJ",
       "NOME": "RAFAEL ALMEIDA FELIX",
       "CPF": "11027478662",
       "FUNCAO": "A CLASSIFICAR",
-      "SETOR": "A CLASSIFICAR"
+      "SETOR": "A CLASSIFICAR",
+      "FILIAL": "MATRIZ",
+      "DATAADMISSAO": null,
+      "DTNASCIMENTO": null
     }
   ];
   fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(dadosIniciais, null, 2), 'utf8');
@@ -38,10 +42,14 @@ async function verificarCpfNoBackup(cpf) {
       //console.log('Arquivo de backup não encontrado, criando um novo...');
       const dadosIniciais = [
         {
+          "CHAPA": "PJ",
           "NOME": "RAFAEL ALMEIDA FELIX",
           "CPF": "11027478662",
           "FUNCAO": "A CLASSIFICAR",
-          "SETOR": "A CLASSIFICAR"
+          "SETOR": "A CLASSIFICAR",
+          "FILIAL": "MATRIZ",
+          "DATAADMISSAO": null,
+          "DTNASCIMENTO": null
         }
       ];
       fs.writeFileSync(BACKUP_FILE_PATH, JSON.stringify(dadosIniciais, null, 2), 'utf8');
