@@ -1,0 +1,524 @@
+// backend/controllers/adminEngagementController.js - versão atualizada
+
+const { Engagement, EngagementAction } = require('../models/Engagement');
+const { Post, Article, File, User } = require('../models');
+const { 
+  SuperCoinTransaction, 
+  SuperCoinAttribute, 
+  SuperCoinBalance 
+} = require('../models/SuperCoin');
+const mongoose = require('mongoose');
+
+// Obter timeline de engajamento
+const getEngagementTimeline = async (req, res) => {
+  try {
+    const { from, to, contentType } = req.query;
+    
+    const matchStage = {
+      timestamp: {
+        $gte: new Date(from),
+        $lte: new Date(to)
+      }
+    };
+    
+    if (contentType && contentType !== 'all') {
+      matchStage.targetModel = contentType;
+    }
+    
+    const timeline = await Engagement.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } }
+          },
+          views: {
+            $sum: {
+              $cond: [{ $in: ["$actionType", ["article_view", "post_view", "file_view"]] }, "$points", 0]
+            }
+          },
+          interactions: {
+            $sum: {
+              $cond: [{ $in: ["$actionType", ["post_like", "post_comment", "file_share"]] }, "$points", 0]
+            }
+          },
+          totalPoints: { $sum: "$points" },
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $project: {
+          date: "$_id.date",
+          views: 1,
+          interactions: 1,
+          totalPoints: 1,
+          uniqueUsers: { $size: "$uniqueUsers" }
+        }
+      },
+      { $sort: { date: 1 } }
+    ]);
+    
+    res.json(timeline);
+  } catch (error) {
+    console.error('Erro ao buscar timeline:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar dados' });
+  }
+};
+
+// Obter estatísticas de conteúdo
+const getContentStats = async (req, res) => {
+  try {
+    const { from, to, contentType } = req.query;
+    
+    const matchStage = {
+      timestamp: {
+        $gte: new Date(from),
+        $lte: new Date(to)
+      }
+    };
+    
+    if (contentType && contentType !== 'all') {
+      matchStage.targetModel = contentType;
+    }
+    
+    const stats = await Engagement.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            contentId: "$targetId",
+            contentType: "$targetModel"
+          },
+          views: {
+            $sum: {
+              $cond: [{ $in: ["$actionType", ["article_view", "post_view", "file_view"]] }, "$points", 0]
+            }
+          },
+          interactions: {
+            $sum: {
+              $cond: [{ $in: ["$actionType", ["post_like", "post_comment", "file_share"]] }, "$points", 0]
+            }
+          },
+          totalPoints: { $sum: "$points" },
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $project: {
+          contentId: "$_id.contentId",
+          contentType: "$_id.contentType",
+          views: 1,
+          interactions: 1,
+          totalPoints: 1,
+          uniqueUsers: { $size: "$uniqueUsers" }
+        }
+      },
+      { $sort: { totalPoints: -1 } },
+      { $limit: 20 }
+    ]);
+    
+    // Buscar títulos dos conteúdos
+    for (const stat of stats) {
+      let title = "Conteúdo não encontrado";
+      
+      if (!stat.contentId) {
+        stat.title = "Conteúdo sem ID";
+        continue;
+      }
+      
+      try {
+        switch (stat.contentType) {
+          case 'Post':
+            const post = await Post.findById(stat.contentId);
+            title = post?.text?.substring(0, 50) || "Post sem texto";
+            break;
+          case 'Article':
+            const article = await Article.findById(stat.contentId);
+            title = article?.title || "Artigo sem título";
+            break;
+          case 'File':
+            const file = await File.findById(stat.contentId);
+            title = file?.name || "Arquivo sem nome";
+            break;
+          default:
+            title = `${stat.contentType || 'Tipo desconhecido'} sem título`;
+        }
+      } catch (error) {
+        console.error(`Erro ao buscar conteúdo ${stat.contentId}:`, error);
+      }
+      
+      stat.title = title;
+    }
+    
+    res.json(stats);
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar dados' });
+  }
+};
+
+// Obter usuários mais ativos - adaptado para sua estrutura
+const getActiveUsers = async (req, res) => {
+  try {
+    const { from, to, limit = 10 } = req.query;
+    
+    const startDate = new Date(from);
+    const endDate = new Date(to);
+    
+    // Agregação para encontrar os usuários mais ativos
+    const activeUsers = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: "$userId",
+          totalPoints: { $sum: "$points" },
+          totalActions: { $sum: 1 },
+          views: {
+            $sum: {
+              $cond: [{ $in: ["$actionType", ["article_view", "post_view", "file_view"]] }, 1, 0]
+            }
+          },
+          interactions: {
+            $sum: {
+              $cond: [{ $in: ["$actionType", ["post_like", "post_comment", "file_share"]] }, 1, 0]
+            }
+          },
+          postCreations: {
+            $sum: {
+              $cond: [{ $eq: ["$actionType", "post_create"] }, 1, 0]
+            }
+          },
+          loginCount: {
+            $sum: {
+              $cond: [{ $eq: ["$actionType", "login"] }, 1, 0]
+            }
+          },
+          lastActivity: { $max: "$timestamp" }
+        }
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "userDetails"
+        }
+      },
+      { 
+        $unwind: {
+          path: "$userDetails",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          userId: "$_id",
+          nome: { $ifNull: ["$userDetails.nome", "Usuário Desconhecido"] },
+          departamento: { $ifNull: ["$userDetails.departamento", ""] },
+          cargo: { $ifNull: ["$userDetails.cargo", ""] },
+          avatar: { $ifNull: ["$userDetails.avatar", null] },
+          totalPoints: 1,
+          totalActions: 1,
+          views: 1,
+          interactions: 1,
+          postCreations: 1,
+          loginCount: 1,
+          lastActivity: 1
+        }
+      },
+      { $sort: { totalPoints: -1 } },
+      { $limit: parseInt(limit) }
+    ]);
+    
+    res.json(activeUsers);
+  } catch (error) {
+    console.error('Erro ao buscar usuários ativos:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar usuários ativos' });
+  }
+};
+
+// Obter estatísticas dos tipos de ações de engajamento
+const getActionStats = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    
+    const startDate = new Date(from);
+    const endDate = new Date(to);
+    
+    const actionStats = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: "$actionType",
+          count: { $sum: 1 },
+          totalPoints: { $sum: "$points" },
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $lookup: {
+          from: "engagementactions",
+          localField: "_id",
+          foreignField: "actionType",
+          as: "actionDetails"
+        }
+      },
+      {
+        $project: {
+          actionType: "$_id",
+          displayName: { 
+            $ifNull: [
+              { $arrayElemAt: ["$actionDetails.displayName", 0] }, 
+              "$_id"
+            ]
+          },
+          description: { 
+            $ifNull: [
+              { $arrayElemAt: ["$actionDetails.description", 0] }, 
+              ""
+            ]
+          },
+          count: 1,
+          totalPoints: 1,
+          uniqueUsers: { $size: "$uniqueUsers" }
+        }
+      },
+      { $sort: { totalPoints: -1 } }
+    ]);
+    
+    res.json(actionStats);
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas de ações:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar estatísticas de ações' });
+  }
+};
+
+// Obter estatísticas de Super Coins
+const getSuperCoinsStats = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    
+    const startDate = new Date(from);
+    const endDate = new Date(to);
+    
+    // 1. Estatísticas gerais
+    const generalStats = await SuperCoinTransaction.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalTransactions: { $sum: 1 },
+          totalCoinsTransferred: { $sum: "$amount" },
+          uniqueSenders: { $addToSet: "$fromUserId" },
+          uniqueReceivers: { $addToSet: "$toUserId" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          totalTransactions: 1,
+          totalCoinsTransferred: 1,
+          uniqueSenders: { $size: "$uniqueSenders" },
+          uniqueReceivers: { $size: "$uniqueReceivers" }
+        }
+      }
+    ]);
+    
+    // 2. Tendência diária
+    const dailyTrends = await SuperCoinTransaction.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
+          transactions: { $sum: 1 },
+          coinsTransferred: { $sum: "$amount" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id",
+          transactions: 1,
+          coinsTransferred: 1
+        }
+      },
+      { $sort: { date: 1 } }
+    ]);
+    
+    // 3. Atributos mais populares
+    const popularAttributes = await SuperCoinTransaction.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: "$attributeId",
+          totalUsed: { $sum: 1 },
+          totalCoins: { $sum: "$amount" }
+        }
+      },
+      {
+        $lookup: {
+          from: "superCoinAttributes",
+          localField: "_id",
+          foreignField: "_id",
+          as: "attributeDetails"
+        }
+      },
+      { 
+        $unwind: {
+          path: "$attributeDetails",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          attributeId: "$_id",
+          name: { $ifNull: ["$attributeDetails.name", "Atributo Desconhecido"] },
+          description: { $ifNull: ["$attributeDetails.description", ""] },
+          cost: { $ifNull: ["$attributeDetails.cost", 0] },
+          icon: { $ifNull: ["$attributeDetails.icon", ""] },
+          color: { $ifNull: ["$attributeDetails.color", "#e60909"] },
+          totalUsed: 1,
+          totalCoins: 1
+        }
+      },
+      { $sort: { totalUsed: -1 } },
+      { $limit: 10 }
+    ]);
+    
+    // 4. Maiores doadores e recebedores
+    const topUsers = await Promise.all([
+      // Top senders
+      SuperCoinTransaction.aggregate([
+        {
+          $match: {
+            timestamp: { $gte: startDate, $lte: endDate }
+          }
+        },
+        {
+          $group: {
+            _id: "$fromUserId",
+            totalSent: { $sum: "$amount" },
+            transactions: { $sum: 1 }
+          }
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "userDetails"
+          }
+        },
+        { 
+          $unwind: {
+            path: "$userDetails",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            userId: "$_id",
+            name: { $ifNull: ["$userDetails.nome", "Usuário Desconhecido"] },
+            department: { $ifNull: ["$userDetails.departamento", ""] },
+            avatar: { $ifNull: ["$userDetails.avatar", null] },
+            totalSent: 1,
+            transactions: 1
+          }
+        },
+        { $sort: { totalSent: -1 } },
+        { $limit: 5 }
+      ]),
+      
+      // Top receivers
+      SuperCoinTransaction.aggregate([
+        {
+          $match: {
+            timestamp: { $gte: startDate, $lte: endDate }
+          }
+        },
+        {
+          $group: {
+            _id: "$toUserId",
+            totalReceived: { $sum: "$amount" },
+            transactions: { $sum: 1 }
+          }
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "userDetails"
+          }
+        },
+        { 
+          $unwind: {
+            path: "$userDetails",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            userId: "$_id",
+            name: { $ifNull: ["$userDetails.nome", "Usuário Desconhecido"] },
+            department: { $ifNull: ["$userDetails.departamento", ""] },
+            avatar: { $ifNull: ["$userDetails.avatar", null] },
+            totalReceived: 1,
+            transactions: 1
+          }
+        },
+        { $sort: { totalReceived: -1 } },
+        { $limit: 5 }
+      ])
+    ]);
+    
+    res.json({
+      generalStats: generalStats[0] || {
+        totalTransactions: 0,
+        totalCoinsTransferred: 0,
+        uniqueSenders: 0,
+        uniqueReceivers: 0
+      },
+      dailyTrends,
+      popularAttributes,
+      topSenders: topUsers[0],
+      topReceivers: topUsers[1]
+    });
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas de Super Coins:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar estatísticas de Super Coins' });
+  }
+};
+
+// Adicione as novas funções ao módulo exportado
+module.exports = {
+  getEngagementTimeline,
+  getContentStats,
+  getActiveUsers,
+  getActionStats,
+  getSuperCoinsStats
+};

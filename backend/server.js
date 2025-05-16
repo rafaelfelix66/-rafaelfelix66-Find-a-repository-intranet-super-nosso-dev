@@ -381,14 +381,30 @@ app.options('/api/files/upload', cors(corsOptions));
 
 // Rotas
 const llmRoutes = require('./routes/llm');
+const engagementRoutes = require('./routes/engagement');
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/timeline', require('./routes/timeline'));
 app.use('/api/knowledge', require('./routes/knowledge'));
 app.use('/api/chat', require('./routes/chat'));
 app.use('/api/files', require('./routes/files'));
 app.use('/api/banners', require('./routes/banners'));
-app.use('/api/llm', llmRoutes);
 app.use('/api/usuarios', require('./routes/usuarios'));
+app.use('/api/admin/engagement', require('./routes/adminEngagement'));
+app.use('/api/supercoins', require('./routes/supercoins'));
+app.use('/api/llm', llmRoutes);
+app.use('/api/engagement', engagementRoutes);
+
+
+// Adicionar job scheduler para recarga mensal
+const { monthlyRecharge } = require('./controllers/superCoinController');
+const cron = require('node-cron');
+
+// Executar todos os dias à meia-noite para verificar recarga
+cron.schedule('0 0 * * *', () => {
+  console.log('Verificando recarga mensal de Super Coins...');
+  monthlyRecharge();
+});
+
 
 // Rotas de autenticação
 app.post('/api/auth/register', async (req, res) => {

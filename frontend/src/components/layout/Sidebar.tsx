@@ -204,7 +204,16 @@ export function Sidebar() {
             isOpen={isOpen}
           />
 		  )}
-          <SidebarItem 
+		  {hasPermission('admin:dashboard') && (
+		  <SidebarItem 
+			icon={LineChart} 
+			to="/admin/engagement" 
+			label="Dashboard de Engajamento" 
+			active={getActivePath("/admin/engagement")} 
+			isOpen={isOpen}
+		  />
+		  )}
+		  <SidebarItem 
             icon={Settings} 
             to="/configuracoes" 
             label="Configurações" 

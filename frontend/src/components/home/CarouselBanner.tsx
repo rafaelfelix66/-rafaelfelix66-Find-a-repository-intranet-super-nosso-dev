@@ -154,7 +154,7 @@ export function CarouselBanner() {
                 <Button 
                   variant="outline" 
                   className="bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 hover:border-white/30 animate-fade-in"
-                  onClick={() => window.location.href = slide.link || "#"}
+                  onClick={() => window.open(slide.link || "#", "_blank", "noopener,noreferrer")}
                 >
                   Saiba mais
                 </Button>

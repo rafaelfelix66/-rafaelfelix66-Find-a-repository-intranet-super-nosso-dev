@@ -238,6 +238,10 @@ const BannerSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+   departamentoVisibilidade: {
+    type: [String],
+    default: ['TODOS']
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -11,6 +11,7 @@ import { PermissionManagement } from '@/components/admin/PermissionManagement';
 import { Navigate } from "react-router-dom";
 import { PermissionGuard } from '@/components/auth/PermissionGuard'; // Ajuste o caminho conforme necessário
 import Home from "./pages/Home";
+import EngagementDashboard from "./pages/EngagementDashboard";
 //import Index from "./pages/Index";
 import FileStorage from "./pages/FileStorage";
 //import Timeline from "./pages/Timeline";
@@ -182,6 +183,14 @@ const App = () => {
 					</PrivateRoute>
 				  } 
 				/>
+			  <Route 
+				  path="/admin/engagement" 
+				  element={
+					<PrivateRoute requiredPermission="admin:dashboard">
+					  <EngagementDashboard />
+					</PrivateRoute>
+				  } 
+				/>	
               
               {/* Rota para página não encontrada */}
               <Route path="*" element={<NotFound />} />

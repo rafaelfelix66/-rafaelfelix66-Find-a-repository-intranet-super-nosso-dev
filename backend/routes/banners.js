@@ -45,7 +45,7 @@ const upload = multer({
 });
 
 // Rotas públicas
-router.get('/', bannerController.getActiveBanners);
+router.get('/',auth, bannerController.getActiveBanners);
 
 // Rotas administrativas
 router.get('/all', auth, hasPermission('banners:view'), bannerController.getAllBanners);

@@ -45,6 +45,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import DepartamentoSelector from "@/components/timeline/DepartamentoSelector";
 
 interface Banner {
   _id: string;
@@ -65,7 +66,7 @@ const BannerAdmin = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentBanner, setCurrentBanner] = useState<Banner | null>(null);
-  
+  const [departamentoVisibilidade, setDepartamentoVisibilidade] = useState(['TODOS']);
   // Form states
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -155,7 +156,7 @@ const handleSave = async () => {
   formData.append('link', link || '');
   formData.append('active', String(active));
   formData.append('order', String(order));
-  
+  formData.append('departamentoVisibilidade', JSON.stringify(departamentoVisibilidade));
   if (image) {
     console.log("Adicionando imagem:", image.name, image.type, image.size);
     formData.append('image', image);
@@ -349,7 +350,11 @@ const handleSave = async () => {
                         onChange={(e) => setOrder(parseInt(e.target.value) || 0)}
                       />
                     </div>
-                    
+                    <div className="space-y-2">
+					  <DepartamentoSelector 
+						onChange={setDepartamentoVisibilidade}
+					  />
+					</div>
                     <div className="flex items-center space-x-2 pt-6">
                       <Switch
                         id="active"

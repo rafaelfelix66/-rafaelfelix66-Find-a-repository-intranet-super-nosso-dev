@@ -28,9 +28,9 @@ export const usePermission = (): UsePermissionResult => {
     }
     
     // Log para depuração - remova em produção
-    // console.log(`Verificando permissão '${permission}' para usuário:`, user.name);
-    // console.log('Roles do usuário:', user.roles);
-    // console.log('Permissions do usuário:', user.permissions);
+     console.log(`Verificando permissão '${permission}' para usuário:`, user.name);
+     console.log('Roles do usuário:', user.roles);
+     console.log('Permissions do usuário:', user.permissions);
     
     // Caso especial: considere 'admin' como tendo todas as permissões
     if (user.roles?.includes('admin')) {
@@ -46,11 +46,11 @@ export const usePermission = (): UsePermissionResult => {
     console.log('Usuário é admin:', hasRolePermission);
     
     // Para debug - remova em produção
-    // if (hasDirectPermission) {
-    //   console.log(`Permissão '${permission}' encontrada diretamente`);
-    // } else {
-    //   console.log(`Permissão '${permission}' não encontrada`);
-    // }
+     if (hasDirectPermission) {
+       console.log(`Permissão '${permission}' encontrada diretamente`);
+     } else {
+       console.log(`Permissão '${permission}' não encontrada`);
+     }
     
     // Permissões básicas que todos os usuários devem ter
     // Isso é uma solução temporária para evitar bloqueios indesejados

@@ -18,6 +18,8 @@ import { LinkifiedText } from "@/components/timeline/LinkifiedText";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { AniversariosWidget } from "@/components/home/AniversariosWidget";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { EngagementRanking } from "@/components/home/EngagementRanking";
+import { SuperCoinWidget } from "@/components/supercoin/SuperCoinWidget";
 import { 
   Card, 
   CardContent, 
@@ -1487,6 +1489,10 @@ const Home = () => {
 			  
 			  {/* Widget de Aniversários */}
 			  <AniversariosWidget />
+			  {/* Widget de Ranking de Engajamento */}
+              <EngagementRanking />
+			  {/* Widget de Super Coins */}
+              <SuperCoinWidget />
 			</div>
         </div>
       </div>

@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { CalendarIcon, ChevronLeft, ChevronRight, Plus, Loader2, MapPin } from "lucide-react";
 import { api } from "@/lib/api"; 
 import { toast } from "@/hooks/use-toast";
+import { usePermission } from '@/hooks/usePermission';
+import { PermissionGuard } from '@/components/auth/PermissionGuard';
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +46,8 @@ export function EnhancedCalendarWidget() {
   const [isEventFormOpen, setIsEventFormOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [multiEventView, setMultiEventView] = useState(false);
-  
+  const { hasPermission } = usePermission();
+  const navigate = useNavigate();
   // Estados do formulário
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -511,7 +515,7 @@ const fetchEvents = async () => {
   
   // Ver detalhes do evento na timeline
   const viewEventInTimeline = (postId: string) => {
-    window.location.href = `/timeline?post=${postId}`;
+    navigate(`/timeline?post=${postId}`);
   };
   
   // Forçar atualização dos eventos do banco de dados
@@ -617,16 +621,18 @@ const fetchEvents = async () => {
           )}
         </div>
       </CardContent>
-      <CardFooter className="pt-2">
-        <Button 
-          variant="outline" 
-          className="w-full text-supernosso-red hover:text-supernosso-red hover:border-supernosso-red"
-          onClick={openEventForm}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Adicionar Evento
-        </Button>
-      </CardFooter>
+       {hasPermission('events:create') && (
+        <CardFooter className="pt-2">
+          <Button 
+            variant="outline" 
+            className="w-full text-supernosso-red hover:text-supernosso-red hover:border-supernosso-red"
+            onClick={openEventForm}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Adicionar Evento
+          </Button>
+        </CardFooter>
+      )}
       
       {/* Formulário de Evento Integrado */}
       <Dialog open={isEventFormOpen} onOpenChange={setIsEventFormOpen}>
