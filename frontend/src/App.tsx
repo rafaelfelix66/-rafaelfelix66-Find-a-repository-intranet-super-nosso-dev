@@ -190,7 +190,7 @@ const App = () => {
 					  <EngagementDashboard />
 					</PrivateRoute>
 				  } 
-				/>	
+				/>
               
               {/* Rota para página não encontrada */}
               <Route path="*" element={<NotFound />} />

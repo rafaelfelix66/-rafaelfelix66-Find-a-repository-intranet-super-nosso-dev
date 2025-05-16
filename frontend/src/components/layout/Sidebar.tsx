@@ -12,7 +12,8 @@ import {
   Settings, 
   LogOut,
   LayoutDashboard,
-  Shield
+  Shield,
+  BarChart 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -206,7 +207,7 @@ export function Sidebar() {
 		  )}
 		  {hasPermission('admin:dashboard') && (
 		  <SidebarItem 
-			icon={LineChart} 
+			icon={BarChart} 
 			to="/admin/engagement" 
 			label="Dashboard de Engajamento" 
 			active={getActivePath("/admin/engagement")} 

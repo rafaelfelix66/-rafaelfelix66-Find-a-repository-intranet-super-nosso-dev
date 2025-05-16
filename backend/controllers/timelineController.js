@@ -28,7 +28,34 @@ const normalizePath = (filePath) => {
       'LIDERANÇA', 
       'OPERACIONAL'
     ];
-
+// Obter uma publicação específica
+const getPostById = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id)
+      .populate('user', ['nome', 'avatar', 'cargo', 'departamento'])
+      .populate('comments.user', ['nome', 'avatar', 'cargo', 'departamento']);
+    
+    if (!post) {
+      return res.status(404).json({ msg: 'Publicação não encontrada' });
+    }
+    
+    // Formatar o post para o frontend (usando a mesma lógica do getPosts)
+    const postObj = post.toObject();
+    
+    // Normalizar caminhos em attachments, processar eventData, etc.
+    // (mesma lógica de formatação que você usa em getPosts)
+    
+    return res.json(postObj);
+  } catch (err) {
+    console.error('Erro ao buscar post específico:', err.message);
+    
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ msg: 'Publicação não encontrada' });
+    }
+    
+    res.status(500).send('Erro no servidor');
+  }
+};
 // Obter todas as publicações
 const getPosts = async (req, res) => {
   try {
@@ -447,4 +474,4 @@ const deletePost = async (req, res) => {
 };
 
 // Exportar as funções
-module.exports = { getPosts, createPost, addComment, likePost, deletePost };
+module.exports = { getPosts, createPost, addComment, likePost, deletePost, getPostById };

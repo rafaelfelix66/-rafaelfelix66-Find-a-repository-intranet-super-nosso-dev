@@ -1,4 +1,3 @@
-
 // routes/timeline.js
 const express = require('express');
 const router = express.Router();
@@ -10,6 +9,10 @@ const { Post } = require('../models');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+
+// NOVO: Importar o middleware de rastreamento de engajamento
+const { trackView, trackInteraction } = require('../middleware/trackEngagement');
+
 // Configuração do multer para uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -28,6 +31,7 @@ const storage = multer.diskStorage({
     cb(null, uniqueFilename);
   }
 });
+
 // Filtro para tipos de arquivo
 const fileFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|gif|mp4|webm|pdf|doc|docx|avi|mov|wmv/;
@@ -46,42 +50,72 @@ const upload = multer({
   fileFilter,
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB
 });
+
 console.log('Registrando rotas da timeline...');
+
 // @route   GET api/timeline
 // @desc    Obter todas as publicações
 // @access  Private
-router.get('/', auth, timelineController.getPosts);
-// @route   GET api/timeline
-// @desc    Obter todas as publicações (filtrado por departamento)
+router.get('/', auth, filterPostsByDepartment, timelineController.getPosts);
+
+// @route   GET api/timeline/:id
+// @desc    Obter uma publicação específica
 // @access  Private
-router.get('/', auth, filterPostsByDepartment, timelineController.getPosts); // Adicionar middleware
+// NOVO: Adicionar middleware de rastreamento de visualização para publicações específicas
+router.get('/:id', auth, trackView('Post'), timelineController.getPostById);
+
 // @route   POST api/timeline
 // @desc    Criar uma publicação
 // @access  Private
-router.post('/', auth, hasPermission('timeline:create'), upload.array('attachments', 5), (req, res) => {
-  console.log('Requisição POST /api/timeline recebida:', { 
-    body: req.body, 
-    files: req.files?.map(f => ({ name: f.originalname, path: f.path, type: f.mimetype })) || [] 
-  });
-  timelineController.createPost(req, res);
-});
+// NOVO: Adicionar middleware de rastreamento de criação de post
+router.post('/', 
+  auth, 
+  hasPermission('timeline:create'), 
+  upload.array('attachments', 5), 
+  trackInteraction('post_create', 'Post'),
+  (req, res) => {
+    console.log('Requisição POST /api/timeline recebida:', { 
+      body: req.body, 
+      files: req.files?.map(f => ({ name: f.originalname, path: f.path, type: f.mimetype })) || [] 
+    });
+    timelineController.createPost(req, res);
+  }
+);
 
 // @route   POST api/timeline/comment/:id
 // @desc    Adicionar comentário a uma publicação
 // @access  Private
-router.post('/:id/comment', auth, hasPermission('timeline:comment'), timelineController.addComment);
+// NOVO: Adicionar middleware de rastreamento de comentário
+router.post('/:id/comment', 
+  auth, 
+  hasPermission('timeline:comment'), 
+  trackInteraction('post_comment', 'Post'),
+  timelineController.addComment
+);
 
 // @route   PUT api/timeline/like/:id
 // @desc    Curtir uma publicação
 // @access  Private
-router.put('/:id/like', auth, timelineController.likePost);
+// NOVO: Adicionar middleware de rastreamento de curtida
+router.put('/:id/like', 
+  auth, 
+  trackInteraction('post_like', 'Post'),
+  timelineController.likePost
+);
+
 console.log('Rotas da timeline registradas com sucesso');
 
 // @route   DELETE api/timeline/:id
 // @desc    Excluir uma publicação
 // @access  Private
-router.delete('/:id', auth, isOwnerOrHasPermission(Post, 'id', 'timeline:delete_any'), timelineController.deletePost);
+router.delete('/:id', 
+  auth, 
+  isOwnerOrHasPermission(Post, 'id', 'timeline:delete_any'), 
+  timelineController.deletePost
+);
+
 console.log('Rota de exclusão de post registrada com sucesso');
+
 // @route   GET api/timeline/check-image/:filename
 // @desc    Verificar se uma imagem específica existe e pode ser acessada
 // @access  Public

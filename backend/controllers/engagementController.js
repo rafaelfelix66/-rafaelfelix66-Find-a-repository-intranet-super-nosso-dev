@@ -1,30 +1,49 @@
-//backend/controllers/engagementController.js
-
+// controllers/engagementController.js
 const { Engagement, EngagementAction } = require('../models/Engagement');
 const { User } = require('../models');
 
 // Registrar uma ação de engajamento
 const trackEngagement = async (userId, actionType, targetId = null, targetModel = null, customActionType = null) => {
   try {
+    // Verificar se o usuário existe
+    const userExists = await User.exists({ _id: userId });
+    if (!userExists) {
+      console.error(`Tentativa de registrar engajamento para usuário inexistente: ${userId}`);
+      return null;
+    }
+    
     // Buscar configuração da ação
-    const actionConfig = await EngagementAction.findOne({ 
-      actionType: customActionType || actionType,
-      active: true 
-    });
+    let pointsValue = 1; // Valor padrão
     
-    const points = actionConfig?.points || 1;
+    try {
+      const actionConfig = await EngagementAction.findOne({ 
+        actionType: customActionType || actionType,
+        active: true 
+      });
+      
+      if (actionConfig && actionConfig.points) {
+        pointsValue = actionConfig.points;
+      }
+    } catch (err) {
+      console.error('Erro ao buscar configuração da ação:', err);
+      // Continue com o valor padrão
+    }
     
+    // Criar registro de engajamento
     const engagement = new Engagement({
       userId,
       actionType,
       customActionType,
-      points,
+      points: pointsValue,
       targetId,
       targetModel,
       timestamp: new Date()
     });
     
+    // Salvar o registro
     await engagement.save();
+    console.log(`Engajamento registrado: ${actionType} por ${userId} - ${pointsValue} pontos`);
+    
     return engagement;
   } catch (error) {
     console.error('Erro ao registrar engajamento:', error);
@@ -44,13 +63,17 @@ const getEngagementRanking = async (req, res) => {
         startDate.setHours(0, 0, 0, 0);
         break;
       case 'week':
-        startDate.setDate(startDate.getDate() - 7);
+        const dayOfWeek = startDate.getDay(); // 0 = Domingo, 1 = Segunda, ...
+        startDate.setDate(startDate.getDate() - dayOfWeek); // Voltar para o início da semana (domingo)
+        startDate.setHours(0, 0, 0, 0);
         break;
       case 'month':
-        startDate.setMonth(startDate.getMonth() - 1);
+        startDate.setDate(1); // Primeiro dia do mês
+        startDate.setHours(0, 0, 0, 0);
         break;
       case 'year':
-        startDate.setFullYear(startDate.getFullYear() - 1);
+        startDate.setMonth(0, 1); // 1º de janeiro
+        startDate.setHours(0, 0, 0, 0);
         break;
       default:
         startDate = new Date(0); // Todos os tempos
@@ -127,6 +150,5 @@ const createEngagementAction = async (req, res) => {
 module.exports = {
   trackEngagement,
   getEngagementRanking,
-  createEngagementAction,
-  // Adicionar outras funções CRUD conforme necessário
+  createEngagementAction
 };

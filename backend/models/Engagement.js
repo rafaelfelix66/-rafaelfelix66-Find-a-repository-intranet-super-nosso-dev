@@ -10,7 +10,13 @@ const EngagementSchema = new mongoose.Schema({
   actionType: {
     type: String,
     required: true,
-    enum: ['post_create', 'post_like', 'post_comment', 'article_view', 'file_share', 'login', 'custom']
+    // Adicione mais tipos conforme necessário
+    enum: [
+      'post_view', 'post_create', 'post_like', 'post_comment', 
+      'article_view', 'article_create', 
+      'file_view', 'file_share', 'file_download',
+      'login', 'profile_update', 'custom'
+    ]
   },
   customActionType: {
     type: String,

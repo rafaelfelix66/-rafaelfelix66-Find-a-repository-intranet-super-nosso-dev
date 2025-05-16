@@ -1,4 +1,4 @@
-// backend/routes/supercoins.js
+// /backend/routes/supercoins.js
 const express = require('express');
 const router = express.Router();
 const superCoinController = require('../controllers/superCoinController');
@@ -15,10 +15,10 @@ router.get('/balance', superCoinController.getBalance);
 router.get('/balance/:userId', hasPermission('supercoins:manage'), superCoinController.getBalance);
 
 // Rota para enviar moedas para outro usuário
-router.post('/send', superCoinController.sendCoins);
+router.post('/send', hasPermission('supercoins:send'), superCoinController.sendCoins);
 
 // Rota para obter o ranking de Super Coins
-router.get('/ranking', superCoinController.getCoinRanking);
+router.get('/ranking', hasPermission('supercoins:view_ranking'), superCoinController.getCoinRanking);
 
 // Rotas administrativas para gerenciar atributos e configurações
 router.get('/attributes', superCoinController.getAttributes);
@@ -35,7 +35,5 @@ router.get('/transactions', superCoinController.getUserTransactions);
 
 // Rota para obter histórico de transações de um usuário específico (apenas para administradores)
 router.get('/transactions/:userId', hasPermission('supercoins:manage'), superCoinController.getUserTransactions);
-
-
 
 module.exports = router;

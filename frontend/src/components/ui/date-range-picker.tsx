@@ -1,6 +1,4 @@
-//frontend/src/components/ui/date-range-picker.tsx
-"use client";
-
+// frontend/src/components/ui/date-range-picker.tsx
 import * as React from "react";
 import { addDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -18,7 +16,7 @@ import {
 
 interface DateRangePickerProps {
   className?: string;
-  dateRange: DateRange | undefined;
+  dateRange: DateRange;
   onDateRangeChange: (range: DateRange | undefined) => void;
 }
 
@@ -37,11 +35,11 @@ export function DateRangePicker({
             variant={"outline"}
             className={cn(
               "w-full justify-start text-left font-normal",
-              !dateRange && "text-muted-foreground"
+              !dateRange.from && "text-muted-foreground"
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {dateRange?.from ? (
+            {dateRange.from ? (
               dateRange.to ? (
                 <>
                   {format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })} -{" "}
@@ -59,7 +57,7 @@ export function DateRangePicker({
           <Calendar
             initialFocus
             mode="range"
-            defaultMonth={dateRange?.from}
+            defaultMonth={dateRange.from}
             selected={dateRange}
             onSelect={onDateRangeChange}
             numberOfMonths={2}

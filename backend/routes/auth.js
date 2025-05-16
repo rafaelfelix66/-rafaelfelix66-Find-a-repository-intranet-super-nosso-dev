@@ -6,6 +6,7 @@ const verificarToken = require('../middleware/auth'); // Atualizado
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { trackLogin } = require('../middleware/trackEngagement');
 
 // Configuração do multer para upload de avatar
 const storage = multer.diskStorage({
@@ -49,7 +50,7 @@ router.post('/register', authController.register);
 // @route   POST api/auth/login
 // @desc    Autenticar usuário
 // @access  Public
-router.post('/login', authController.login);
+router.post('/login', trackLogin(), authController.login);
 
 // @route   GET api/auth/user
 // @desc    Obter dados do usuário
