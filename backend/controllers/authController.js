@@ -1,10 +1,24 @@
-// controllers/authController.js (simplificado para usar apenas o backup)
+// controllers/authController.js (mantendo funcionalidades existentes e adicionando melhorias)
 const { User } = require('../models');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const oracleService = require('../services/oracleService');
 
-// Função register modificada para usar apenas o backup
+// Função auxiliar para formatar data de DD/MM/YYYY para objeto Date
+const parseDataBrasileira = (dataStr) => {
+  if (!dataStr) return null;
+  
+  try {
+    const [dia, mes, ano] = dataStr.split('/').map(Number);
+    // Criar data no formato YYYY-MM-DD (mês em JavaScript é baseado em zero, então subtraímos 1)
+    return new Date(ano, mes - 1, dia);
+  } catch (error) {
+    console.error('Erro ao converter data:', error);
+    return null;
+  }
+};
+
+// Função register modificada para usar apenas o backup E incluir todos os campos
 const register = async (req, res) => {
   try {
     const { cpf, senha } = req.body;
@@ -27,6 +41,7 @@ const register = async (req, res) => {
     // Criar novo usuário com dados do backup
     const dados = resultadoBackup.data;
     
+    // MELHORIA: Incluir todos os campos do backup
     user = new User({
       nome: dados.NOME,
       cpf: dados.CPF,
@@ -34,6 +49,11 @@ const register = async (req, res) => {
       password: senha, // Será hasheado pelo middleware do modelo
       cargo: dados.FUNCAO,
       departamento: dados.SETOR,
+      // NOVOS CAMPOS
+      chapa: dados.CHAPA,
+      filial: dados.FILIAL,
+      dataNascimento: parseDataBrasileira(dados.DTNASCIMENTO),
+      dataAdmissao: parseDataBrasileira(dados.DATAADMISSAO),
       roles: ['user'], // Papel padrão
       ativo: true,
       ultimaSincronizacao: new Date()
@@ -59,14 +79,9 @@ const register = async (req, res) => {
   }
 };
 
-// Função login modificada para usar apenas o backup
+// Função login modificada para atualizar os campos faltantes durante o login
 const login = async (req, res) => {
   try {
-    //console.log('Requisição de login recebida:', {
-    //  body: req.body,
-    //  headers: req.headers['content-type']
-    //});
-
     // Verificar se o corpo da requisição existe
     if (!req.body) {
       return res.status(400).json({ 
@@ -82,12 +97,9 @@ const login = async (req, res) => {
         mensagem: 'CPF e senha são obrigatórios'
       });
     }
-
-    //console.log('Processando login para CPF:', cpf);
     
     // Buscar usuário no banco local
     const user = await User.findOne({ cpf });
-    //console.log('Usuário encontrado:', user ? 'Sim' : 'Não');
 
     // SOLUÇÃO TEMPORÁRIA: Permitir login direto para o usuário do backup
     // Se o usuário não existe no banco local, verificar no backup
@@ -110,6 +122,11 @@ const login = async (req, res) => {
           password: senha,
           cargo: dados.FUNCAO,
           departamento: dados.SETOR,
+          // NOVOS CAMPOS ADICIONADOS
+          chapa: dados.CHAPA,
+          filial: dados.FILIAL,
+          dataNascimento: parseDataBrasileira(dados.DTNASCIMENTO),
+          dataAdmissao: parseDataBrasileira(dados.DATAADMISSAO),
           roles: ['user'], // Papel padrão
           ativo: true,
           ultimaSincronizacao: new Date(),
@@ -145,6 +162,11 @@ const login = async (req, res) => {
             email: novoUsuario.email,
             cargo: novoUsuario.cargo,
             departamento: novoUsuario.departamento,
+            // ENVIAR NOVOS CAMPOS NA RESPOSTA
+            chapa: novoUsuario.chapa,
+            filial: novoUsuario.filial,
+            dataAdmissao: novoUsuario.dataAdmissao,
+            dataNascimento: novoUsuario.dataNascimento,
             avatar: novoUsuario.avatar,
             roles: novoUsuario.roles || [],
             permissions: novoUsuario.permissoes || []
@@ -156,50 +178,99 @@ const login = async (req, res) => {
       
       return res.status(404).json({ mensagem: 'Usuário não encontrado' });
     }
-    
-    // Log detalhado para depuração da comparação de senhas
-//console.log('Detalhes do usuário:', {
-  //id: user._id,
-  //passwordLength: user.password?.length || 0,
-  //senhaFornecida: senha,
-  //senhaEsperada: cpf.slice(-6)
-//});
 
-// Substitua a verificação de senha por esta implementação
-let isMatch = false;
-try {
-  const bcrypt = require('bcryptjs');
-  // Compare diretamente usando bcrypt com um timeout
-  //console.log('Tentando comparar com bcrypt diretamente...');
-  isMatch = await bcrypt.compare(senha, user.password);
-  //console.log('Resultado da comparação direta bcrypt:', isMatch);
-  
-  // Se falhar, tente verificar se as senhas em texto são iguais
-  if (!isMatch && senha === cpf.slice(-6)) {
-    //console.log('Senhas em texto são iguais, atualizando hash...');
-    // Atualizar a senha com um novo hash que funcionará na próxima vez
-    const salt = await bcrypt.genSalt(10);
-    const newHash = await bcrypt.hash(senha, salt);
+    // MELHORIA: Sincronizar campos do usuário com o backup durante o login
+    try {
+      const resultadoBackup = await oracleService.verificarCpfNoBackup(user.cpf);
+      if (resultadoBackup.success) {
+        const dados = resultadoBackup.data;
+        let atualizacaoNecessaria = false;
+        
+        // Verificar se os campos faltantes precisam ser atualizados
+        if (dados.CHAPA && (!user.chapa || user.chapa !== dados.CHAPA)) {
+          user.chapa = dados.CHAPA;
+          atualizacaoNecessaria = true;
+        }
+        
+        if (dados.FILIAL && (!user.filial || user.filial !== dados.FILIAL)) {
+          user.filial = dados.FILIAL;
+          atualizacaoNecessaria = true;
+        }
+        
+        if (dados.DTNASCIMENTO) {
+          const dataNascimento = parseDataBrasileira(dados.DTNASCIMENTO);
+          if (dataNascimento && (!user.dataNascimento || 
+             (user.dataNascimento && dataNascimento.getTime() !== user.dataNascimento.getTime()))) {
+            user.dataNascimento = dataNascimento;
+            atualizacaoNecessaria = true;
+          }
+        }
+        
+        if (dados.DATAADMISSAO) {
+          const dataAdmissao = parseDataBrasileira(dados.DATAADMISSAO);
+          if (dataAdmissao && (!user.dataAdmissao || 
+             (user.dataAdmissao && dataAdmissao.getTime() !== user.dataAdmissao.getTime()))) {
+            user.dataAdmissao = dataAdmissao;
+            atualizacaoNecessaria = true;
+          }
+        }
+        
+        // Atualizar outros campos, se necessário
+        if (dados.FUNCAO && (!user.cargo || user.cargo !== dados.FUNCAO)) {
+          user.cargo = dados.FUNCAO;
+          atualizacaoNecessaria = true;
+        }
+        
+        if (dados.SETOR && (!user.departamento || user.departamento !== dados.SETOR)) {
+          user.departamento = dados.SETOR;
+          atualizacaoNecessaria = true;
+        }
+        
+        // Se houve alguma atualização, salvar usuário
+        if (atualizacaoNecessaria) {
+          user.ultimaSincronizacao = new Date();
+          // Não esperamos pela atualização para não atrasar o login
+          user.save().catch(err => console.error('Erro ao atualizar dados do usuário durante login:', err));
+          console.log(`Dados do usuário ${user.nome} atualizados durante o login`);
+        }
+      }
+    } catch (syncError) {
+      console.error('Erro ao sincronizar dados do usuário durante login:', syncError);
+      // Continuar com o login mesmo se houver erro na sincronização
+    }
     
-    await User.updateOne(
-      { _id: user._id },
-      { $set: { password: newHash } }
-    );
-    
-    // Aceitamos o login desta vez
-    isMatch = true;
-  }
-} catch (error) {
-  console.error('Erro detalhado na verificação de senha:', error);
-  // Use a verificação direta como fallback em caso de erro
-  isMatch = senha === cpf.slice(-6);
-  console.log('Fallback para verificação direta:', isMatch);
-}
+    // Verificação de senha (mantida a mesma lógica)
+    let isMatch = false;
+    try {
+      const bcrypt = require('bcryptjs');
+      // Compare diretamente usando bcrypt com um timeout
+      isMatch = await bcrypt.compare(senha, user.password);
+      
+      // Se falhar, tente verificar se as senhas em texto são iguais
+      if (!isMatch && senha === cpf.slice(-6)) {
+        // Atualizar a senha com um novo hash que funcionará na próxima vez
+        const salt = await bcrypt.genSalt(10);
+        const newHash = await bcrypt.hash(senha, salt);
+        
+        await User.updateOne(
+          { _id: user._id },
+          { $set: { password: newHash } }
+        );
+        
+        // Aceitamos o login desta vez
+        isMatch = true;
+      }
+    } catch (error) {
+      console.error('Erro detalhado na verificação de senha:', error);
+      // Use a verificação direta como fallback em caso de erro
+      isMatch = senha === cpf.slice(-6);
+      console.log('Fallback para verificação direta:', isMatch);
+    }
 
-// Continue o código original após a verificação
-if (!isMatch) {
-  return res.status(401).json({ mensagem: 'Senha incorreta' });
-}
+    // Continue o código original após a verificação
+    if (!isMatch) {
+      return res.status(401).json({ mensagem: 'Senha incorreta' });
+    }
     
     // Atualizar último acesso
     user.ultimoAcesso = new Date();
@@ -212,8 +283,6 @@ if (!isMatch) {
       { expiresIn: '24h' }
     );
     
-    //console.log('Token gerado:', token);
-    
     res.json({
       token,
       usuario: {
@@ -223,6 +292,11 @@ if (!isMatch) {
         email: user.email,
         cargo: user.cargo,
         departamento: user.departamento,
+        // INCLUIR CAMPOS ADICIONAIS NA RESPOSTA
+        chapa: user.chapa,
+        filial: user.filial,
+        dataAdmissao: user.dataAdmissao,
+        dataNascimento: user.dataNascimento,
         avatar: user.avatar,
         roles: user.roles || [],
         permissions: user.permissoes || []
