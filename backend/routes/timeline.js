@@ -103,6 +103,45 @@ router.put('/:id/like',
   timelineController.likePost
 );
 
+// @route   PUT api/timeline/:postId/comment/:commentId/like
+// @desc    Curtir um comentário específico
+// @access  Private
+router.put('/:postId/comment/:commentId/like', 
+  auth, 
+  hasPermission('timeline:like_comment'),
+  trackInteraction('comment_like', 'Post'),
+  timelineController.likeComment
+);
+
+// @route   PUT api/timeline/:postId/comment/:commentId/like
+// @desc    Curtir um comentário específico
+// @access  Private
+router.put('/:postId/comment/:commentId/like', 
+  auth, 
+  hasPermission('timeline:like_comment'),
+  trackInteraction('comment_like', 'Post'),
+  timelineController.likeComment
+);
+
+// @route   PUT api/timeline/:id/reaction
+// @desc    Adicionar/remover reação a uma publicação
+// @access  Private
+router.put('/:id/reaction', 
+  auth, 
+  hasPermission('timeline:react'),
+  trackInteraction('post_react', 'Post'),
+  timelineController.addReaction
+);
+
+// @route   DELETE api/timeline/:postId/comment/:commentId
+// @desc    Excluir um comentário (apenas admins)
+// @access  Private (Admin only)
+router.delete('/:postId/comment/:commentId', 
+  auth, 
+  hasPermission('timeline:delete_any_comment'),
+  timelineController.deleteComment
+);
+
 console.log('Rotas da timeline registradas com sucesso');
 
 // @route   DELETE api/timeline/:id

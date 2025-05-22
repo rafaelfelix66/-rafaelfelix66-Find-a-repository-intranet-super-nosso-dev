@@ -9,6 +9,194 @@ const {
 } = require('../models/SuperCoin');
 const mongoose = require('mongoose');
 
+// Obter estatísticas de engajamento com banners
+const getBannerEngagementStats = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    
+    const startDate = new Date(from || Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = new Date(to || Date.now());
+    
+    const { Engagement } = require('../models/Engagement');
+    const { Banner } = require('../models');
+    
+    // Buscar todos os banners
+    const banners = await Banner.find({}, 'title description');
+    const bannerIds = banners.map(banner => banner._id);
+    
+    // Obter estatísticas gerais de visualizações e cliques
+    const overallStats = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate },
+          actionType: { $in: ['banner_view', 'banner_click'] },
+          targetModel: 'Banner'
+        }
+      },
+      {
+        $group: {
+          _id: '$actionType',
+          count: { $sum: 1 },
+          uniqueUsers: { $addToSet: '$userId' }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          actionType: '$_id',
+          count: 1,
+          uniqueUsers: { $size: '$uniqueUsers' }
+        }
+      }
+    ]);
+    
+    // Calcular estatísticas de visualizações e cliques por dia
+    const dailyStats = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate },
+          actionType: { $in: ['banner_view', 'banner_click'] },
+          targetModel: 'Banner'
+        }
+      },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } },
+            actionType: '$actionType'
+          },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { '_id.date': 1 }
+      }
+    ]);
+    
+    // Consolidar estatísticas diárias
+    const days = new Set();
+    dailyStats.forEach(stat => days.add(stat._id.date));
+    
+    const formattedDailyStats = Array.from(days).map(date => {
+      const dayStats = { date };
+      
+      dailyStats.forEach(stat => {
+        if (stat._id.date === date) {
+          if (stat._id.actionType === 'banner_view') {
+            dayStats.views = stat.count;
+          } else if (stat._id.actionType === 'banner_click') {
+            dayStats.clicks = stat.count;
+          }
+        }
+      });
+      
+      // Garantir que todos os campos existam
+      dayStats.views = dayStats.views || 0;
+      dayStats.clicks = dayStats.clicks || 0;
+      
+      // Calcular CTR
+      dayStats.ctr = dayStats.views > 0 ? (dayStats.clicks / dayStats.views) * 100 : 0;
+      
+      return dayStats;
+    });
+    
+    // Ordenar por data
+    formattedDailyStats.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Obter estatísticas por banner
+    const bannerStats = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate },
+          actionType: { $in: ['banner_view', 'banner_click'] },
+          targetModel: 'Banner',
+          targetId: { $in: bannerIds.map(id => new mongoose.Types.ObjectId(id)) }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            bannerId: '$targetId',
+            actionType: '$actionType'
+          },
+          count: { $sum: 1 },
+          uniqueUsers: { $addToSet: '$userId' }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+    
+    // Preparar estatísticas por banner
+    const formattedBannerStats = banners.map(banner => {
+      const stats = {
+        bannerId: banner._id,
+        title: banner.title,
+        description: banner.description,
+        views: 0,
+        clicks: 0,
+        uniqueViewers: 0,
+        uniqueClickers: 0,
+        ctr: 0
+      };
+      
+      bannerStats.forEach(stat => {
+        if (stat._id.bannerId.equals(banner._id)) {
+          if (stat._id.actionType === 'banner_view') {
+            stats.views = stat.count;
+            stats.uniqueViewers = stat.uniqueUsers.length;
+          } else if (stat._id.actionType === 'banner_click') {
+            stats.clicks = stat.count;
+            stats.uniqueClickers = stat.uniqueUsers.length;
+          }
+        }
+      });
+      
+      // Calcular CTR
+      stats.ctr = stats.views > 0 ? (stats.clicks / stats.views) * 100 : 0;
+      
+      return stats;
+    });
+    
+    // Ordenar por visualizações (decrescente)
+    formattedBannerStats.sort((a, b) => b.views - a.views);
+    
+    // Extrair dados de visualizações e cliques
+    const viewsStats = overallStats.find(stat => stat.actionType === 'banner_view') || { 
+      count: 0, 
+      uniqueUsers: 0 
+    };
+    
+    const clicksStats = overallStats.find(stat => stat.actionType === 'banner_click') || { 
+      count: 0, 
+      uniqueUsers: 0 
+    };
+    
+    // Calcular CTR global
+    const globalCtr = viewsStats.count > 0 ? (clicksStats.count / viewsStats.count) * 100 : 0;
+    
+    res.json({
+      period: {
+        from: startDate,
+        to: endDate
+      },
+      overall: {
+        views: viewsStats.count,
+        clicks: clicksStats.count,
+        uniqueViewers: viewsStats.uniqueUsers,
+        uniqueClickers: clicksStats.uniqueUsers,
+        ctr: globalCtr
+      },
+      dailyStats: formattedDailyStats,
+      bannerStats: formattedBannerStats
+    });
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas de banners:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar estatísticas', error: error.message });
+  }
+};
+
 // Obter timeline de engajamento
 const getEngagementTimeline = async (req, res) => {
   try {
@@ -514,11 +702,222 @@ const getSuperCoinsStats = async (req, res) => {
   }
 };
 
+const getOverallEngagementStats = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    
+    const startDate = new Date(from || Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = new Date(to || Date.now());
+    
+    const { Engagement, EngagementAction } = require('../models/Engagement');
+    
+    // Obter contagem de ações por tipo
+    const actionCounts = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: "$actionType",
+          count: { $sum: 1 },
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+    
+    // Obter contagem total de engajamento
+    const totalCount = await Engagement.countDocuments({
+      timestamp: { $gte: startDate, $lte: endDate }
+    });
+    
+    // Obter contagem de usuários únicos
+    const uniqueUsers = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          users: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          count: { $size: "$users" }
+        }
+      }
+    ]);
+    
+    // Obter pontos de engajamento totais
+    const totalPoints = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$points" }
+        }
+      }
+    ]);
+    
+    // Agrupar ações por categoria
+    const actionsByCategory = {
+      content: ['post_view', 'post_create', 'post_like', 'post_comment', 'article_view', 'article_create'],
+      files: ['file_view', 'file_share', 'file_download'],
+      banners: ['banner_view', 'banner_click'],
+      system: ['login', 'profile_update']
+    };
+    
+    const categoryCounts = {};
+    
+    Object.entries(actionsByCategory).forEach(([category, actions]) => {
+      const count = actionCounts
+        .filter(item => actions.includes(item._id))
+        .reduce((sum, item) => sum + item.count, 0);
+      
+      categoryCounts[category] = count;
+    });
+    
+    // Obter tendências diárias
+    const dailyTrends = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
+            category: {
+              $switch: {
+                branches: [
+                  { 
+                    case: { $in: ["$actionType", ['post_view', 'post_create', 'post_like', 'post_comment', 'article_view', 'article_create']] }, 
+                    then: "content" 
+                  },
+                  { 
+                    case: { $in: ["$actionType", ['file_view', 'file_share', 'file_download']] }, 
+                    then: "files" 
+                  },
+                  { 
+                    case: { $in: ["$actionType", ['banner_view', 'banner_click']] }, 
+                    then: "banners" 
+                  }
+                ],
+                default: "system"
+              }
+            }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $group: {
+          _id: "$_id.date",
+          categories: {
+            $push: {
+              category: "$_id.category",
+              count: "$count"
+            }
+          },
+          total: { $sum: "$count" }
+        }
+      },
+      {
+        $sort: { "_id": 1 }
+      }
+    ]);
+    
+    // Formatar tendências diárias
+    const formattedDailyTrends = dailyTrends.map(day => {
+      const result = {
+        date: day._id,
+        total: day.total
+      };
+      
+      // Adicionar contagens por categoria
+      day.categories.forEach(cat => {
+        result[cat.category] = cat.count;
+      });
+      
+      // Garantir que todas as categorias existam
+      Object.keys(actionsByCategory).forEach(category => {
+        if (!result[category]) {
+          result[category] = 0;
+        }
+      });
+      
+      return result;
+    });
+    
+    // Estatísticas específicas de banner
+    const bannerStats = await Engagement.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate },
+          actionType: { $in: ['banner_view', 'banner_click'] }
+        }
+      },
+      {
+        $group: {
+          _id: "$actionType",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    const bannerViews = bannerStats.find(stat => stat._id === 'banner_view')?.count || 0;
+    const bannerClicks = bannerStats.find(stat => stat._id === 'banner_click')?.count || 0;
+    const bannerCTR = bannerViews > 0 ? (bannerClicks / bannerViews) * 100 : 0;
+    
+    res.json({
+      period: {
+        from: startDate,
+        to: endDate
+      },
+      summary: {
+        totalActions: totalCount,
+        uniqueUsers: uniqueUsers[0]?.count || 0,
+        totalPoints: totalPoints[0]?.total || 0
+      },
+      actionCounts: actionCounts.map(item => ({
+        type: item._id,
+        count: item.count,
+        uniqueUsers: item.uniqueUsers.length
+      })),
+      categoryCounts,
+      bannerEngagement: {
+        views: bannerViews,
+        clicks: bannerClicks,
+        ctr: bannerCTR
+      },
+      dailyTrends: formattedDailyTrends
+    });
+  } catch (error) {
+    console.error('Erro ao buscar estatísticas gerais de engajamento:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar estatísticas', error: error.message });
+  }
+};
+
 // Adicione as novas funções ao módulo exportado
 module.exports = {
   getEngagementTimeline,
+  getBannerEngagementStats,
   getContentStats,
   getActiveUsers,
   getActionStats,
-  getSuperCoinsStats
+  getSuperCoinsStats,
+  getOverallEngagementStats
 };

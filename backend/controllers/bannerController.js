@@ -177,10 +177,224 @@ const deleteBanner = async (req, res) => {
   }
 };
 
+// Obter estatísticas de engajamento para um banner específico
+const getBannerStats = async (req, res) => {
+  try {
+    const bannerId = req.params.id;
+    const { Engagement } = require('../models/Engagement');
+    const { Banner } = require('../models');
+    
+    // Verificar se o banner existe
+    const banner = await Banner.findById(bannerId);
+    if (!banner) {
+      return res.status(404).json({ mensagem: 'Banner não encontrado' });
+    }
+    
+    // Obter período para os dados (padrão: últimos 30 dias)
+    const { from, to } = req.query;
+    const startDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = to ? new Date(to) : new Date();
+    
+    // Configurar filtro de data
+    const dateFilter = {
+      timestamp: {
+        $gte: startDate,
+        $lte: endDate
+      }
+    };
+    
+    // Obter estatísticas de visualizações
+    const viewsStats = await Engagement.aggregate([
+      {
+        $match: {
+          ...dateFilter,
+          targetId: mongoose.Types.ObjectId(bannerId),
+          actionType: 'banner_view'
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$timestamp" },
+            month: { $month: "$timestamp" },
+            day: { $dayOfMonth: "$timestamp" }
+          },
+          count: { $sum: 1 },
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: {
+                $dateFromParts: {
+                  year: "$_id.year",
+                  month: "$_id.month",
+                  day: "$_id.day"
+                }
+              }
+            }
+          },
+          views: "$count",
+          uniqueUsers: { $size: "$uniqueUsers" }
+        }
+      },
+      { $sort: { date: 1 } }
+    ]);
+    
+    // Obter estatísticas de cliques
+    const clicksStats = await Engagement.aggregate([
+      {
+        $match: {
+          ...dateFilter,
+          targetId: mongoose.Types.ObjectId(bannerId),
+          actionType: 'banner_click'
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$timestamp" },
+            month: { $month: "$timestamp" },
+            day: { $dayOfMonth: "$timestamp" }
+          },
+          count: { $sum: 1 },
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          date: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: {
+                $dateFromParts: {
+                  year: "$_id.year",
+                  month: "$_id.month",
+                  day: "$_id.day"
+                }
+              }
+            }
+          },
+          clicks: "$count",
+          uniqueUsers: { $size: "$uniqueUsers" }
+        }
+      },
+      { $sort: { date: 1 } }
+    ]);
+    
+    // Contagens totais
+    const totalViews = await Engagement.countDocuments({
+      targetId: bannerId,
+      actionType: 'banner_view',
+      ...dateFilter
+    });
+    
+    const totalClicks = await Engagement.countDocuments({
+      targetId: bannerId,
+      actionType: 'banner_click',
+      ...dateFilter
+    });
+    
+    const uniqueViewers = await Engagement.aggregate([
+      {
+        $match: {
+          targetId: mongoose.Types.ObjectId(bannerId),
+          actionType: 'banner_view',
+          ...dateFilter
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          count: { $size: "$uniqueUsers" }
+        }
+      }
+    ]);
+    
+    const uniqueClickers = await Engagement.aggregate([
+      {
+        $match: {
+          targetId: mongoose.Types.ObjectId(bannerId),
+          actionType: 'banner_click',
+          ...dateFilter
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          count: { $size: "$uniqueUsers" }
+        }
+      }
+    ]);
+    
+    // Calcular CTR (Click-Through Rate)
+    const ctr = totalViews > 0 ? (totalClicks / totalViews) * 100 : 0;
+    
+    // Combinar os dados por data
+    const dailyStats = [];
+    const allDates = new Set([
+      ...viewsStats.map(stat => stat.date),
+      ...clicksStats.map(stat => stat.date)
+    ]);
+    
+    // Para cada data, combinar views e clicks
+    allDates.forEach(date => {
+      const viewStat = viewsStats.find(stat => stat.date === date) || { views: 0, uniqueUsers: 0 };
+      const clickStat = clicksStats.find(stat => stat.date === date) || { clicks: 0, uniqueUsers: 0 };
+      
+      dailyStats.push({
+        date,
+        views: viewStat.views,
+        clicks: clickStat.clicks,
+        dailyCtr: viewStat.views > 0 ? (clickStat.clicks / viewStat.views) * 100 : 0
+      });
+    });
+    
+    // Ordenar por data
+    dailyStats.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    res.json({
+      bannerId,
+      title: banner.title,
+      totalViews,
+      totalClicks,
+      uniqueViewers: uniqueViewers[0]?.count || 0,
+      uniqueClickers: uniqueClickers[0]?.count || 0,
+      ctr,
+      period: {
+        from: startDate,
+        to: endDate
+      },
+      dailyStats
+    });
+  } catch (error) {
+    console.error('Erro ao obter estatísticas do banner:', error);
+    res.status(500).json({ mensagem: 'Erro ao obter estatísticas', error: error.message });
+  }
+};
+
 module.exports = { 
   getAllBanners, 
   getActiveBanners, 
   createBanner, 
   updateBanner, 
-  deleteBanner 
+  deleteBanner,
+  getBannerStats
 };

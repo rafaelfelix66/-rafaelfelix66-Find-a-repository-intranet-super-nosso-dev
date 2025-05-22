@@ -24,4 +24,19 @@ router.get('/action-stats', adminEngagementController.getActionStats);
 // Rota para obter estatísticas de Super Coins
 router.get('/supercoins-stats', adminEngagementController.getSuperCoinsStats);
 
+// Rota para obter estatísticas de Banner
+/**
+ * @route   GET /api/admin/engagement/banners
+ * @desc    Obter estatísticas de engajamento com banners
+ * @access  Private (Admin)
+ */
+router.get('/banners', adminEngagementController.getBannerEngagementStats);
+
+/**
+ * @route   GET /api/admin/engagement/overall
+ * @desc    Obter estatísticas gerais de engajamento
+ * @access  Private (Admin)
+ */
+router.get('/overall', adminEngagementController.getOverallEngagementStats);
+
 module.exports = router;

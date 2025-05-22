@@ -7,6 +7,7 @@ const { hasPermission } = require('../middleware/permissions');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { trackBannerView, trackBannerClick } = require('../middleware/trackEngagement');
 
 // Configuração para upload de imagens
 const storage = multer.diskStorage({
@@ -45,12 +46,17 @@ const upload = multer({
 });
 
 // Rotas públicas
-router.get('/',auth, bannerController.getActiveBanners);
+router.get('/',auth, trackBannerView, bannerController.getActiveBanners);
 
 // Rotas administrativas
-router.get('/all', auth, hasPermission('banners:view'), bannerController.getAllBanners);
+router.get('/all', auth, hasPermission('banners:view'), trackBannerView, bannerController.getAllBanners);
 router.post('/', auth, hasPermission('banners:create'), upload.single('image'), bannerController.createBanner);
 router.put('/:id', auth, hasPermission('banners:edit'), upload.single('image'), bannerController.updateBanner);
 router.delete('/:id', auth, hasPermission('banners:delete'), bannerController.deleteBanner);
+
+router.get('/:id/click', auth, trackBannerClick, (req, res) => {
+  // Esta rota é apenas para rastrear o clique, então retornamos um sucesso simples
+  res.json({ success: true });
+});
 
 module.exports = router;

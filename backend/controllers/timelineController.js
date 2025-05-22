@@ -354,6 +354,202 @@ const addComment = async (req, res) => {
   }
 };
 
+// Curtir comentário
+const likeComment = async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const userId = req.usuario.id;
+    
+    console.log('Tentando curtir comentário:', { postId, commentId, userId });
+    
+    // Buscar o post
+    const post = await Post.findById(postId);
+    if (!post) {
+      console.log('Post não encontrado:', postId);
+      return res.status(404).json({ msg: 'Publicação não encontrada' });
+    }
+    
+    // Encontrar o comentário
+    const comment = post.comments.id(commentId);
+    if (!comment) {
+      console.log('Comentário não encontrado:', commentId);
+      return res.status(404).json({ msg: 'Comentário não encontrado' });
+    }
+    
+    // Inicializar array de likes se não existir
+    if (!comment.likes) {
+      comment.likes = [];
+    }
+    
+    // Verificar se já curtiu e remover se sim, adicionar se não
+    const likeIndex = comment.likes.findIndex(like => like.toString() === userId);
+    
+    if (likeIndex !== -1) {
+      // Já curtiu, então remover
+      console.log('Comentário já curtido, removendo curtida de:', userId);
+      comment.likes.splice(likeIndex, 1);
+    } else {
+      // Ainda não curtiu, adicionar
+      console.log('Adicionando curtida de:', userId);
+      comment.likes.push(userId);
+    }
+    
+    // Salvar o post com as alterações
+    await post.save();
+    
+    // Retornar o post atualizado com populate
+    const updatedPost = await Post.findById(postId)
+      .populate('user', ['nome', 'avatar', 'cargo', 'departamento'])
+      .populate('comments.user', ['nome', 'avatar', 'cargo', 'departamento']);
+    
+    console.log('Comentário curtido/descurtido com sucesso');
+    res.json(updatedPost);
+    
+  } catch (err) {
+    console.error('Erro ao curtir comentário:', err.message);
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ msg: 'ID inválido' });
+    }
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+};
+
+// Adicionar/remover reação
+const addReaction = async (req, res) => {
+  try {
+    const { emoji } = req.body;
+    const postId = req.params.id;
+    const userId = req.usuario.id;
+    
+    console.log('Tentando adicionar reação:', { postId, emoji, userId });
+    
+    if (!emoji) {
+      return res.status(400).json({ msg: 'Emoji é obrigatório' });
+    }
+    
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ msg: 'Publicação não encontrada' });
+    }
+    
+    // Inicializar array de reações se não existir
+    if (!post.reactions) {
+      post.reactions = [];
+    }
+    
+    // Procurar se já existe uma reação com este emoji
+    let reactionIndex = post.reactions.findIndex(reaction => reaction.emoji === emoji);
+    
+    if (reactionIndex !== -1) {
+      // Reação já existe, verificar se o usuário já reagiu
+      const userIndex = post.reactions[reactionIndex].users.findIndex(
+        user => user.toString() === userId
+      );
+      
+      if (userIndex !== -1) {
+        // Usuário já reagiu com este emoji, remover
+        post.reactions[reactionIndex].users.splice(userIndex, 1);
+        post.reactions[reactionIndex].count = post.reactions[reactionIndex].users.length;
+        
+        // Se não há mais usuários, remover a reação completamente
+        if (post.reactions[reactionIndex].users.length === 0) {
+          post.reactions.splice(reactionIndex, 1);
+        }
+      } else {
+        // Usuário não reagiu com este emoji ainda, adicionar
+        post.reactions[reactionIndex].users.push(userId);
+        post.reactions[reactionIndex].count = post.reactions[reactionIndex].users.length;
+      }
+    } else {
+      // Reação não existe, criar nova
+      post.reactions.push({
+        emoji: emoji,
+        users: [userId],
+        count: 1
+      });
+    }
+    
+    // Remover reações do usuário com outros emojis (um usuário só pode ter uma reação por post)
+    post.reactions = post.reactions.map(reaction => {
+      if (reaction.emoji !== emoji) {
+        const userIndex = reaction.users.findIndex(user => user.toString() === userId);
+        if (userIndex !== -1) {
+          reaction.users.splice(userIndex, 1);
+          reaction.count = reaction.users.length;
+        }
+      }
+      return reaction;
+    }).filter(reaction => reaction.count > 0); // Remover reações vazias
+    
+    await post.save();
+    
+    console.log('Reação processada com sucesso');
+    res.json(post.reactions);
+    
+  } catch (err) {
+    console.error('Erro ao processar reação:', err.message);
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ msg: 'Publicação não encontrada' });
+    }
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+};
+
+// Excluir comentário (apenas para admins)
+const deleteComment = async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const userId = req.usuario.id;
+    
+    console.log('Tentando excluir comentário:', { postId, commentId, userId });
+    
+    // Buscar o post
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ msg: 'Publicação não encontrada' });
+    }
+    
+    // Encontrar o comentário
+    const commentIndex = post.comments.findIndex(
+      comment => comment._id.toString() === commentId
+    );
+    
+    if (commentIndex === -1) {
+      return res.status(404).json({ msg: 'Comentário não encontrado' });
+    }
+    
+    // Verificar se o usuário tem permissão (já verificado no middleware, mas dupla verificação)
+    const { User } = require('../models');
+    const user = await User.findById(userId);
+    
+    const isAdmin = user.roles?.includes('admin') || 
+                   user.permissions?.includes('timeline:delete_any_comment');
+    
+    if (!isAdmin) {
+      return res.status(403).json({ msg: 'Acesso negado. Apenas administradores podem excluir comentários.' });
+    }
+    
+    // Remover o comentário
+    post.comments.splice(commentIndex, 1);
+    await post.save();
+    
+    // Retornar o post atualizado
+    const updatedPost = await Post.findById(postId)
+      .populate('user', ['nome', 'avatar', 'cargo', 'departamento'])
+      .populate('comments.user', ['nome', 'avatar', 'cargo', 'departamento']);
+    
+    console.log('Comentário excluído com sucesso');
+    res.json(updatedPost);
+    
+  } catch (err) {
+    console.error('Erro ao excluir comentário:', err.message);
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ msg: 'ID inválido' });
+    }
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+};
+
 // Curtir publicação
 const likePost = async (req, res) => {
   try {
@@ -474,4 +670,14 @@ const deletePost = async (req, res) => {
 };
 
 // Exportar as funções
-module.exports = { getPosts, createPost, addComment, likePost, deletePost, getPostById };
+module.exports = { 
+  getPosts, 
+  createPost, 
+  addComment, 
+  likePost, 
+  deletePost, 
+  getPostById,
+  likeComment ,
+  addReaction,    
+  deleteComment   
+};

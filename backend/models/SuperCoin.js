@@ -1,4 +1,4 @@
-//backend/models/SuperCoin.js
+// backend/models/SuperCoin.js (atualizado)
 const mongoose = require('mongoose');
 
 const SuperCoinTransactionSchema = new mongoose.Schema({
@@ -49,7 +49,7 @@ const SuperCoinBalanceSchema = new mongoose.Schema({
   },
   lastRecharge: {
     type: Date,
-    default: Date.now
+    default: null
   },
   updatedAt: {
     type: Date,
@@ -91,6 +91,12 @@ const SuperCoinConfigSchema = new mongoose.Schema({
     default: 1, // Dia do mês para recarga
     min: 1,
     max: 28
+  },
+  rechargeMode: {
+    type: String,
+    enum: ['reset', 'complement'],
+    default: 'reset',
+    description: 'reset: sempre define o valor para monthlyRechargeAmount, complement: adiciona apenas o necessário para atingir monthlyRechargeAmount'
   },
   active: {
     type: Boolean,

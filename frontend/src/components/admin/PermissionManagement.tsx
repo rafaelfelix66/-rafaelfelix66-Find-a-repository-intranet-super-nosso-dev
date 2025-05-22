@@ -99,10 +99,13 @@ export function PermissionManagement() {
       permissions: [
         { key: 'timeline:view', description: 'Visualizar posts' },
         { key: 'timeline:create', description: 'Criar publicações' },
+		{ key: 'timeline:like', description: 'Curtir publicações' },
+		{ key: 'timeline:like_comment', description: 'Curtir comentarios' },
         { key: 'timeline:edit_own', description: 'Editar próprias publicações' },
         { key: 'timeline:delete_own', description: 'Excluir próprias publicações' },
         { key: 'timeline:delete_any', description: 'Excluir qualquer publicação' },
         { key: 'timeline:comment', description: 'Adicionar comentários' },
+		{ key: 'timeline:react', description: 'Reagir com emojis às publicações' },
         { key: 'timeline:delete_comment_own', description: 'Excluir próprios comentários' },
         { key: 'timeline:delete_comment_any', description: 'Excluir qualquer comentário' },
       ],
@@ -163,6 +166,14 @@ export function PermissionManagement() {
         { key: 'users:edit', description: 'Editar usuários' },
         { key: 'users:delete', description: 'Excluir usuários' },
         { key: 'roles:manage', description: 'Gerenciar papéis e permissões' },
+      ],
+    },
+	{
+      name: 'SuperCoins',
+      key: 'supercoins',
+      permissions: [
+        { key: 'supercoins:send_message', description: 'Enviar mensagem no atributo' },
+        
       ],
     },
   ];

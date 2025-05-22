@@ -13,8 +13,10 @@ const EngagementSchema = new mongoose.Schema({
     // Adicione mais tipos conforme necessário
     enum: [
       'post_view', 'post_create', 'post_like', 'post_comment', 
+	  'comment_like', 'post_react',
       'article_view', 'article_create', 
       'file_view', 'file_share', 'file_download',
+	  'banner_view', 'banner_click',
       'login', 'profile_update', 'custom'
     ]
   },
@@ -34,7 +36,7 @@ const EngagementSchema = new mongoose.Schema({
   },
   targetModel: {
     type: String,
-    enum: ['Post', 'Article', 'File', 'User']
+    enum: ['Post', 'Article', 'File', 'User', 'Banner']
   },
   metadata: {
     type: mongoose.Schema.Types.Mixed

@@ -138,9 +138,15 @@ const PostSchema = new mongoose.Schema({
   }
 },
   likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  reactions: [{
+    emoji: { type: String, required: true },
+    users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    count: { type: Number, default: 0 }
+  }],
   comments: [{
     text: String,
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+	likes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     createdAt: { type: Date, default: Date.now }
   }],
   createdAt: { type: Date, default: Date.now }

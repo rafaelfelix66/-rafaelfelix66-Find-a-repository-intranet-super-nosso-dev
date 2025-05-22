@@ -26,6 +26,7 @@ import NewArticlePage from "./pages/NewArticlePage";
 import BannerAdmin from "./pages/BannerAdmin";
 import Unauthorized from "./pages/Unauthorized";
 import Chat from "./pages/Chat";
+import SuperCoinsAdmin from "./pages/SuperCoinsAdmin";
 
 // Update Tailwind CSS variables to include the new red color
 import { useEffect } from "react";
@@ -188,6 +189,14 @@ const App = () => {
 				  element={
 					<PrivateRoute requiredPermission="admin:dashboard">
 					  <EngagementDashboard />
+					</PrivateRoute>
+				  } 
+				/>
+			  <Route 
+				  path="/admin/supercoins" 
+				  element={
+					<PrivateRoute requiredPermission="supercoins:manage">
+					  <SuperCoinsAdmin />
 					</PrivateRoute>
 				  } 
 				/>

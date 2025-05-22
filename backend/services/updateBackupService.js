@@ -59,7 +59,7 @@ async function updateUserBackup() {
     
     // Ler backup existente
     const existingUsers = await readBackupFile();
-    console.log(`Usuários existentes no backup: ${existingUsers.length}`);
+    //console.log(`Usuários existentes no backup: ${existingUsers.length}`);
     
     // Criar um Set de CPFs existentes para verificação rápida
     const existingCPFs = new Set(existingUsers.map(user => user.CPF));
@@ -89,7 +89,7 @@ async function updateUserBackup() {
       outFormat: oracledb.OUT_FORMAT_OBJECT 
     });
     
-    console.log(`Registros retornados do Oracle: ${result.rows.length}`);
+    //console.log(`Registros retornados do Oracle: ${result.rows.length}`);
     
     // Processar todos os usuários (novos e existentes)
     const updatedUsers = result.rows.filter(row => row.CPF).map(row => {
@@ -121,8 +121,8 @@ async function updateUserBackup() {
     // Filtrar apenas usuários novos
     const newUsers = updatedUsers.filter(user => !existingCPFs.has(user.CPF));
     
-    console.log(`Novos usuários encontrados: ${newUsers.length}`);
-    console.log(`Usuários atualizados: ${updatedUsers.length}`);
+    //console.log(`Novos usuários encontrados: ${newUsers.length}`);
+    //console.log(`Usuários atualizados: ${updatedUsers.length}`);
     
     // Atualizar o arquivo com todos os dados
     await saveBackupFile(updatedUsers);
@@ -130,7 +130,7 @@ async function updateUserBackup() {
     if (newUsers.length > 0) {
       console.log('Novos usuários adicionados ao backup:');
       newUsers.forEach(user => {
-        console.log(`- ${user.NOME} (CPF: ${user.CPF}, Chapa: ${user.CHAPA})`);
+        //console.log(`- ${user.NOME} (CPF: ${user.CPF}, Chapa: ${user.CHAPA})`);
       });
     }
     
@@ -170,9 +170,9 @@ async function runManualUpdate() {
   console.log('\n=== RESULTADO DA ATUALIZAÇÃO ===');
   if (result.success) {
     console.log(`✓ Atualização concluída com sucesso`);
-    console.log(`• Usuários existentes: ${result.existingCount}`);
-    console.log(`• Novos usuários: ${result.newCount}`);
-    console.log(`• Usuários atualizados: ${result.updatedCount}`);
+    //console.log(`• Usuários existentes: ${result.existingCount}`);
+    //console.log(`• Novos usuários: ${result.newCount}`);
+    //console.log(`• Usuários atualizados: ${result.updatedCount}`);
     console.log(`• Total de usuários: ${result.totalCount}`);
   } else {
     console.log(`✗ Erro na atualização: ${result.error}`);

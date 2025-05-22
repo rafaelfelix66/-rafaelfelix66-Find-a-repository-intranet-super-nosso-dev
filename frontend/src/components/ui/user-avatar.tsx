@@ -1,4 +1,4 @@
-// src/components/ui/user-avatar.tsx
+// frontend/src/components/ui/user-avatar.tsx (Melhorado)
 import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,12 +11,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Briefcase, Building2 } from "lucide-react";
+import { UserAttributesBadge } from "@/components/user/UserAttributesBadge";
+import { useUserAttributes } from "@/hooks/useUserAttributes";
 
 interface UserAvatarProps {
   className?: string;
   size?: "sm" | "md" | "lg";
   showBorder?: boolean;
+  showAttributes?: boolean;
   user?: {
+    id?: string;
     name?: string;
     avatar?: string;
     cargo?: string;
@@ -29,14 +33,18 @@ interface UserAvatarProps {
 export function UserAvatar({ 
   className, 
   size = "md", 
-  showBorder = false, 
+  showBorder = false,
+  showAttributes = false,
   user: propUser, 
   onClick,
-  enableModal = true 
+  enableModal = false 
 }: UserAvatarProps) {
   const { user: authUser } = useAuth();
   const user = propUser || authUser;
   const [showImageModal, setShowImageModal] = useState(false);
+  
+  // Usar o hook para buscar atributos do usuário
+  const { attributes, loading } = useUserAttributes(user?.id || '');
   
   const getInitials = (name: string) => {
     if (!name) return "??";
@@ -69,7 +77,7 @@ export function UserAvatar({
   };
   
   return (
-    <>
+    <div className="inline-flex flex-col items-center">
       <Avatar 
         className={cn(
           sizeClasses[size],
@@ -93,14 +101,25 @@ export function UserAvatar({
         </AvatarFallback>
       </Avatar>
       
+      {/* Mostrar badges de atributos se solicitado */}
+      {showAttributes && user?.id && attributes.length > 0 && (
+        <UserAttributesBadge 
+          userId={user.id} 
+          attributeCounts={attributes}
+          loading={loading}
+          size={size === "lg" ? "md" : "sm"}
+          maxToShow={size === "sm" ? 2 : 3}
+        />
+      )}
+      
       {/* Modal para mostrar a imagem grande */}
       <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
         <DialogContent className="max-w-md border-0 p-0 overflow-hidden">
-		          {/* Título oculto para acessibilidade */}
-				  <div className="sr-only">
-					<DialogTitle>Foto do perfil de {user?.name || "usuário"}</DialogTitle>
-					<DialogDescription>Visualização ampliada da foto do perfil</DialogDescription>
-				  </div>
+          {/* Título oculto para acessibilidade */}
+          <div className="sr-only">
+            <DialogTitle>Perfil de {user?.name || "usuário"}</DialogTitle>
+            <DialogDescription>Visualização do perfil</DialogDescription>
+          </div>
           <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
             {/* Background pattern */}
             <div className="absolute inset-0 bg-grid-white/[0.02]" />
@@ -121,7 +140,7 @@ export function UserAvatar({
                   </div>
                   
                   {/* Avatar container */}
-                  <div className="relative w-96 h-96 rounded-full overflow-hidden border-4 border-gray-900">
+                  <div className="relative w-64 h-64 rounded-full overflow-hidden border-4 border-gray-900">
                     {user?.avatar ? (
                       <img 
                         src={user.avatar} 
@@ -130,15 +149,12 @@ export function UserAvatar({
                       />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-[#e60909] to-[#ff4444] flex items-center justify-center">
-                        <span className="text-8xl text-white font-bold">
+                        <span className="text-5xl text-white font-bold">
                           {getInitials(user?.name || "")}
                         </span>
                       </div>
                     )}
                   </div>
-                  
-                  {/* Status indicator */}
-                  <div className="absolute bottom-2 right-2 w-6 h-6 bg-green-500 rounded-full border-4 border-gray-900" />
                 </div>
               </div>
               
@@ -170,16 +186,24 @@ export function UserAvatar({
                     )}
                   </div>
                 </div>
+                
+                {/* Mostrar atributos no modal */}
+                {user?.id && (
+                  <div className="flex flex-wrap justify-center gap-2 mt-4">
+                    <UserAttributesBadge 
+                      userId={user.id}
+                      attributeCounts={attributes}
+                      loading={loading}
+                      maxToShow={10}
+                      size="lg"
+                    />
+                  </div>
+                )}
               </div>
             </div>
-            
-            {/* Decorative elements */}
-            <div className="absolute top-4 left-4 w-2 h-2 bg-[#e60909] rounded-full animate-pulse" />
-            <div className="absolute top-8 right-6 w-1 h-1 bg-[#ff4444] rounded-full animate-pulse delay-75" />
-            <div className="absolute bottom-6 left-8 w-1.5 h-1.5 bg-[#e60909] rounded-full animate-pulse delay-150" />
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

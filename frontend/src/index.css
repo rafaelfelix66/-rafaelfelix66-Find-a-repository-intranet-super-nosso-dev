@@ -168,3 +168,36 @@
 .delay-150 {
   animation-delay: 150ms;
 }
+
+/* Estilos para emojis personalizados inline */
+.inline-emoji {
+  width: 20px !important;
+  height: 20px !important;
+  vertical-align: middle;
+  margin: 0 2px;
+  display: inline-block;
+  border-radius: 2px;
+}
+
+/* Estilos para emojis em diferentes contextos */
+.message-content .inline-emoji {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.post-content .inline-emoji {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+.comment-content .inline-emoji {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Hover effect para o emoji picker */
+.emoji-picker-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  transform: scale(1.1);
+  transition: all 0.2s ease;
+}

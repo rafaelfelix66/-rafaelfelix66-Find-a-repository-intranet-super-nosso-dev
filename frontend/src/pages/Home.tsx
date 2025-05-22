@@ -20,6 +20,9 @@ import { AniversariosWidget } from "@/components/home/AniversariosWidget";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { EngagementRanking } from "@/components/home/EngagementRanking";
 import { SuperCoinWidget } from "@/components/supercoin/SuperCoinWidget";
+import { EmojiInput } from "@/components/ui/emoji-input";
+import { ReactionPicker } from '@/components/ui/reaction-picker';
+import { CustomEmojiDisplay, getAllCustomEmojis } from '@/components/ui/custom-emoji';
 import { 
   Card, 
   CardContent, 
@@ -37,7 +40,8 @@ import {
   Film,
   Calendar,
   Plus,
-  X
+  X,
+  Smile
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -68,6 +72,12 @@ import { PermissionGuard } from '@/components/auth/PermissionGuard';
 import { OwnershipGuard } from '@/components/auth/OwnershipGuard';
 
 // Interfaces
+interface PostReaction {
+  emoji: string;
+  users: string[];
+  count: number;
+}
+
 interface PostComment {
   id: string;
   user: {
@@ -80,6 +90,8 @@ interface PostComment {
   };
   content: string;
   timestamp: string;
+  likes?: string[]; // ADICIONAR ESTA LINHA
+  liked?: boolean;  // ADICIONAR ESTA LINHA
 }
 
 interface Post {
@@ -97,6 +109,7 @@ interface Post {
   video?: string;
   timestamp: string;
   likes: number;
+  reactions?: PostReaction[];
   comments: PostComment[];
   liked: boolean;
   event?: {
@@ -389,6 +402,7 @@ const Home = () => {
             content: post.text || "",
             timestamp: formatTimestamp(post.createdAt),
             likes: post.likes?.length || 0,
+			reactions: post.reactions || [],
             comments: (post.comments || []).map(comment => ({
               id: comment._id,
               user: {
@@ -400,7 +414,9 @@ const Home = () => {
                 initials: getInitials(comment.user?.nome || 'Usuário')
               },
               content: comment.text,
-              timestamp: formatTimestamp(comment.createdAt)
+              timestamp: formatTimestamp(comment.createdAt),
+			  likes: comment.likes || [], // ADICIONAR ESTA LINHA
+              liked: comment.likes?.includes(userId) || false // ADICIONAR ESTA LINHA
             })),
             liked: post.likes?.some(like => 
               like.toString() === userId || 
@@ -780,6 +796,225 @@ const Home = () => {
       });
     }
   };
+  
+  const handleAddReaction = async (postId: string, emojiId: string) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    console.error('Token não encontrado');
+    navigate('/login');
+    return;
+  }
+
+  try {
+    const userId = localStorage.getItem('userId');
+    
+    // Atualizar otimisticamente
+    setPosts(prevPosts => prevPosts.map(post => {
+      if (post.id === postId) {
+        const currentReactions = post.reactions || [];
+        let updatedReactions = [...currentReactions];
+        
+        // Remover reações anteriores do usuário
+        updatedReactions = updatedReactions.map(reaction => ({
+          ...reaction,
+          users: reaction.users.filter(id => id !== userId),
+          count: reaction.users.filter(id => id !== userId).length
+        })).filter(reaction => reaction.count > 0);
+        
+        // Adicionar nova reação ou incrementar existente
+        const existingReactionIndex = updatedReactions.findIndex(r => r.emoji === emojiId);
+        if (existingReactionIndex !== -1) {
+          updatedReactions[existingReactionIndex].users.push(userId);
+          updatedReactions[existingReactionIndex].count++;
+        } else {
+          updatedReactions.push({
+            emoji: emojiId, // Agora usa o ID do emoji personalizado
+            users: [userId],
+            count: 1
+          });
+        }
+        
+        return { ...post, reactions: updatedReactions };
+      }
+      return post;
+    }));
+
+    // Fazer a requisição para o backend
+    const response = await api.put(`/timeline/${postId}/reaction`, { emoji: emojiId });
+    
+    // Atualizar com os dados reais do servidor
+    setPosts(prevPosts => prevPosts.map(post => {
+      if (post.id === postId) {
+        return { ...post, reactions: response };
+      }
+      return post;
+    }));
+
+  } catch (error) {
+    console.error('Erro ao adicionar reação:', error);
+    toast({ 
+      title: "Erro", 
+      description: "Não foi possível adicionar a reação.",
+      variant: "destructive" 
+    });
+  }
+};
+  
+  // Adicione esta função para curtir comentários
+const handleLikeComment = async (postId: string, commentId: string) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    console.error('Token não encontrado');
+    navigate('/login');
+    return;
+  }
+
+  try {
+    const userId = localStorage.getItem('userId');
+    
+    // Atualizar otimisticamente
+    setPosts(prevPosts => prevPosts.map(post => {
+      if (post.id === postId) {
+        const updatedComments = post.comments.map(comment => {
+          if (comment.id === commentId) {
+            const currentLikes = comment.likes || [];
+            const isLiked = currentLikes.includes(userId);
+            
+            return {
+              ...comment,
+              likes: isLiked 
+                ? currentLikes.filter(id => id !== userId)
+                : [...currentLikes, userId],
+              liked: !isLiked
+            };
+          }
+          return comment;
+        });
+        
+        return { ...post, comments: updatedComments };
+      }
+      return post;
+    }));
+
+    // Fazer a requisição para o backend
+    const response = await api.put(`/timeline/${postId}/comment/${commentId}/like`);
+    
+    // Atualizar com os dados reais do servidor
+    setPosts(prevPosts => prevPosts.map(post => {
+      if (post.id === postId) {
+        const formattedComments = response.comments.map(comment => ({
+          id: comment._id,
+          user: {
+            id: comment.user?._id,
+            name: comment.user?.nome || 'Usuário',
+            avatar: comment.user?.avatar,
+            cargo: comment.user?.cargo,
+            department: comment.user?.departamento,
+            initials: getInitials(comment.user?.nome || 'Usuário')
+          },
+          content: comment.text,
+          timestamp: formatTimestamp(comment.createdAt),
+          likes: comment.likes || [],
+          liked: comment.likes?.includes(userId) || false
+        }));
+        
+        return { ...post, comments: formattedComments };
+      }
+      return post;
+    }));
+
+  } catch (error) {
+    console.error('Erro ao curtir comentário:', error);
+    
+    // Reverter mudança otimística em caso de erro
+    setPosts(prevPosts => prevPosts.map(post => {
+      if (post.id === postId) {
+        const revertedComments = post.comments.map(comment => {
+          if (comment.id === commentId) {
+            const userId = localStorage.getItem('userId');
+            const currentLikes = comment.likes || [];
+            const wasLiked = currentLikes.includes(userId);
+            
+            return {
+              ...comment,
+              likes: wasLiked 
+                ? [...currentLikes, userId]
+                : currentLikes.filter(id => id !== userId),
+              liked: wasLiked
+            };
+          }
+          return comment;
+        });
+        
+        return { ...post, comments: revertedComments };
+      }
+      return post;
+    }));
+
+    toast({ 
+      title: "Erro", 
+      description: "Não foi possível curtir o comentário.",
+      variant: "destructive" 
+    });
+  }
+};
+
+
+// Nova função para excluir comentários
+const handleDeleteComment = async (postId: string, commentId: string) => {
+  if (!confirm('Tem certeza que deseja excluir este comentário?')) {
+    return;
+  }
+
+  const token = localStorage.getItem('token');
+  if (!token) {
+    console.error('Token não encontrado');
+    navigate('/login');
+    return;
+  }
+
+  try {
+    // Fazer a requisição para o backend
+    const response = await api.delete(`/timeline/${postId}/comment/${commentId}`);
+    
+    // Atualizar com os dados reais do servidor
+    setPosts(prevPosts => prevPosts.map(post => {
+      if (post.id === postId) {
+        const formattedComments = response.comments.map(comment => ({
+          id: comment._id,
+          user: {
+            id: comment.user?._id,
+            name: comment.user?.nome || 'Usuário',
+            avatar: comment.user?.avatar,
+            cargo: comment.user?.cargo,
+            department: comment.user?.departamento,
+            initials: getInitials(comment.user?.nome || 'Usuário')
+          },
+          content: comment.text,
+          timestamp: formatTimestamp(comment.createdAt),
+          likes: comment.likes || [],
+          liked: comment.likes?.includes(localStorage.getItem('userId')) || false
+        }));
+        
+        return { ...post, comments: formattedComments };
+      }
+      return post;
+    }));
+
+    toast({ 
+      title: "Sucesso", 
+      description: "Comentário excluído com sucesso." 
+    });
+
+  } catch (error) {
+    console.error('Erro ao excluir comentário:', error);
+    toast({ 
+      title: "Erro", 
+      description: "Não foi possível excluir o comentário. Verifique suas permissões.",
+      variant: "destructive" 
+    });
+  }
+};
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -1226,6 +1461,7 @@ const Home = () => {
 								cargo: post.user.cargo,
 								department: post.user.department
 							  }}
+							  showAttributes={true}
 							  size="md"
 							  enableModal={true}
 							/>
@@ -1335,107 +1571,156 @@ const Home = () => {
                         </div>
                       </CardContent>
                       <CardFooter className="flex flex-col space-y-4">
-                        <div className="flex justify-around w-full border-y py-1">
-                          <PermissionGuard requiredPermission="timeline:like">
-                            <Button 
-                              variant="ghost" 
-                              className={cn(
-                                "flex-1", 
-                                post.liked ? "text-[#e60909]" : ""
-                              )}
-                              onClick={() => handleLike(post.id)}
-                            >
-                              <Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#e60909]" : "")} />
-                              Curtir
-                            </Button>
-                          </PermissionGuard>
-                          <PermissionGuard requiredPermission="timeline:comment">
-                            <Button variant="ghost" className="flex-1">
-                              <MessageCircle className="mr-1 h-4 w-4" />
-                              Comentar
-                            </Button>
-                          </PermissionGuard>
-                        </div>
-                        {post.comments.length > 0 && (
-                          <div className="space-y-3 w-full">
-                            {post.comments.map((comment) => (
-                              <div key={comment.id} className="flex space-x-3">
-                                <UserAvatar 
-									  user={{
-										name: comment.user.name,
-										avatar: comment.user.avatar,
-										cargo: comment.user.cargo,
-										department: comment.user.department
-									  }}
-									  size="sm"
-									  enableModal={true}
-									/>
-                                <div className="flex-1">
-                                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 px-3">
-                                    <div className="font-medium text-sm">{comment.user.name}</div>
-                                    <div className="text-sm">
-									  <LinkifiedText text={comment.content} />
-									</div>
-                                  </div>
-                                  <div className="flex text-xs text-gray-500 mt-1 ml-2 space-x-3">
-                                    <span>{comment.timestamp}</span>
-                                    <PermissionGuard requiredPermission="timeline:like_comment">
-                                      <button className="hover:text-[#e60909]">Curtir</button>
-                                    </PermissionGuard>
-                                    <PermissionGuard requiredPermission="timeline:comment">
-                                      <button className="hover:text-[#e60909]">Responder</button>
-                                    </PermissionGuard>
-                                    <OwnershipGuard
-                                      resourceOwnerId={comment.user.id}
-                                      specialPermission="timeline:delete_any_comment"
-                                    >
-                                      <button className="hover:text-red-500">Excluir</button>
-                                    </OwnershipGuard>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <PermissionGuard requiredPermission="timeline:comment">
-                          <div className="flex space-x-3 w-full">
-                            <UserAvatar size="sm" />
-                            <div className="flex-1 flex relative">
-							  <Input 
-								placeholder="Escreva um comentário..." 
-								className="rounded-r-none focus-visible:ring-0 border-r-0 pr-10"
-								value={commentInput[post.id] || ''}
-								onChange={(e) => setCommentInput({
-								  ...commentInput,
-								  [post.id]: e.target.value
-								})}
-								onKeyDown={(e) => {
-								  if (e.key === 'Enter') {
-									handleComment(post.id);
-								  }
+					  {/* Seção de Reações - NOVA */}
+					  {post.reactions && post.reactions.length > 0 && (
+						<div className="w-full">
+						  <div className="flex flex-wrap gap-2 mb-2">
+							{post.reactions.map((reaction, index) => {
+							  const userId = localStorage.getItem('userId');
+							  const userReacted = reaction.users.includes(userId);
+							  
+							  return (
+								<button
+								  key={index}
+								  className={cn(
+									"flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-all duration-200",
+									userReacted 
+									  ? "bg-[#e60909]/10 border-[#e60909] text-[#e60909] shadow-sm" 
+									  : "bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300"
+								  )}
+								  onClick={() => handleAddReaction(post.id, reaction.emoji)}
+								  title={`${reaction.count} pessoa${reaction.count !== 1 ? 's' : ''} reagiu${reaction.count !== 1 ? 'ram' : ''}`}
+								>
+								  <CustomEmojiDisplay 
+									emojiId={reaction.emoji} 
+									size="sm" 
+								  />
+								  <span className="text-xs font-medium">{reaction.count}</span>
+								</button>
+							  );
+							})}
+						  </div>
+						</div>
+					  )}
+
+					  <div className="flex justify-around w-full border-y py-1">
+						<PermissionGuard requiredPermission="timeline:like">
+						  <Button 
+							variant="ghost" 
+							className={cn(
+							  "flex-1", 
+							  post.liked ? "text-[#e60909]" : ""
+							)}
+							onClick={() => handleLike(post.id)}
+						  >
+							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#e60909]" : "")} />
+							Curtir
+						  </Button>
+						</PermissionGuard>
+						
+						<PermissionGuard requiredPermission="timeline:comment">
+						  <Button variant="ghost" className="flex-1">
+							<MessageCircle className="mr-1 h-4 w-4" />
+							Comentar
+						  </Button>
+						</PermissionGuard>
+						
+						{/* Botão de Reações - NOVO */}
+						<PermissionGuard requiredPermission="timeline:react">
+						  <ReactionPicker onReactionSelect={(emojiId) => handleAddReaction(post.id, emojiId)} />
+						</PermissionGuard>
+					  </div>
+					  
+					  {post.comments.length > 0 && (
+						<div className="space-y-3 w-full">
+						  {post.comments.map((comment) => (
+							<div key={comment.id} className="flex space-x-3">
+							  <UserAvatar 
+								user={{
+								  name: comment.user.name,
+								  avatar: comment.user.avatar,
+								  cargo: comment.user.cargo,
+								  department: comment.user.department
+								}}
+								showAttributes={true}
+								size="sm"
+								enableModal={true}
+							  />
+							  <div className="flex-1">
+								<div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 px-3">
+								  <div className="font-medium text-sm">{comment.user.name}</div>
+								  <div className="text-sm">
+									<LinkifiedText text={comment.content} />
+								  </div>
+								</div>
+								<div className="flex text-xs text-gray-500 mt-1 ml-2 space-x-3">
+								  <span>{comment.timestamp}</span>
+								  <PermissionGuard requiredPermission="timeline:like_comment">
+									<button 
+									  className={`flex items-center gap-1 hover:text-[#e60909] ${comment.liked ? 'text-[#e60909] font-medium' : ''}`}
+									  onClick={() => handleLikeComment(post.id, comment.id)}
+									>
+									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#e60909]" : "")} />
+									  {comment.likes?.length > 0 && comment.likes.length}
+									</button>
+								  </PermissionGuard>
+								  <OwnershipGuard
+									resourceOwnerId={comment.user.id}
+									specialPermission="timeline:delete_any_comment"
+								  >
+									<button 
+									  className="hover:text-red-500"
+									  onClick={() => handleDeleteComment(post.id, comment.id)}
+									>
+									  Excluir
+									</button>
+								  </OwnershipGuard>
+								</div>
+							  </div>
+							</div>
+						  ))}
+						</div>
+					  )}
+					  
+					  <PermissionGuard requiredPermission="timeline:comment">
+						<div className="flex space-x-3 w-full">
+						  <UserAvatar size="sm" />
+						  <div className="flex-1 flex relative">
+							<EmojiInput
+							  value={commentInput[post.id] || ''}
+							  onChange={(value) => setCommentInput({
+								...commentInput,
+								[post.id]: value
+							  })}
+							  onKeyDown={(e) => {
+								if (e.key === 'Enter') {
+								  handleComment(post.id);
+								}
+							  }}
+							  placeholder="Escreva um comentário..."
+							  className="rounded-r-none focus-visible:ring-0 border-r-0 pr-10"
+							/>
+							<div className="absolute right-20 top-1/2 -translate-y-1/2 z-10">
+							  <EmojiPicker 
+								onEmojiSelect={(emoji) => {
+								  const currentValue = commentInput[post.id] || '';
+								  setCommentInput({
+									...commentInput,
+									[post.id]: currentValue + emoji
+								  });
 								}}
 							  />
-							  <div className="absolute right-20 top-1/2 -translate-y-1/2 z-10">
-								<EmojiPicker 
-								  onEmojiSelect={(emoji) => {
-									const currentValue = commentInput[post.id] || '';
-									setCommentInput({
-									  ...commentInput,
-									  [post.id]: currentValue + emoji
-									});
-								  }}
-								/>
-							  </div>
-							  <Button 
-								className="rounded-l-none bg-[#e60909] hover:bg-[#e60909]/90 text-white"
-								onClick={() => handleComment(post.id)}
-								disabled={!commentInput[post.id]?.trim()}
-							  >
-								Enviar
-							  </Button>
 							</div>
-                          </div>
-                        </PermissionGuard>
+							<Button 
+							  className="rounded-l-none bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+							  onClick={() => handleComment(post.id)}
+							  disabled={!commentInput[post.id]?.trim()}
+							>
+							  Enviar
+							</Button>
+						  </div>
+						</div>
+					  </PermissionGuard>
                       </CardFooter>
                     </Card>
                   ))
@@ -1479,20 +1764,24 @@ const Home = () => {
               <TabsContent value="eventos" className="space-y-6" />
             </Tabs>
           </div>
-          
-          {/* Calendário e Aniversários - Coluna da direita (1/3 do espaço) */}
-			<div className="space-y-6">
-			  {/* Widget do Calendário */}
-			  <div className="bg-white rounded-xl shadow-sm p-6">
-				<EnhancedCalendarWidget />
-			  </div>
-			  
-			  {/* Widget de Aniversários */}
-			  <AniversariosWidget />
-			  {/* Widget de Ranking de Engajamento */}
+          <div className="space-y-6">
+		  {/* Widget de Ranking de Engajamento */}
+		  <div className="bg-white rounded-xl shadow-sm p-6">
               <EngagementRanking />
-			  {/* Widget de Super Coins */}
-              <SuperCoinWidget />
+		  </div>	  
+		  
+		  {/* Widget de Aniversários */}
+			  <AniversariosWidget />
+		   
+          {/* Widget de Super Coins */}
+              <SuperCoinWidget />		   
+			  
+          {/* Calendário e Aniversários - Coluna da direita (1/3 do espaço) */}
+			 {/* Widget do Calendário */}
+			  <EnhancedCalendarWidget />
+			 
+			 
+			  
 			</div>
         </div>
       </div>

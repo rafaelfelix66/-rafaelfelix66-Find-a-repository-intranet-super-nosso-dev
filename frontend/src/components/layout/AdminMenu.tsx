@@ -7,7 +7,8 @@ import {
   Shield, 
   FileText, 
   Image, 
-  BarChart 
+  BarChart,
+  Coins 
 } from 'lucide-react';
 import { usePermission } from '@/hooks/usePermission';
 import { 
@@ -87,6 +88,16 @@ export const AdminMenu: React.FC = () => {
             <span>Estatísticas</span>
           </Link>
         )}
+		
+		{hasPermission('supercoins:manage') && (
+		  <Link 
+			to="/admin/supercoins" 
+			className="flex items-center p-3 rounded-md bg-white hover:bg-gray-100 border border-gray-200"
+		  >
+			<Coins className="h-5 w-5 mr-2 text-yellow-500" />
+			<span>Super Coins</span>
+		  </Link>
+		)}
       </div>
       
       <div className="mt-6">

@@ -1,4 +1,7 @@
-//backend/controllers/superCoinController.js
+// backend/controllers/superCoinController.js
+const mongoose = require('mongoose');
+const { User } = require('../models');
+const { manualRecharge, performMonthlyRecharge } = require('../jobs/superCoinsRechargeJob');
 const {
   SuperCoinTransaction,
   SuperCoinBalance,
@@ -6,14 +9,18 @@ const {
   SuperCoinConfig
 } = require('../models/SuperCoin');
 
-// Enviar moedas para outro usuário
+// Enviar moedas para outro usuário - Versão sem transações
 const sendCoins = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  
   try {
     const { toUserId, attributeId, message } = req.body;
     const fromUserId = req.usuario.id;
+    
+    console.log('Tentando enviar moedas:', {
+      fromUserId,
+      toUserId,
+      attributeId,
+      message: message || 'Sem mensagem'
+    });
     
     // Verificar se o usuário não está enviando para si mesmo
     if (fromUserId === toUserId) {
@@ -26,12 +33,56 @@ const sendCoins = async (req, res) => {
       throw new Error('Atributo inválido ou inativo');
     }
     
+    // Verificação de permissão para mensagem - CORRIGIDA
+    let canSendMessage = false;
+    // Só verificamos a permissão se houver uma mensagem
+    if (message && message.trim().length > 0) {
+      try {
+        // Buscar permissões do usuário
+        const user = await User.findById(fromUserId);
+        if (user && user.permissions) {
+          canSendMessage = user.permissions.includes('supercoins:send_message');
+        }
+        
+        // Verificar também nas roles (papéis)
+        if (!canSendMessage && user.roles && user.roles.length > 0) {
+          const { Role } = require('../models');
+          const userRoles = await Role.find({ name: { $in: user.roles } });
+          
+          // Verificar se algum papel tem a permissão
+          for (const role of userRoles) {
+            if (role.permissions && role.permissions.includes('supercoins:send_message')) {
+              canSendMessage = true;
+              break;
+            }
+          }
+        }
+        
+        // Se não tem permissão e tentou enviar mensagem
+        if (!canSendMessage) {
+          console.log('Usuário não tem permissão para enviar mensagens');
+        }
+      } catch (permError) {
+        console.error('Erro ao verificar permissão:', permError);
+        // Em caso de erro, presumimos que o usuário não tem permissão
+        canSendMessage = false;
+      }
+    }
+    
+    // Se não tem permissão para enviar mensagem e tentou enviar uma
+    if (message && message.trim().length > 0 && !canSendMessage) {
+      console.log('Tentativa de enviar mensagem sem permissão');
+      // Em vez de lançar erro, apenas ignoramos a mensagem
+      console.log('Mensagem será ignorada');
+    }
+    
     // Verificar saldo do remetente
     let senderBalance = await SuperCoinBalance.findOne({ userId: fromUserId });
     if (!senderBalance) {
       // Criar saldo inicial se não existir
+      console.log('Criando saldo inicial para o remetente:', fromUserId);
       senderBalance = new SuperCoinBalance({ userId: fromUserId, balance: 0 });
-      await senderBalance.save({ session });
+      await senderBalance.save();
     }
     
     if (senderBalance.balance < attribute.cost) {
@@ -41,30 +92,63 @@ const sendCoins = async (req, res) => {
     // Buscar ou criar saldo do destinatário
     let receiverBalance = await SuperCoinBalance.findOne({ userId: toUserId });
     if (!receiverBalance) {
+      console.log('Criando saldo inicial para o destinatário:', toUserId);
       receiverBalance = new SuperCoinBalance({ userId: toUserId, balance: 0 });
+      await receiverBalance.save();
     }
     
-    // Realizar a transação
+    // Realizar a transação - CORRIGIDO
+    const finalMessage = canSendMessage ? (message || '') : '';
     const transaction = new SuperCoinTransaction({
       fromUserId,
       toUserId,
       amount: attribute.cost,
       attributeId,
-      message
+      message: finalMessage // Usar mensagem só se tiver permissão
     });
     
     // Atualizar saldos
     senderBalance.balance -= attribute.cost;
     senderBalance.totalGiven += attribute.cost;
-    await senderBalance.save({ session });
+    await senderBalance.save();
     
     receiverBalance.balance += attribute.cost;
     receiverBalance.totalReceived += attribute.cost;
-    await receiverBalance.save({ session });
+    await receiverBalance.save();
     
-    await transaction.save({ session });
+    await transaction.save();
     
-    await session.commitTransaction();
+    // Criar notificação para o destinatário
+    try {
+      const { Notification } = require('../models/Notification');
+      const senderUser = await User.findById(fromUserId).select('nome avatar');
+      
+      const notification = new Notification({
+        userId: toUserId,
+        title: 'Super Coins Recebidas',
+        message: `${senderUser ? senderUser.nome : 'Alguém'} enviou ${attribute.cost} Super Coins para você${finalMessage ? ': ' + finalMessage : '!'}`,
+        type: 'supercoins',
+        data: {
+          transactionId: transaction._id,
+          attributeId: attribute._id,
+          attributeName: attribute.name,
+          amount: attribute.cost,
+          senderId: fromUserId,
+          senderName: senderUser ? senderUser.nome : null,
+          senderAvatar: senderUser ? senderUser.avatar : null,
+          color: attribute.color
+        },
+        isRead: false
+      });
+      
+      await notification.save();
+      console.log('Notificação criada para o usuário:', toUserId);
+    } catch (notifError) {
+      console.error('Erro ao criar notificação:', notifError);
+      // Continuar o fluxo mesmo se a notificação falhar
+    }
+    
+    console.log('Transação de moedas realizada com sucesso:', transaction._id);
     
     res.json({
       success: true,
@@ -72,10 +156,8 @@ const sendCoins = async (req, res) => {
       newBalance: senderBalance.balance
     });
   } catch (error) {
-    await session.abortTransaction();
+    console.error('Erro ao enviar moedas:', error.message);
     res.status(400).json({ mensagem: error.message });
-  } finally {
-    session.endSession();
   }
 };
 
@@ -84,53 +166,45 @@ const getBalance = async (req, res) => {
   try {
     const userId = req.params.userId || req.usuario.id;
     
+    console.log('Buscando saldo do usuário:', userId);
+    
     let balance = await SuperCoinBalance.findOne({ userId });
     if (!balance) {
+      console.log('Saldo não encontrado, criando novo para:', userId);
       balance = new SuperCoinBalance({ userId, balance: 0 });
       await balance.save();
     }
     
     res.json(balance);
   } catch (error) {
+    console.error('Erro ao buscar saldo:', error.message);
     res.status(500).json({ mensagem: 'Erro ao buscar saldo' });
   }
 };
 
-// Recarga mensal automática (deve ser executada por um job)
+// Recarga mensal automática (executada por cron)
 const monthlyRecharge = async () => {
   try {
-    const config = await SuperCoinConfig.findOne({ active: true });
-    if (!config) return;
-    
-    const today = new Date().getDate();
-    if (today !== config.rechargeDay) return;
-    
-    // Buscar todos os usuários ativos
-    const users = await User.find({ ativo: true });
-    
-    for (const user of users) {
-      let balance = await SuperCoinBalance.findOne({ userId: user._id });
-      if (!balance) {
-        balance = new SuperCoinBalance({ userId: user._id });
-      }
-      
-      // Verificar se já foi recarregado este mês
-      const lastRecharge = balance.lastRecharge;
-      const now = new Date();
-      if (
-        lastRecharge &&
-        lastRecharge.getMonth() === now.getMonth() &&
-        lastRecharge.getFullYear() === now.getFullYear()
-      ) {
-        continue; // Já foi recarregado este mês
-      }
-      
-      balance.balance += config.monthlyRechargeAmount;
-      balance.lastRecharge = now;
-      await balance.save();
-    }
+    return await performMonthlyRecharge();
   } catch (error) {
     console.error('Erro na recarga mensal:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Executar recarga manual (via API)
+const executeManualRecharge = async (req, res) => {
+  try {
+    // Verificar permissão
+    if (!req.usuario || !req.usuario.id) {
+      return res.status(401).json({ mensagem: 'Não autorizado' });
+    }
+    
+    const result = await manualRecharge();
+    res.json(result);
+  } catch (error) {
+    console.error('Erro na recarga manual:', error);
+    res.status(500).json({ mensagem: 'Erro na recarga manual', error: error.message });
   }
 };
 
@@ -138,25 +212,62 @@ const monthlyRecharge = async () => {
 const getCoinRanking = async (req, res) => {
   try {
     const { type = 'received' } = req.query;
+    console.log('Buscando ranking de tipo:', type);
     
+    // Definir o campo para ordenação
     const sortField = type === 'received' ? 'totalReceived' : 'totalGiven';
     
-    const ranking = await SuperCoinBalance.find()
-      .sort({ [sortField]: -1 })
-      .limit(10)
-      .populate('userId', 'nome avatar departamento');
+    // Buscar balances com valores > 0 para o campo específico
+    const balances = await SuperCoinBalance.find({
+      [sortField]: { $gt: 0 }
+    })
+    .sort({ [sortField]: -1 })
+    .limit(10);
     
-    res.json(ranking);
+    // Preencher os detalhes do usuário manualmente para evitar erros de população
+    const formattedRanking = [];
+    
+    for (const balance of balances) {
+      try {
+        // Buscar o usuário associado ao saldo
+        const user = await User.findById(balance.userId).select('nome avatar departamento');
+        
+        // Adicionar ao ranking formatado
+        formattedRanking.push({
+          userId: balance.userId.toString(),
+          userName: user ? user.nome : 'Usuário Desconhecido',
+          userAvatar: user ? user.avatar : null,
+          userDepartment: user ? user.departamento : null,
+          totalPoints: type === 'received' ? balance.totalReceived : balance.totalGiven
+        });
+      } catch (userError) {
+        console.error(`Erro ao buscar usuário ${balance.userId}:`, userError);
+        // Incluir no ranking mesmo se não encontrar o usuário
+        formattedRanking.push({
+          userId: balance.userId.toString(),
+          userName: 'Usuário Desconhecido',
+          userAvatar: null,
+          userDepartment: null,
+          totalPoints: type === 'received' ? balance.totalReceived : balance.totalGiven
+        });
+      }
+    }
+    
+    console.log(`Ranking formatado com ${formattedRanking.length} usuários`);
+    res.json(formattedRanking);
   } catch (error) {
-    res.status(500).json({ mensagem: 'Erro ao buscar ranking' });
+    console.error('Erro ao buscar ranking:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar ranking de moedas' });
   }
 };
 
 const getAttributes = async (req, res) => {
   try {
     const attributes = await SuperCoinAttribute.find({ active: true });
+    console.log(`Encontrados ${attributes.length} atributos ativos`);
     res.json(attributes);
   } catch (error) {
+    console.error('Erro ao buscar atributos:', error.message);
     res.status(500).json({ mensagem: 'Erro ao buscar atributos' });
   }
 };
@@ -164,7 +275,11 @@ const getAttributes = async (req, res) => {
 const createAttribute = async (req, res) => {
   try {
     const { name, description, cost, icon, color } = req.body;
-    
+
+	// Verificar valores obrigatórios
+    if (!name || !cost) {
+      return res.status(400).json({ mensagem: 'Nome e custo são obrigatórios' });    
+	}
     // Verificar se já existe um atributo com o mesmo nome
     const existingAttribute = await SuperCoinAttribute.findOne({ name });
     if (existingAttribute) {
@@ -174,15 +289,16 @@ const createAttribute = async (req, res) => {
     const attribute = new SuperCoinAttribute({
       name,
       description,
-      cost,
+      cost: Number(cost),
       icon,
-      color
+      color: color || '#e60909'
     });
     
     await attribute.save();
     res.status(201).json(attribute);
   } catch (error) {
-    res.status(500).json({ mensagem: 'Erro ao criar atributo' });
+    console.error('Erro ao criar atributo:', error);
+    res.status(500).json({ mensagem: 'Erro ao criar atributo', error: error.message });
   }
 };
 
@@ -207,7 +323,7 @@ const updateAttribute = async (req, res) => {
     // Atualizar os campos
     if (name) attribute.name = name;
     if (description !== undefined) attribute.description = description;
-    if (cost !== undefined) attribute.cost = cost;
+    if (cost !== undefined) attribute.cost = Number(cost);
     if (icon !== undefined) attribute.icon = icon;
     if (color !== undefined) attribute.color = color;
     if (active !== undefined) attribute.active = active;
@@ -215,7 +331,8 @@ const updateAttribute = async (req, res) => {
     await attribute.save();
     res.json(attribute);
   } catch (error) {
-    res.status(500).json({ mensagem: 'Erro ao atualizar atributo' });
+    console.error('Erro ao atualizar atributo:', error);
+    res.status(500).json({ mensagem: 'Erro ao atualizar atributo', error: error.message });
   }
 };
 
@@ -243,7 +360,8 @@ const deleteAttribute = async (req, res) => {
     await attribute.deleteOne();
     res.json({ mensagem: 'Atributo excluído com sucesso' });
   } catch (error) {
-    res.status(500).json({ mensagem: 'Erro ao excluir atributo' });
+    console.error('Erro ao excluir atributo:', error);
+    res.status(500).json({ mensagem: 'Erro ao excluir atributo', error: error.message });
   }
 };
 
@@ -258,26 +376,48 @@ const getConfig = async (req, res) => {
     }
     res.json(config);
   } catch (error) {
+    console.error('Erro ao buscar configurações:', error.message);
     res.status(500).json({ mensagem: 'Erro ao buscar configurações' });
   }
 };
 
 const updateConfig = async (req, res) => {
   try {
-    const { monthlyRechargeAmount, rechargeDay } = req.body;
+    const { monthlyRechargeAmount, rechargeDay, rechargeMode } = req.body;
     
     let config = await SuperCoinConfig.findOne({ active: true });
     if (!config) {
       config = new SuperCoinConfig();
     }
+    // Validar valores
+    if (monthlyRechargeAmount !== undefined) {
+      const amount = Number(monthlyRechargeAmount);
+      if (isNaN(amount) || amount < 0) {
+        return res.status(400).json({ mensagem: 'Valor de recarga mensal inválido' });
+      }
+      config.monthlyRechargeAmount = amount;
+    }
     
-    if (monthlyRechargeAmount !== undefined) config.monthlyRechargeAmount = monthlyRechargeAmount;
-    if (rechargeDay !== undefined) config.rechargeDay = rechargeDay;
+    if (rechargeDay !== undefined) {
+      const day = Number(rechargeDay);
+      if (isNaN(day) || day < 1 || day > 28) {
+        return res.status(400).json({ mensagem: 'Dia de recarga deve ser entre 1 e 28' });
+      }
+      config.rechargeDay = day;
+    }
+    
+    if (rechargeMode !== undefined) {
+      if (!['reset', 'complement'].includes(rechargeMode)) {
+        return res.status(400).json({ mensagem: 'Modo de recarga inválido. Use "reset" ou "complement"' });
+      }
+      config.rechargeMode = rechargeMode;
+    }
     
     await config.save();
     res.json(config);
   } catch (error) {
-    res.status(500).json({ mensagem: 'Erro ao atualizar configurações' });
+    console.error('Erro ao atualizar configurações:', error);
+    res.status(500).json({ mensagem: 'Erro ao atualizar configurações', error: error.message });
   }
 };
 
@@ -294,282 +434,67 @@ const getUserTransactions = async (req, res) => {
       ]
     })
     .sort({ timestamp: -1 })
-    .populate('fromUserId', 'nome avatar')
-    .populate('toUserId', 'nome avatar')
+    .populate('fromUserId', 'nome avatar departamento')
+    .populate('toUserId', 'nome avatar departamento')
     .populate('attributeId');
     
     res.json(transactions);
   } catch (error) {
-    res.status(500).json({ mensagem: 'Erro ao buscar transações' });
-  }
-};
-// Obter usuários mais ativos
-const getActiveUsers = async (req, res) => {
-  try {
-    const { from, to, limit = 10 } = req.query;
-    
-    const startDate = new Date(from);
-    const endDate = new Date(to);
-    
-    // Agregação para encontrar os usuários mais ativos
-    const activeUsers = await Engagement.aggregate([
-      {
-        $match: {
-          timestamp: { $gte: startDate, $lte: endDate }
-        }
-      },
-      {
-        $group: {
-          _id: "$userId",
-          totalActions: { $sum: 1 },
-          views: {
-            $sum: {
-              $cond: [{ $in: ["$actionType", ["article_view", "file_view", "post_view"]] }, 1, 0]
-            }
-          },
-          interactions: {
-            $sum: {
-              $cond: [{ $in: ["$actionType", ["post_like", "post_comment", "file_share"]] }, 1, 0]
-            }
-          },
-          lastActivity: { $max: "$timestamp" }
-        }
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "_id",
-          foreignField: "_id",
-          as: "userDetails"
-        }
-      },
-      { $unwind: "$userDetails" },
-      {
-        $project: {
-          _id: 0,
-          userId: "$_id",
-          nome: "$userDetails.nome",
-          departamento: "$userDetails.departamento",
-          cargo: "$userDetails.cargo",
-          avatar: "$userDetails.avatar",
-          totalActions: 1,
-          views: 1,
-          interactions: 1,
-          lastActivity: 1
-        }
-      },
-      { $sort: { totalActions: -1 } },
-      { $limit: parseInt(limit) }
-    ]);
-    
-    res.json(activeUsers);
-  } catch (error) {
-    console.error('Erro ao buscar usuários ativos:', error);
-    res.status(500).json({ mensagem: 'Erro ao buscar usuários ativos' });
+    console.error('Erro ao buscar transações:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar transações', error: error.message });
   }
 };
 
-// Obter estatísticas de Super Coins
-const getSuperCoinsStats = async (req, res) => {
+// Estatísticas do sistema de moedas
+const getSystemStats = async (req, res) => {
   try {
-    const { from, to } = req.query;
+    // Total de usuários com saldo
+    const usersWithBalance = await SuperCoinBalance.countDocuments();
     
-    const startDate = new Date(from);
-    const endDate = new Date(to);
-    
-    // 1. Estatísticas gerais
-    const generalStats = await SuperCoinTransaction.aggregate([
-      {
-        $match: {
-          timestamp: { $gte: startDate, $lte: endDate }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalTransactions: { $sum: 1 },
-          totalCoinsTransferred: { $sum: "$amount" },
-          uniqueSenders: { $addToSet: "$fromUserId" },
-          uniqueReceivers: { $addToSet: "$toUserId" }
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          totalTransactions: 1,
-          totalCoinsTransferred: 1,
-          uniqueSenders: { $size: "$uniqueSenders" },
-          uniqueReceivers: { $size: "$uniqueReceivers" }
-        }
-      }
+    // Total de moedas em circulação
+    const totalCoinsResult = await SuperCoinBalance.aggregate([
+      { $group: { _id: null, total: { $sum: "$balance" } } }
     ]);
+    const totalCoins = totalCoinsResult.length > 0 ? totalCoinsResult[0].total : 0;
     
-    // 2. Tendência diária
-    const dailyTrends = await SuperCoinTransaction.aggregate([
-      {
-        $match: {
-          timestamp: { $gte: startDate, $lte: endDate }
-        }
-      },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
-          transactions: { $sum: 1 },
-          coinsTransferred: { $sum: "$amount" }
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          date: "$_id",
-          transactions: 1,
-          coinsTransferred: 1
-        }
-      },
-      { $sort: { date: 1 } }
-    ]);
+    // Total de transações
+    const totalTransactions = await SuperCoinTransaction.countDocuments();
     
-    // 3. Atributos mais populares
-    const popularAttributes = await SuperCoinTransaction.aggregate([
-      {
-        $match: {
-          timestamp: { $gte: startDate, $lte: endDate }
-        }
-      },
-      {
-        $group: {
-          _id: "$attributeId",
-          totalUsed: { $sum: 1 },
-          totalCoins: { $sum: "$amount" }
-        }
-      },
-      {
-        $lookup: {
-          from: "superCoinAttributes",
-          localField: "_id",
-          foreignField: "_id",
-          as: "attributeDetails"
-        }
-      },
-      { $unwind: "$attributeDetails" },
-      {
-        $project: {
-          _id: 0,
-          attributeId: "$_id",
-          name: "$attributeDetails.name",
-          description: "$attributeDetails.description",
-          cost: "$attributeDetails.cost",
-          icon: "$attributeDetails.icon",
-          color: "$attributeDetails.color",
-          totalUsed: 1,
-          totalCoins: 1
-        }
-      },
-      { $sort: { totalUsed: -1 } },
-      { $limit: 10 }
-    ]);
+    // Total de atributos
+    const totalAttributes = await SuperCoinAttribute.countDocuments();
     
-    // 4. Maiores doadores e recebedores
-    const topUsers = await Promise.all([
-      // Top senders
-      SuperCoinTransaction.aggregate([
-        {
-          $match: {
-            timestamp: { $gte: startDate, $lte: endDate }
-          }
-        },
-        {
-          $group: {
-            _id: "$fromUserId",
-            totalSent: { $sum: "$amount" },
-            transactions: { $sum: 1 }
-          }
-        },
-        {
-          $lookup: {
-            from: "users",
-            localField: "_id",
-            foreignField: "_id",
-            as: "userDetails"
-          }
-        },
-        { $unwind: "$userDetails" },
-        {
-          $project: {
-            _id: 0,
-            userId: "$_id",
-            name: "$userDetails.nome",
-            department: "$userDetails.departamento",
-            avatar: "$userDetails.avatar",
-            totalSent: 1,
-            transactions: 1
-          }
-        },
-        { $sort: { totalSent: -1 } },
-        { $limit: 5 }
-      ]),
-      
-      // Top receivers
-      SuperCoinTransaction.aggregate([
-        {
-          $match: {
-            timestamp: { $gte: startDate, $lte: endDate }
-          }
-        },
-        {
-          $group: {
-            _id: "$toUserId",
-            totalReceived: { $sum: "$amount" },
-            transactions: { $sum: 1 }
-          }
-        },
-        {
-          $lookup: {
-            from: "users",
-            localField: "_id",
-            foreignField: "_id",
-            as: "userDetails"
-          }
-        },
-        { $unwind: "$userDetails" },
-        {
-          $project: {
-            _id: 0,
-            userId: "$_id",
-            name: "$userDetails.nome",
-            department: "$userDetails.departamento",
-            avatar: "$userDetails.avatar",
-            totalReceived: 1,
-            transactions: 1
-          }
-        },
-        { $sort: { totalReceived: -1 } },
-        { $limit: 5 }
-      ])
+    // Transações nos últimos 30 dias
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const recentTransactions = await SuperCoinTransaction.countDocuments({
+      timestamp: { $gte: thirtyDaysAgo }
+    });
+    
+    // Valor total de moedas transacionadas
+    const totalAmountResult = await SuperCoinTransaction.aggregate([
+      { $group: { _id: null, total: { $sum: "$amount" } } }
     ]);
+    const totalAmount = totalAmountResult.length > 0 ? totalAmountResult[0].total : 0;
     
     res.json({
-      generalStats: generalStats[0] || {
-        totalTransactions: 0,
-        totalCoinsTransferred: 0,
-        uniqueSenders: 0,
-        uniqueReceivers: 0
-      },
-      dailyTrends,
-      popularAttributes,
-      topSenders: topUsers[0],
-      topReceivers: topUsers[1]
+      usersWithBalance,
+      totalCoins,
+      totalTransactions,
+      totalAttributes,
+      recentTransactions,
+      totalAmount
     });
   } catch (error) {
-    console.error('Erro ao buscar estatísticas de Super Coins:', error);
-    res.status(500).json({ mensagem: 'Erro ao buscar estatísticas de Super Coins' });
+    console.error('Erro ao buscar estatísticas:', error);
+    res.status(500).json({ mensagem: 'Erro ao buscar estatísticas', error: error.message });
   }
 };
-
 module.exports = {
   sendCoins,
   getBalance,
   monthlyRecharge,
+  executeManualRecharge,
   getCoinRanking,
   getAttributes,
   createAttribute,
@@ -577,4 +502,6 @@ module.exports = {
   deleteAttribute,
   getConfig,
   updateConfig,
-  getUserTransactions};
+  getUserTransactions,
+  getSystemStats
+};

@@ -8,8 +8,9 @@ const http = require('http');
 const socketIo = require('socket.io');
 require('dotenv').config();
 const fs = require('fs');
-
+//jobs
 const { startBackupScheduler } = require('./jobs/backupScheduler');
+const { scheduleSuperCoinsRecharge } = require('./jobs/superCoinsRechargeJob');
 
 
 // Importar modelos
@@ -226,6 +227,7 @@ app.use('/uploads/banners', express.static(path.join(__dirname, 'uploads/banners
 app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads/avatars')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads/folders', express.static(path.join(__dirname, 'uploads/folders')));
+app.use('/uploads/emojis', express.static(path.join(__dirname, 'uploads/emojis')));
 // Rota de diagnóstico para verificar arquivos
 app.get('/api/check-file', (req, res) => {
   const filePath = req.query.path;
@@ -382,6 +384,7 @@ app.options('/api/files/upload', cors(corsOptions));
 // Rotas
 const llmRoutes = require('./routes/llm');
 const engagementRoutes = require('./routes/engagement');
+const notificationRoutes = require('./routes/notifications');
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/timeline', require('./routes/timeline'));
 app.use('/api/knowledge', require('./routes/knowledge'));
@@ -393,17 +396,7 @@ app.use('/api/admin/engagement', require('./routes/adminEngagement'));
 app.use('/api/supercoins', require('./routes/supercoins'));
 app.use('/api/llm', llmRoutes);
 app.use('/api/engagement', engagementRoutes);
-
-
-// Adicionar job scheduler para recarga mensal
-const { monthlyRecharge } = require('./controllers/superCoinController');
-const cron = require('node-cron');
-
-// Executar todos os dias à meia-noite para verificar recarga
-cron.schedule('0 0 * * *', () => {
-  console.log('Verificando recarga mensal de Super Coins...');
-  monthlyRecharge();
-});
+app.use('/api/notifications', notificationRoutes);
 
 
 // Rotas de autenticação
@@ -649,6 +642,7 @@ app.put('/api/files/:itemType/:itemId/public', verificarToken, async (req, res) 
 // Iniciar agendador de backup de usuários
 if (process.env.NODE_ENV !== 'test') {
   startBackupScheduler();
+  scheduleSuperCoinsRecharge();
 }
 
 

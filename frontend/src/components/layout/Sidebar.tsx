@@ -13,7 +13,9 @@ import {
   LogOut,
   LayoutDashboard,
   Shield,
-  BarChart 
+  BarChart,
+  Coins,
+  User  
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -175,7 +177,7 @@ export function Sidebar() {
           <SidebarItem 
             icon={MessageSquare} 
             to="/chat" 
-            label="ChatBot" 
+            label="Pesquisa" 
             active={getActivePath("/chat")} 
             isOpen={isOpen}
           />
@@ -214,10 +216,19 @@ export function Sidebar() {
 			isOpen={isOpen}
 		  />
 		  )}
+		  {hasPermission('supercoins:manage') && (
 		  <SidebarItem 
-            icon={Settings} 
+			icon={Coins} 
+			to="/admin/supercoins" 
+			label="Super Coins" 
+			active={getActivePath("/admin/supercoins")} 
+			isOpen={isOpen}
+		  />
+		  )}
+		  <SidebarItem 
+            icon={User} 
             to="/configuracoes" 
-            label="Configurações" 
+            label="Meu Perfil" 
             active={getActivePath("/configuracoes")} 
             isOpen={isOpen}
           />

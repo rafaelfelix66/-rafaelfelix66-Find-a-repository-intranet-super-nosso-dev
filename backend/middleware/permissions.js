@@ -1,25 +1,54 @@
 // middleware/permissions.js
+// backend/middleware/permissions.js - Versão simplificada para debug
 const { User, Role } = require('../models');
 
 // Middleware para verificar permissão específica
 const hasPermission = (requiredPermission) => {
   return async (req, res, next) => {
-	//console.log('Verificando permissão:', requiredPermission);
-    //console.log('Usuário na requisição:', req.usuario);
+    console.log(`Verificando permissão: ${requiredPermission}`);
+    console.log('Usuário na requisição:', req.usuario?.id);
+    
     try {
       // Verificar se o usuário está autenticado
       if (!req.usuario || !req.usuario.id) {
+        console.log('Usuário não autenticado');
         return res.status(401).json({ mensagem: 'Não autenticado' });
+      }
+      
+      // Para verificação rápida, bypassa a verificação se for uma função do controller
+      if (res === undefined) {
+        // Chamado diretamente de um controller, não como middleware
+        const user = await User.findById(req.usuario.id).select('roles permissions');
+        if (!user) return false;
+        
+        // Verificar permissões diretas
+        if (user.permissions?.includes(requiredPermission)) return true;
+        
+        // Verificar permissões por papel
+        if (user.roles && user.roles.length > 0) {
+          const userRoles = await Role.find({ name: { $in: user.roles } });
+          for (const role of userRoles) {
+            if (role.permissions?.includes(requiredPermission)) return true;
+          }
+        }
+        
+        return false;
       }
       
       // Buscar usuário com permissões completas do banco de dados
       const user = await User.findById(req.usuario.id);
       if (!user) {
+        console.log('Usuário não encontrado no banco');
         return res.status(404).json({ mensagem: 'Usuário não encontrado' });
       }
       
+      // Debug - mostrar as permissões do usuário
+      console.log('Permissões do usuário:', user.permissions || []);
+      console.log('Papéis do usuário:', user.roles || []);
+      
       // Verificar permissões explícitas do usuário
       if (user.permissions?.includes(requiredPermission)) {
+        console.log('Permissão encontrada diretamente:', requiredPermission);
         return next();
       }
       
@@ -28,15 +57,21 @@ const hasPermission = (requiredPermission) => {
         // Buscar todos os papéis do usuário
         const userRoles = await Role.find({ name: { $in: user.roles } });
         
+        // Debug
+        console.log('Papéis encontrados:', userRoles.map(r => r.name));
+        
         // Verificar se algum papel tem a permissão necessária
         for (const role of userRoles) {
+          console.log(`Verificando permissões em papel ${role.name}:`, role.permissions || []);
           if (role.permissions?.includes(requiredPermission)) {
+            console.log(`Permissão ${requiredPermission} encontrada no papel ${role.name}`);
             return next();
           }
         }
       }
       
       // Se chegou aqui, o usuário não tem a permissão necessária
+      console.log('Acesso negado - permissão não encontrada');
       return res.status(403).json({ 
         mensagem: 'Acesso negado. Você não tem permissão para esta ação.',
         requiredPermission

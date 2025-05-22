@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/services/api";
 import { useToast } from "@/components/ui/use-toast";
+import { BannerItem } from "./BannerItem";
 
 interface Slide {
   _id: string;
@@ -133,28 +134,33 @@ export function CarouselBanner() {
               "absolute inset-0 bg-black/40 z-10 transition-opacity",
               isLoading ? "opacity-100" : "opacity-40"
             )} />
-            <img 
-              src={slide.imageUrl} 
-              alt={slide.title}
-              className={cn(
-                "w-full h-full object-cover transition-transform duration-700",
-                index === currentSlide ? "scale-105" : "scale-100"
-              )}
-              onLoad={() => index === currentSlide && setIsLoading(false)}
-              onError={(e) => {
-                // Usar imagem de fallback em caso de erro
-                const target = e.target as HTMLImageElement;
-                target.src = "/placeholder.svg";
-              }}
-            />
-            <div className="absolute bottom-0 left-0 right-0 z-20 p-4 sm:p-8 text-white">
+            
+            {/* Utilizando o componente BannerItem para rastrear os cliques */}
+            <div className="absolute inset-0 z-20">
+              <BannerItem
+                id={slide._id}
+                imageUrl={slide.imageUrl}
+                link={slide.link}
+                title={slide.title}
+                description={slide.description}
+              />
+            </div>
+            
+            <div className="absolute bottom-0 left-0 right-0 z-30 p-4 sm:p-8 text-white pointer-events-none">
               <h3 className="text-xl sm:text-2xl font-bold mb-2 animate-fade-in">{slide.title}</h3>
               <p className="text-sm sm:text-base mb-4 max-w-md animate-fade-in opacity-90">{slide.description}</p>
               {slide.link && (
                 <Button 
                   variant="outline" 
-                  className="bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 hover:border-white/30 animate-fade-in"
-                  onClick={() => window.open(slide.link || "#", "_blank", "noopener,noreferrer")}
+                  className="bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 hover:border-white/30 animate-fade-in pointer-events-auto"
+                  onClick={(e) => {
+                    e.stopPropagation(); // Evitar duplo clique
+                    window.open(slide.link || "#", "_blank", "noopener,noreferrer");
+                    // Também podemos registrar o clique direto por aqui, mas o BannerItem já faz isso
+                    api.get(`/banners/${slide._id}/click`).catch(err => 
+                      console.error("Erro ao registrar clique adicional:", err)
+                    );
+                  }}
                 >
                   Saiba mais
                 </Button>
@@ -169,7 +175,7 @@ export function CarouselBanner() {
           <Button 
             variant="outline" 
             size="icon" 
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-30 bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 text-white rounded-full"
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-40 bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 text-white rounded-full"
             onClick={prevSlide}
           >
             <ChevronLeft size={20} />
@@ -178,13 +184,13 @@ export function CarouselBanner() {
           <Button 
             variant="outline" 
             size="icon" 
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-30 bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 text-white rounded-full"
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-40 bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 text-white rounded-full"
             onClick={nextSlide}
           >
             <ChevronRight size={20} />
           </Button>
           
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex space-x-2">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex space-x-2">
             {slides.map((_, index) => (
               <button
                 key={index}
