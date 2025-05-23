@@ -1,5 +1,4 @@
-// middleware/permissions.js
-// backend/middleware/permissions.js - Versão simplificada para debug
+// backend/middleware/permissions.js - Versão Atualizada com Permissões Institucionais
 const { User, Role } = require('../models');
 
 // Middleware para verificar permissão específica
@@ -24,6 +23,9 @@ const hasPermission = (requiredPermission) => {
         // Verificar permissões diretas
         if (user.permissions?.includes(requiredPermission)) return true;
         
+        // Verificar se é admin (tem todas as permissões)
+        if (user.roles?.includes('admin')) return true;
+        
         // Verificar permissões por papel
         if (user.roles && user.roles.length > 0) {
           const userRoles = await Role.find({ name: { $in: user.roles } });
@@ -45,6 +47,12 @@ const hasPermission = (requiredPermission) => {
       // Debug - mostrar as permissões do usuário
       console.log('Permissões do usuário:', user.permissions || []);
       console.log('Papéis do usuário:', user.roles || []);
+      
+      // Verificar se é admin (tem todas as permissões)
+      if (user.roles?.includes('admin')) {
+        console.log('Usuário é admin - acesso liberado');
+        return next();
+      }
       
       // Verificar permissões explícitas do usuário
       if (user.permissions?.includes(requiredPermission)) {
@@ -106,6 +114,11 @@ const isOwnerOrHasPermission = (model, paramIdField, specialPermission) => {
         return res.status(404).json({ mensagem: 'Usuário não encontrado' });
       }
       
+      // Verificar se é admin (tem todas as permissões)
+      if (user.roles?.includes('admin')) {
+        return next();
+      }
+      
       // Verificar permissão especial diretamente no usuário
       if (user.permissions?.includes(specialPermission)) {
         return next();
@@ -146,4 +159,93 @@ const isOwnerOrHasPermission = (model, paramIdField, specialPermission) => {
   };
 };
 
-module.exports = { hasPermission, isOwnerOrHasPermission };
+// Lista de permissões disponíveis no sistema (para referência)
+const AVAILABLE_PERMISSIONS = {
+  // Timeline
+  'timeline:view': 'Visualizar posts',
+  'timeline:create': 'Criar publicações',
+  'timeline:like': 'Curtir publicações',
+  'timeline:like_comment': 'Curtir comentários',
+  'timeline:edit_own': 'Editar próprias publicações',
+  'timeline:delete_own': 'Excluir próprias publicações',
+  'timeline:delete_any': 'Excluir qualquer publicação',
+  'timeline:comment': 'Adicionar comentários',
+  'timeline:react': 'Reagir com emojis às publicações',
+  'timeline:delete_comment_own': 'Excluir próprios comentários',
+  'timeline:delete_comment_any': 'Excluir qualquer comentário',
+  
+  // Arquivos
+  'files:view': 'Visualizar arquivos',
+  'files:upload': 'Fazer upload de arquivos',
+  'files:download': 'Baixar arquivos',
+  'files:delete_own': 'Excluir próprios arquivos',
+  'files:delete_any': 'Excluir qualquer arquivo',
+  'files:create_folder': 'Criar pastas',
+  'files:share': 'Compartilhar arquivos',
+  
+  // Base de Conhecimento
+  'knowledge:view': 'Visualizar artigos',
+  'knowledge:create': 'Criar artigos',
+  'knowledge:edit_own': 'Editar próprios artigos',
+  'knowledge:edit_any': 'Editar qualquer artigo',
+  'knowledge:delete_own': 'Excluir próprios artigos',
+  'knowledge:delete_any': 'Excluir qualquer artigo',
+  
+  // Calendário/Eventos
+  'calendar:view': 'Visualizar calendário',
+  'calendar:create': 'Criar eventos',
+  'calendar:edit_own': 'Editar próprios eventos',
+  'calendar:edit_any': 'Editar qualquer evento',
+  'calendar:delete_own': 'Excluir próprios eventos',
+  'calendar:delete_any': 'Excluir qualquer evento',
+  
+  // Banners
+  'banners:view': 'Visualizar banners',
+  'banners:create': 'Criar banners',
+  'banners:edit': 'Editar banners',
+  'banners:delete': 'Excluir banners',
+  'banners:manage': 'Gerenciar banners',
+  
+  // Institucional - NOVAS PERMISSÕES
+  'institutional:view': 'Visualizar áreas institucionais',
+  'institutional:create': 'Criar áreas institucionais',
+  'institutional:edit': 'Editar áreas institucionais',
+  'institutional:delete': 'Excluir áreas institucionais',
+  'institutional:manage': 'Gerenciar áreas institucionais (incluindo reordenação e visualização de inativas)',
+  
+  // Chat
+  'chat:access': 'Acessar chat',
+  'chat:create_group': 'Criar grupos de chat',
+  'chat:manage_group': 'Gerenciar grupos de chat',
+  
+  // Administração
+  'admin:access': 'Acesso à área administrativa',
+  'admin:dashboard': 'Visualizar dashboard administrativo',
+  'users:view': 'Visualizar usuários',
+  'users:create': 'Criar usuários',
+  'users:edit': 'Editar usuários',
+  'users:delete': 'Excluir usuários',
+  'roles:manage': 'Gerenciar papéis e permissões',
+  
+  // SuperCoins
+  'supercoins:send_message': 'Enviar mensagem no atributo',
+  'supercoins:manage': 'Gerenciar sistema SuperCoins'
+};
+
+// Função para verificar se uma permissão existe
+const isValidPermission = (permission) => {
+  return Object.keys(AVAILABLE_PERMISSIONS).includes(permission);
+};
+
+// Função para obter todas as permissões disponíveis
+const getAllPermissions = () => {
+  return AVAILABLE_PERMISSIONS;
+};
+
+module.exports = { 
+  hasPermission, 
+  isOwnerOrHasPermission,
+  AVAILABLE_PERMISSIONS,
+  isValidPermission,
+  getAllPermissions
+};

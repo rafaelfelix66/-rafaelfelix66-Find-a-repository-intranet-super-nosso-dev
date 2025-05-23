@@ -1,6 +1,6 @@
-// src/contexts/AuthContext.tsx (modificado)
+// src/contexts/AuthContext.tsx - Versão melhorada com redirecionamento
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from "@/hooks/use-toast";
 import { activitiesService } from '@/services/activitiesService';
 import { calendarService } from '@/services/calendarService';
@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 interface User {
   id: string;
   name: string;
-  cpf: string;  // Adicionado CPF
+  cpf: string;
   email: string;
   chapa?: string;
   cargo?: string;
@@ -26,26 +26,61 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (cpf: string, password: string) => Promise<void>;  // Modificado para CPF
-  register: (cpf: string, password: string) => Promise<void>;  // Modificado para apenas CPF e senha
+  login: (cpf: string, password: string, redirectTo?: string) => Promise<void>;
+  register: (cpf: string, password: string, redirectTo?: string) => Promise<void>;
   logout: () => void;
   updateUser: (data: Partial<User>) => Promise<void>;
   uploadAvatar: (file: File) => Promise<void>;
   removeAvatar: () => Promise<void>;
+  pendingRedirect: string | null;
+  setPendingRedirect: (path: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Chave para armazenar redirecionamento pendente
+const REDIRECT_KEY = 'auth_pending_redirect';
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingRedirect, setPendingRedirectState] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  // Função para gerenciar redirecionamento pendente
+  const setPendingRedirect = (path: string | null) => {
+    setPendingRedirectState(path);
+    if (path) {
+      localStorage.setItem(REDIRECT_KEY, path);
+    } else {
+      localStorage.removeItem(REDIRECT_KEY);
+    }
+  };
+
+  // Função para obter redirecionamento pendente
+  const getPendingRedirect = (): string | null => {
+    return localStorage.getItem(REDIRECT_KEY) || pendingRedirect;
+  };
+
+  // Função para executar redirecionamento após login
+  const executeRedirect = () => {
+    const redirectPath = getPendingRedirect();
+    
+    if (redirectPath && redirectPath !== '/login' && redirectPath !== '/registro') {
+      console.log('Executando redirecionamento para:', redirectPath);
+      setPendingRedirect(null);
+      navigate(redirectPath, { replace: true });
+    } else {
+      console.log('Redirecionando para página inicial');
+      navigate('/', { replace: true });
+    }
+  };
 
   // Inicializa os serviços após autenticação bem-sucedida
   const initializeServices = (userId: string) => {
     try {
-      // Inicializar preferências ou carregar dados iniciais
       activitiesService.getAll().catch(err => 
         console.warn('Falha ao pré-carregar atividades:', err)
       );
@@ -60,22 +95,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // Carrega redirecionamento pendente do localStorage
+  useEffect(() => {
+    const storedRedirect = localStorage.getItem(REDIRECT_KEY);
+    if (storedRedirect) {
+      setPendingRedirectState(storedRedirect);
+    }
+  }, []);
+
+  // Carrega dados do usuário na inicialização
   useEffect(() => {
     const loadUser = async () => {
       if (isAuthenticated()) {
         try {
           const result = await getUserData();
           if (result.success && result.data) {
-            // Adaptar o formato de dados do backend para o formato esperado pelo frontend
             const userData = {
               id: result.data._id || result.data.id,
               name: result.data.nome,
-              cpf: result.data.cpf, // Adicionado CPF
+              cpf: result.data.cpf,
               email: result.data.email,
-			  chapa: result.data.chapa,
+              chapa: result.data.chapa,
               cargo: result.data.cargo,
               department: result.data.departamento,
-			  filial: result.data.filial,
+              filial: result.data.filial,
               dataAdmissao: result.data.dataAdmissao,
               dataNascimento: result.data.dataNascimento,
               avatar: result.data.avatar,
@@ -85,16 +128,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             
             setUser(userData);
             
-            // Garantir que o ID do usuário está armazenado no localStorage
             if (userData.id) {
               localStorage.setItem('userId', userData.id);
-              // Inicializar serviços com o ID do usuário
               initializeServices(userData.id);
+            }
+
+            // Se estivermos na página de login e há um redirecionamento pendente, executá-lo
+            if (location.pathname === '/login' && getPendingRedirect()) {
+              executeRedirect();
             }
           }
         } catch (error) {
           console.error('Erro ao carregar usuário:', error);
-          // Se houver erro, podemos limpar o token
           localStorage.removeItem('token');
           localStorage.removeItem('userId');
           
@@ -109,84 +154,96 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     
     loadUser();
-  }, []);
+  }, [location.pathname]);
 
-  const login = async (cpf: string, password: string) => {
-  setIsLoading(true);
-  try {
-    // Remover formatação do CPF
-    const cpfLimpo = cpf.replace(/\D/g, '');
-    
-    if (cpfLimpo.length !== 11) {
-      throw new Error("CPF inválido. Informe um CPF com 11 dígitos.");
+  const login = async (cpf: string, password: string, redirectTo?: string) => {
+    setIsLoading(true);
+    try {
+      const cpfLimpo = cpf.replace(/\D/g, '');
+      
+      if (cpfLimpo.length !== 11) {
+        throw new Error("CPF inválido. Informe um CPF com 11 dígitos.");
+      }
+      
+      const payload = {
+        cpf: cpfLimpo,
+        senha: password
+      };
+      
+      console.log('Tentando fazer login com CPF:', cpfLimpo.substring(0, 3) + '***');
+      
+      const response = await fetch(`${window.location.origin}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.mensagem || 'Falha na autenticação. Verifique suas credenciais.');
+      }
+      
+      const result = await response.json();
+      
+      const userData = {
+        id: result.usuario.id,
+        name: result.usuario.nome,
+        cpf: result.usuario.cpf,
+        email: result.usuario.email,
+        chapa: result.usuario.chapa,
+        cargo: result.usuario.cargo,
+        department: result.usuario.departamento,
+        filial: result.usuario.filial,
+        dataAdmissao: result.usuario.dataAdmissao,
+        dataNascimento: result.usuario.dataNascimento,
+        avatar: result.usuario.avatar,
+        roles: result.usuario.roles || [],
+        permissions: result.usuario.permissions || []
+      };
+      
+      localStorage.setItem('token', result.token);
+      localStorage.setItem('userId', result.usuario.id);
+      setUser(userData);
+      
+      // Inicializar serviços
+      initializeServices(result.usuario.id);
+      
+      toast({
+        title: "Login bem-sucedido",
+        description: `Bem-vindo, ${result.usuario.nome}!`,
+      });
+      
+      // Determinar para onde redirecionar
+      const targetPath = redirectTo || getPendingRedirect() || '/';
+      
+      console.log('Login bem-sucedido, redirecionando para:', targetPath);
+      
+      // Limpar redirecionamento pendente
+      setPendingRedirect(null);
+      
+      // Pequeno delay para garantir que o estado seja atualizado
+      setTimeout(() => {
+        navigate(targetPath, { replace: true });
+      }, 100);
+      
+    } catch (error) {
+      console.error('Erro no login:', error);
+      
+      toast({
+        title: "Erro no login",
+        description: error instanceof Error ? error.message : "Falha no login. Verifique suas credenciais.",
+        variant: "destructive",
+      });
+      
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Garantir que estamos enviando os dados corretos
-    const payload = {
-      cpf: cpfLimpo,
-      senha: password // Usando 'senha' como esperado pelo backend
-    };
-    
-    //console.log('Enviando dados de login:', { cpf: payload.cpf, senha: '******' });
-    
-    // Fazer a requisição diretamente usando axios ou fetch
-    const response = await fetch(`${window.location.origin}/api/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-    
-    if (!response.ok) {
-      throw new Error('Falha na autenticação. Verifique suas credenciais.');
-    }
-    
-    const result = await response.json();
-    
-    // Adaptar o formato de dados do backend para o formato esperado pelo frontend
-    const userData = {
-      id: result.usuario.id,
-      name: result.usuario.nome,
-      cpf: result.usuario.cpf, // Adicionado CPF
-      email: result.usuario.email,
-	  chapa: result.usuario.chapa,
-      cargo: result.usuario.cargo,
-      department: result.usuario.departamento,
-	  filial: result.usuario.filial,
-      dataAdmissao: result.usuario.dataAdmissao,
-      dataNascimento: result.usuario.dataNascimento,
-      avatar: result.usuario.avatar,
-      roles: result.usuario.roles || [],
-      permissions: result.usuario.permissions || []
-    };
-    
-    localStorage.setItem('token', result.token);
-    localStorage.setItem('userId', result.usuario.id);
-    setUser(userData);
-    
-    toast({
-      title: "Login bem-sucedido",
-      description: `Bem-vindo, ${result.usuario.nome}!`,
-    });
-    
-    navigate('/');
-  } catch (error) {
-    console.error('Erro no login:', error);
-    
-    toast({
-      title: "Erro no login",
-      description: error instanceof Error ? error.message : "Falha no login. Verifique suas credenciais.",
-      variant: "destructive",
-    });
-    
-    throw error;
-  } finally {
-    setIsLoading(false);
-  }
-};
-  // Função de registro simplificada para CPF e senha
-  const register = async (cpf: string, password: string) => {
+  };
+
+  const register = async (cpf: string, password: string, redirectTo?: string) => {
     setIsLoading(true);
     try {
       const result = await registerUser(cpf, password);
@@ -197,10 +254,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             name: result.data.usuario.nome,
             cpf: result.data.usuario.cpf,
             email: result.data.usuario.email,
-			chapa: result.data.usuario.chapa,
+            chapa: result.data.usuario.chapa,
             cargo: result.data.usuario.cargo,
             department: result.data.usuario.departamento,
-			filial: result.data.usuario.filial,
+            filial: result.data.usuario.filial,
             dataAdmissao: result.data.usuario.dataAdmissao,
             dataNascimento: result.data.usuario.dataNascimento,
             avatar: result.data.usuario.avatar,
@@ -210,11 +267,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           
           setUser(userData);
           
-          // Armazenar o ID do usuário no localStorage
           if (userData.id) {
             localStorage.setItem('userId', userData.id);
-            
-            // Inicializar serviços após registro bem-sucedido
             initializeServices(userData.id);
           }
           
@@ -222,6 +276,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             title: "Registro bem-sucedido",
             description: `Bem-vindo, ${userData.name}!`,
           });
+          
+          // Determinar para onde redirecionar
+          const targetPath = redirectTo || getPendingRedirect() || '/';
+          setPendingRedirect(null);
+          
+          setTimeout(() => {
+            navigate(targetPath, { replace: true });
+          }, 100);
         } else {
           toast({
             title: "Registro realizado",
@@ -231,8 +293,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           navigate('/login');
           return;
         }
-        
-        navigate('/');
       } else {
         throw new Error(result.message);
       }
@@ -251,15 +311,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Função para verificar autenticação
   const isAuthenticated = () => {
     return !!localStorage.getItem('token');
   };
 
-  // Função de logout
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
+    setPendingRedirect(null);
     setUser(null);
     
     toast({
@@ -272,7 +331,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   const updateUser = async (data: Partial<User>) => {
     try {
-      // Apenas o email pode ser atualizado
       const response = await api.put('/auth/user', {
         email: data.email
       });
@@ -294,7 +352,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Função auxiliar para obter dados do usuário
   const getUserData = async () => {
     try {
       const response = await api.get('/auth/user');
@@ -305,24 +362,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Função auxiliar para login
-  const loginUser = async (cpf: string, password: string) => {
-    try {
-      const response = await api.post('/auth/login', { cpf, senha: password });
-      
-      if (response && response.token) {
-        localStorage.setItem('token', response.token);
-        return { success: true, data: response };
-      }
-      
-      return { success: false, message: 'Resposta inválida do servidor' };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao fazer login';
-      return { success: false, message };
-    }
-  };
-
-  // Função auxiliar para registro
   const registerUser = async (cpf: string, password: string) => {
     try {
       const response = await api.post('/auth/register', { cpf, senha: password });
@@ -344,7 +383,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const formData = new FormData();
       formData.append('avatar', file);
       
-       // Usar fetch diretamente se api.uploadPut não existir
       const token = localStorage.getItem('token');
       const response = await fetch(`${window.location.origin}/api/auth/avatar`, {
         method: 'POST',
@@ -418,9 +456,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         register,
         logout,
-		updateUser,
-		uploadAvatar,
-        removeAvatar
+        updateUser,
+        uploadAvatar,
+        removeAvatar,
+        pendingRedirect,
+        setPendingRedirect
       }}
     >
       {children}

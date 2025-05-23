@@ -176,7 +176,18 @@ export function PermissionManagement() {
         
       ],
     },
-  ];
+	{
+	  name: 'Institucional',
+	  key: 'institutional',
+	  permissions: [
+		{ key: 'institutional:view', description: 'Visualizar áreas institucionais' },
+		{ key: 'institutional:create', description: 'Criar áreas institucionais' },
+		{ key: 'institutional:edit', description: 'Editar áreas institucionais' },
+		{ key: 'institutional:delete', description: 'Excluir áreas institucionais' },
+		{ key: 'institutional:manage', description: 'Gerenciar todas as áreas' },
+	  ],
+	},
+	  ];
 
   // Recuperar todos os permissões como lista plana
   const getAllPermissions = (): Permission[] => {

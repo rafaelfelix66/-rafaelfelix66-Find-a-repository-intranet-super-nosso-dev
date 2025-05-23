@@ -23,6 +23,7 @@ import { SuperCoinWidget } from "@/components/supercoin/SuperCoinWidget";
 import { EmojiInput } from "@/components/ui/emoji-input";
 import { ReactionPicker } from '@/components/ui/reaction-picker';
 import { CustomEmojiDisplay, getAllCustomEmojis } from '@/components/ui/custom-emoji';
+import { YouTubeVideo } from "@/components/ui/youtube-video";
 import { 
   Card, 
   CardContent, 
@@ -41,7 +42,8 @@ import {
   Calendar,
   Plus,
   X,
-  Smile
+  Smile,
+  Youtube
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -328,8 +330,13 @@ const ImageRenderer = ({ src, alt, className, enableModal = false }: { src: stri
 };
 
 // Função para determinar o tipo de arquivo
-const getFileType = (url: string): 'image' | 'video' | 'unknown' => {
+const getFileType = (url: string): 'image' | 'video' | 'youtube' | 'unknown' => {
   if (!url) return 'unknown';
+  
+  // Verificar se é URL do YouTube
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    return 'youtube';
+  }
   
   const extension = url.split('.').pop()?.toLowerCase();
   
@@ -366,6 +373,7 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [departamentoVisibilidade, setDepartamentoVisibilidade] = useState(['TODOS']);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   
   // Refs para inputs de arquivo
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -373,92 +381,107 @@ const Home = () => {
   
   // Função para buscar os posts
   const fetchPosts = async () => {
-    try {
-      const data = await api.get('/timeline');
+  try {
+    const data = await api.get('/timeline');
+    
+    if (Array.isArray(data)) {
+      const userId = localStorage.getItem('userId');
       
-      if (Array.isArray(data)) {
-        const userId = localStorage.getItem('userId');
-        
-        const formattedPosts = data.map(post => {
-          console.log(`Post ${post._id}:`, {
-            text: post.text ? post.text.substring(0, 30) : "Sem texto",
-            hasAttachments: !!post.attachments && post.attachments.length > 0,
-            attachments: post.attachments,
-            images: post.images,
-            event: post.event,
-            eventData: post.eventData
-          });
-          
-          const formattedPost = {
-            id: post._id,
-            user: {
-			  id: post.user?._id,
-              name: post.user?.nome || 'Usuário',
-			  avatar: post.user?.avatar, // Adicione o avatar
-              cargo: post.user?.cargo, // Adicione o cargo
-              department: post.user?.departamento, // Adicione o departamento
-              initials: getInitials(post.user?.nome || 'Usuário')
-            },
-            content: post.text || "",
-            timestamp: formatTimestamp(post.createdAt),
-            likes: post.likes?.length || 0,
-			reactions: post.reactions || [],
-            comments: (post.comments || []).map(comment => ({
-              id: comment._id,
-              user: {
-			    id: comment.user?._id,
-                name: comment.user?.nome || 'Usuário',
-				avatar: comment.user?.avatar, // Adicione o avatar
-                cargo: comment.user?.cargo, // Adicione o cargo
-                department: comment.user?.departamento, // Adicione o departamento
-                initials: getInitials(comment.user?.nome || 'Usuário')
-              },
-              content: comment.text,
-              timestamp: formatTimestamp(comment.createdAt),
-			  likes: comment.likes || [], // ADICIONAR ESTA LINHA
-              liked: comment.likes?.includes(userId) || false // ADICIONAR ESTA LINHA
-            })),
-            liked: post.likes?.some(like => 
-              like.toString() === userId || 
-              like === userId
-            ) || false,
-            images: [],
-            event: null // Inicializar como null
-          };
-          
-          // Verificar tanto eventData quanto event
-          if (post.eventData && typeof post.eventData === 'object') {
-            console.log(`Post ${post._id} tem eventData:`, post.eventData);
-            formattedPost.event = {
-              title: post.eventData.title || '',
-              date: post.eventData.date || '',
-              location: post.eventData.location || ''
-            };
-          } else if (post.event && typeof post.event === 'object') {
-            console.log(`Post ${post._id} tem event:`, post.event);
-            formattedPost.event = post.event;
-          }
-          
-          // Processar imagens/anexos - simplificado para usar apenas attachments
-          if (post.attachments && post.attachments.length > 0) {
-            formattedPost.images = post.attachments
-              .filter(attachment => attachment) // Filtrar valores vazios
-              .map(attachment => normalizePath(attachment));
-          }
-          
-          return formattedPost;
+      const formattedPosts = data.map(post => {
+        console.log(`Post ${post._id}:`, {
+          text: post.text ? post.text.substring(0, 30) : "Sem texto",
+          hasAttachments: !!post.attachments && post.attachments.length > 0,
+          attachments: post.attachments,
+          images: post.images,
+          event: post.event,
+          eventData: post.eventData
         });
         
-        return formattedPosts;
-      } else {
-        console.error('Resposta do backend não é um array:', data);
-        return [];
-      }
-    } catch (error) {
-      console.error('Erro ao carregar posts:', error);
-      throw new Error('Não foi possível carregar os posts');
+        const formattedPost = {
+          id: post._id,
+          user: {
+            id: post.user?._id,
+            name: post.user?.nome || 'Usuário',
+            avatar: post.user?.avatar,
+            cargo: post.user?.cargo,
+            department: post.user?.departamento,
+            initials: getInitials(post.user?.nome || 'Usuário')
+          },
+          content: post.text || "",
+          timestamp: formatTimestamp(post.createdAt),
+          likes: post.likes?.length || 0,
+          reactions: post.reactions || [],
+          comments: (post.comments || []).map(comment => ({
+            id: comment._id,
+            user: {
+              id: comment.user?._id,
+              name: comment.user?.nome || 'Usuário',
+              avatar: comment.user?.avatar,
+              cargo: comment.user?.cargo,
+              department: comment.user?.departamento,
+              initials: getInitials(comment.user?.nome || 'Usuário')
+            },
+            content: comment.text,
+            timestamp: formatTimestamp(comment.createdAt),
+            likes: comment.likes || [],
+            liked: comment.likes?.includes(userId) || false
+          })),
+          liked: post.likes?.some(like => 
+            like.toString() === userId || 
+            like === userId
+          ) || false,
+          images: [],
+          event: null
+        };
+        
+        // Verificar tanto eventData quanto event
+        if (post.eventData && typeof post.eventData === 'object') {
+          console.log(`Post ${post._id} tem eventData:`, post.eventData);
+          formattedPost.event = {
+            title: post.eventData.title || '',
+            date: post.eventData.date || '',
+            location: post.eventData.location || ''
+          };
+        } else if (post.event && typeof post.event === 'object') {
+          console.log(`Post ${post._id} tem event:`, post.event);
+          formattedPost.event = post.event;
+        }
+        
+        // NOVO: Processar texto para extrair URLs do YouTube
+        let processedImages = [];
+        let cleanContent = formattedPost.content;
+
+        // Verificar se tem marcador de YouTube no texto
+        const youtubeMatch = cleanContent.match(/\[YOUTUBE:(.*?)\]/);
+        if (youtubeMatch) {
+          processedImages.push(youtubeMatch[1]);
+          cleanContent = cleanContent.replace(/\[YOUTUBE:.*?\]/, '').trim();
+          formattedPost.content = cleanContent;
+        }
+
+        // Processar imagens/anexos existentes
+        if (post.attachments && post.attachments.length > 0) {
+          const attachments = post.attachments
+            .filter(attachment => attachment)
+            .map(attachment => normalizePath(attachment));
+          processedImages = [...processedImages, ...attachments];
+        }
+
+        formattedPost.images = processedImages;
+        
+        return formattedPost;
+      });
+      
+      return formattedPosts;
+    } else {
+      console.error('Resposta do backend não é um array:', data);
+      return [];
     }
-  };
+  } catch (error) {
+    console.error('Erro ao carregar posts:', error);
+    throw new Error('Não foi possível carregar os posts');
+  }
+};
   
   // Função para criar um novo post
   const createNewPostApi = async (
@@ -506,6 +529,18 @@ const Home = () => {
         images: [],
         event: null as any
       };
+
+	  // NOVO: Processar YouTube no post recém-criado
+    let processedImages = [];
+    let cleanContent = formattedPost.content;
+
+    // Verificar se tem marcador de YouTube no texto retornado
+    const youtubeMatch = cleanContent.match(/\[YOUTUBE:(.*?)\]/);
+    if (youtubeMatch) {
+      processedImages.push(youtubeMatch[1]);
+      cleanContent = cleanContent.replace(/\[YOUTUBE:.*?\]/, '').trim();
+      formattedPost.content = cleanContent;
+    }
       
       // Processar imagens/anexos
       if (data.attachments && data.attachments.length > 0) {
@@ -1083,7 +1118,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 
     // Verificar conteúdo mínimo para publicação
     const hasContent = newPostContent.trim().length > 0;
-    const hasMedia = selectedImages.length > 0 || selectedVideo !== null;
+    const hasMedia = selectedImages.length > 0 || selectedVideo !== null || youtubeUrl !== "";
     const hasEvent = showEventForm && eventTitle.trim() && eventLocation.trim() && eventDate;
 
     if (!hasContent && !hasMedia && !hasEvent) {
@@ -1094,6 +1129,15 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
       });
       return;
     }
+       // Validar URL do YouTube se fornecida
+	  if (youtubeUrl && !youtubeUrl.includes('youtube.com') && !youtubeUrl.includes('youtu.be')) {
+		toast({
+		  title: "URL inválida",
+		  description: "Por favor, insira uma URL válida do YouTube.",
+		  variant: "destructive"
+		});
+		return;
+       }
 
     // Validar dados do evento se estiver habilitado
     if (showEventForm && (!eventTitle.trim() || !eventLocation.trim() || !eventDate)) {
@@ -1106,8 +1150,16 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
     }
 
     try {
-      // Preparar arquivos
-      const files = selectedVideo ? [selectedVideo] : selectedImages;
+      // Preparar arquivos - ATUALIZADO
+    let files = selectedVideo ? [selectedVideo] : selectedImages;
+
+    // Preparar conteúdo - ATUALIZADO
+    let finalContent = newPostContent;
+    if (youtubeUrl) {
+      // Adicionar marcador especial para YouTube
+      finalContent = newPostContent + (newPostContent ? '\n' : '') + `[YOUTUBE:${youtubeUrl}]`;
+      files = []; // Não enviar arquivos se for YouTube
+    }
       
       // Preparar dados do evento
       let eventData = undefined;
@@ -1146,6 +1198,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
       setEventDate(undefined);
       setNewPostDialog(false);
       setDepartamentoVisibilidade(['TODOS']);
+	  setYoutubeUrl("");
     } catch (error) {
       console.error('Erro ao enviar post:', error);
       toast({ 
@@ -1264,6 +1317,24 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                         </Button>
                       </div>
                     )}
+					
+					{youtubeUrl && (
+					  <div className="mt-4 rounded-lg overflow-hidden relative">
+						<YouTubeVideo 
+						  url={youtubeUrl}
+						  className="w-full"
+						  showThumbnail={true}
+						/>
+						<Button 
+						  variant="destructive" 
+						  size="icon" 
+						  className="absolute top-1 right-1 h-6 w-6 rounded-full z-10"
+						  onClick={() => setYoutubeUrl("")}
+						>
+						  <X className="h-3 w-3" />
+						</Button>
+					  </div>
+					)}
    
                     {showEventForm && (
                       <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-4 mt-4">
@@ -1377,6 +1448,54 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                         <Film className="mr-2 h-4 w-4" />
                         {selectedVideo ? "Vídeo Selecionado" : "Adicionar Vídeo"}
                       </Button>
+					  <Dialog>
+					  <DialogTrigger asChild>
+						<Button 
+						  variant="outline" 
+						  className="flex-1"
+						  disabled={previewImages.length > 0 || !!selectedVideo || !!youtubeUrl}
+						>
+						  <Youtube className="mr-2 h-4 w-4" />
+						  {youtubeUrl ? "YouTube Adicionado" : "YouTube"}
+						</Button>
+					  </DialogTrigger>
+					  <DialogContent>
+						<DialogHeader>
+						  <DialogTitle>Adicionar vídeo do YouTube</DialogTitle>
+						  <DialogDescription>
+							Cole a URL completa do vídeo do YouTube
+						  </DialogDescription>
+						</DialogHeader>
+						<div className="space-y-4 py-4">
+						  <Input
+							placeholder="https://www.youtube.com/watch?v=..."
+							value={youtubeUrl}
+							onChange={(e) => setYoutubeUrl(e.target.value)}
+						  />
+						</div>
+						<DialogFooter>
+						  <Button variant="outline" onClick={() => setYoutubeUrl("")}>
+							Cancelar
+						  </Button>
+						  <Button onClick={() => {
+							if (youtubeUrl && (youtubeUrl.includes('youtube.com') || youtubeUrl.includes('youtu.be'))) {
+							  setSelectedImages([]);
+							  setPreviewImages([]);
+							  setSelectedVideo(null);
+							  setPreviewVideo(null);
+							} else {
+							  toast({
+								title: "URL inválida",
+								description: "Por favor, insira uma URL válida do YouTube",
+								variant: "destructive"
+							  });
+							}
+						  }}>
+							Adicionar
+						  </Button>
+						</DialogFooter>
+					  </DialogContent>
+					</Dialog>
                       <Button 
                         variant="outline" 
                         className={cn(
@@ -1543,6 +1662,12 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                                       className="w-full h-full object-cover"
                                       enableModal={true}
                                     />
+								  ) : fileType === 'youtube' ? (
+									<YouTubeVideo 
+									  url={img} 
+									  className="w-full h-full"
+									  showThumbnail={true}
+									/>
                                   ) : (
                                     <div className="flex items-center justify-center w-full h-full bg-gray-100 rounded-lg">
                                       <span className="text-gray-500">Anexo não suportado</span>

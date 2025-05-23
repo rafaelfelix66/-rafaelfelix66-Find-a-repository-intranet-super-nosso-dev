@@ -13,8 +13,10 @@ const { startBackupScheduler } = require('./jobs/backupScheduler');
 const { scheduleSuperCoinsRecharge } = require('./jobs/superCoinsRechargeJob');
 
 
+
 // Importar modelos
 const { User, File, Message, Chat, Folder } = require('./models');
+const InstitutionalArea = require('./models/InstitutionalArea');
 
 // Configuração do app
 const app = express();
@@ -61,7 +63,8 @@ const createRequiredDirs = () => {
     path.join(uploadsPath, 'files'),
     path.join(uploadsPath, 'knowledge'),
     path.join(uploadsPath, 'timeline'),
-    path.join(uploadsPath, 'banners')
+    path.join(uploadsPath, 'banners'),
+	path.join(uploadsPath, 'institutional')
   ];
   
   dirs.forEach(dir => {
@@ -228,6 +231,8 @@ app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads/avatars
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/uploads/folders', express.static(path.join(__dirname, 'uploads/folders')));
 app.use('/uploads/emojis', express.static(path.join(__dirname, 'uploads/emojis')));
+app.use('/uploads/institutional', express.static(path.join(__dirname, 'uploads/institutional')));
+
 // Rota de diagnóstico para verificar arquivos
 app.get('/api/check-file', (req, res) => {
   const filePath = req.query.path;
@@ -394,9 +399,11 @@ app.use('/api/banners', require('./routes/banners'));
 app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/admin/engagement', require('./routes/adminEngagement'));
 app.use('/api/supercoins', require('./routes/supercoins'));
+app.use('/api/institutional', require('./routes/institutional'));
 app.use('/api/llm', llmRoutes);
 app.use('/api/engagement', engagementRoutes);
 app.use('/api/notifications', notificationRoutes);
+
 
 
 // Rotas de autenticação

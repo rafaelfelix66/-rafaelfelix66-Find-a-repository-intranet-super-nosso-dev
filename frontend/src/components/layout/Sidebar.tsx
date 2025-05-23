@@ -15,7 +15,8 @@ import {
   Shield,
   BarChart,
   Coins,
-  User  
+  User,
+  Building2  
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -166,6 +167,13 @@ export function Sidebar() {
             active={getActivePath("/")} 
             isOpen={isOpen}
           />
+		  <SidebarItem 
+		    icon={Building2} 
+			to="/institucional" 
+			label="Institucional" 
+			active={getActivePath("/institucional")} 
+			isOpen={isOpen}
+		  />
           <SidebarItem 
             icon={FileText} 
             to="/arquivos" 

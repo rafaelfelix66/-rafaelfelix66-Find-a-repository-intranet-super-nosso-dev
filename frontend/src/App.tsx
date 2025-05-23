@@ -27,6 +27,7 @@ import BannerAdmin from "./pages/BannerAdmin";
 import Unauthorized from "./pages/Unauthorized";
 import Chat from "./pages/Chat";
 import SuperCoinsAdmin from "./pages/SuperCoinsAdmin";
+import Institutional from "./pages/Institutional";
 
 // Update Tailwind CSS variables to include the new red color
 import { useEffect } from "react";
@@ -200,6 +201,15 @@ const App = () => {
 					</PrivateRoute>
 				  } 
 				/>
+			  <Route 
+				  path="/institucional" 
+				  element={
+					<PrivateRoute>
+					  <Institutional />
+					</PrivateRoute>
+				  } 
+				/>
+				
               
               {/* Rota para página não encontrada */}
               <Route path="*" element={<NotFound />} />
