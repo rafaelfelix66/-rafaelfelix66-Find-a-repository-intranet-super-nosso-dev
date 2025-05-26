@@ -1,4 +1,4 @@
-// controllers/filesController.js - Versão atualizada
+// controllers/filesController.js - Versão Corrigida
 const { File, Folder, User } = require('../models');
 const path = require('path');
 const fs = require('fs');
@@ -7,13 +7,26 @@ const getFiles = async (req, res) => {
   try {
     const { folderId } = req.query;
     
-    // Obter dados do usuário para filtrar por departamento
+    console.log('=== GET FILES DEBUG ===');
+    console.log('folderId:', folderId);
+    console.log('usuarioId:', req.usuario.id);
+    
+    // Obter dados do usuário para verificar permissões
     const user = await User.findById(req.usuario.id);
     if (!user) {
       return res.status(404).json({ msg: 'Usuário não encontrado' });
     }
     
     const userDepartment = user.departamento || 'PUBLICO';
+    const isAdmin = user.roles?.includes('admin') || false;
+    
+    console.log('Usuário:', {
+      id: user._id,
+      nome: user.nome,
+      departamento: userDepartment,
+      isAdmin,
+      roles: user.roles
+    });
     
     // Definir consultas base
     let fileQuery = {};
@@ -28,45 +41,65 @@ const getFiles = async (req, res) => {
       folderQuery.parentId = null;
     }
     
-    // Aplicar filtros de acesso e departamento
-    const accessFilter = {
-      $and: [
-        {
-          $or: [
-            { owner: req.usuario.id },
-            { 'sharedWith.user': req.usuario.id },
-            { isPublic: true }
-          ]
-        },
-        {
-          $or: [
-            { departamentoVisibilidade: 'TODOS' },
-            { departamentoVisibilidade: userDepartment },
-            { owner: req.usuario.id } // Proprietário sempre vê seus arquivos
-          ]
-        }
-      ]
-    };
+    // CORREÇÃO: Para admins, não aplicar filtros de acesso
+    if (!isAdmin) {
+      // Aplicar filtros de acesso e departamento apenas para não-admins
+      const accessFilter = {
+        $or: [
+          { owner: req.usuario.id }, // Proprietário
+          { 'sharedWith.user': req.usuario.id }, // Compartilhado diretamente
+          { isPublic: true }, // Público
+          { departamentoVisibilidade: 'TODOS' }, // Visível para todos
+          { departamentoVisibilidade: userDepartment } // Visível para o departamento
+        ]
+      };
+      
+      fileQuery = { ...fileQuery, ...accessFilter };
+      folderQuery = { ...folderQuery, ...accessFilter };
+    }
     
-    fileQuery = { ...fileQuery, ...accessFilter };
-    folderQuery = { ...folderQuery, ...accessFilter };
+    console.log('Consultas:', {
+      fileQuery: JSON.stringify(fileQuery),
+      folderQuery: JSON.stringify(folderQuery)
+    });
     
     // Buscar arquivos e pastas
     const files = await File.find(fileQuery)
-      .populate('owner', ['nome'])
+      .populate('owner', ['nome', 'departamento'])
       .sort({ createdAt: -1 });
       
     const folders = await Folder.find(folderQuery)
-      .populate('owner', ['nome'])
+      .populate('owner', ['nome', 'departamento'])
       .sort({ name: 1 });
     
-    console.log(`Usuário ${req.usuario.id} (${userDepartment}) acessando pasta ${folderId || 'root'}`);
     console.log(`Encontrados ${folders.length} pastas e ${files.length} arquivos`);
+    
+    // Log detalhado para debug
+    folders.forEach(folder => {
+      console.log('Pasta:', {
+        id: folder._id,
+        name: folder.name,
+        owner: folder.owner?.nome,
+        departamentoVisibilidade: folder.departamentoVisibilidade,
+        isPublic: folder.isPublic
+      });
+    });
+    
+    files.forEach(file => {
+      console.log('Arquivo:', {
+        id: file._id,
+        name: file.name,
+        type: file.type,
+        owner: file.owner?.nome,
+        departamentoVisibilidade: file.departamentoVisibilidade,
+        isPublic: file.isPublic
+      });
+    });
     
     res.json({ folders, files });
   } catch (err) {
     console.error('Erro ao buscar arquivos:', err.message);
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
@@ -89,11 +122,7 @@ const createFolder = async (req, res) => {
     // Verificar se já existe uma pasta com este nome no mesmo local
     const existingFolder = await Folder.findOne({
       name,
-      parentId: parentId || null,
-      $or: [
-        { owner: req.usuario.id },
-        { 'sharedWith.user': req.usuario.id, 'sharedWith.access': 'edit' }
-      ]
+      parentId: parentId || null
     });
     
     if (existingFolder) {
@@ -132,12 +161,13 @@ const createFolder = async (req, res) => {
     });
     
     const folder = await newFolder.save();
-    const populatedFolder = await Folder.findById(folder._id).populate('owner', ['nome']);
+    const populatedFolder = await Folder.findById(folder._id).populate('owner', ['nome', 'departamento']);
     
+    console.log('Pasta criada:', populatedFolder);
     res.json(populatedFolder);
   } catch (err) {
     console.error('Erro ao criar pasta:', err.message);
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
@@ -195,8 +225,9 @@ const uploadFile = async (req, res) => {
       });
       
       const savedLink = await newLink.save();
-      const populatedLink = await File.findById(savedLink._id).populate('owner', ['nome']);
+      const populatedLink = await File.findById(savedLink._id).populate('owner', ['nome', 'departamento']);
       
+      console.log('Link criado:', populatedLink);
       return res.json(populatedLink);
     } else {
       // Para arquivos físicos
@@ -245,18 +276,23 @@ const uploadFile = async (req, res) => {
       });
       
       const savedFile = await newFile.save();
-      const populatedFile = await File.findById(savedFile._id).populate('owner', ['nome']);
+      const populatedFile = await File.findById(savedFile._id).populate('owner', ['nome', 'departamento']);
       
+      console.log('Arquivo criado:', populatedFile);
       return res.json(populatedFile);
     }
   } catch (err) {
     console.error('Erro ao fazer upload:', err.message);
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
 const downloadFile = async (req, res) => {
   try {
+    console.log('=== DOWNLOAD FILE DEBUG ===');
+    console.log('fileId:', req.params.id);
+    console.log('usuarioId:', req.usuario.id);
+    
     const file = await File.findById(req.params.id);
     if (!file) {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
@@ -272,11 +308,23 @@ const downloadFile = async (req, res) => {
       return res.status(403).json({ msg: 'Download não permitido para este arquivo' });
     }
     
-    // Verificar acesso
+    // Verificar acesso - CORREÇÃO: Permitir acesso para admins
     const user = await User.findById(req.usuario.id);
     const userDepartment = user?.departamento || 'PUBLICO';
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    console.log('Verificação de acesso:', {
+      fileOwner: file.owner.toString(),
+      currentUser: req.usuario.id,
+      isOwner: file.owner.toString() === req.usuario.id,
+      isPublic: file.isPublic,
+      userDepartment,
+      fileDepartments: file.departamentoVisibilidade,
+      isAdmin
+    });
     
     const hasAccess = 
+      isAdmin || // Admin pode baixar qualquer arquivo
       file.owner.toString() === req.usuario.id || 
       file.isPublic || 
       file.sharedWith.some(share => share.user.toString() === req.usuario.id) ||
@@ -284,32 +332,39 @@ const downloadFile = async (req, res) => {
       file.departamentoVisibilidade.includes(userDepartment);
       
     if (!hasAccess) {
+      console.log('Acesso negado ao download');
       return res.status(401).json({ msg: 'Acesso negado' });
     }
     
     // Verificar se o arquivo físico existe
     if (!fs.existsSync(file.path)) {
+      console.log('Arquivo físico não encontrado:', file.path);
       return res.status(404).json({ msg: 'Arquivo físico não encontrado' });
     }
     
+    console.log('Download autorizado, enviando arquivo');
     res.download(file.path, file.originalName);
   } catch (err) {
     console.error('Erro ao baixar arquivo:', err.message);
     if (err.kind === 'ObjectId') {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
     }
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
 const getFilePreview = async (req, res) => {
   try {
+    console.log('=== GET FILE PREVIEW DEBUG ===');
+    console.log('fileId:', req.params.id);
+    console.log('usuarioId:', req.usuario.id);
+    
     const file = await File.findById(req.params.id);
     if (!file) {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
     }
     
-    // Se for um link, redirecionar
+    // Se for um link, retornar informações do link
     if (file.type === 'link') {
       return res.json({
         type: 'link',
@@ -319,11 +374,13 @@ const getFilePreview = async (req, res) => {
       });
     }
     
-    // Verificar acesso
+    // Verificar acesso - CORREÇÃO: Permitir acesso para admins
     const user = await User.findById(req.usuario.id);
     const userDepartment = user?.departamento || 'PUBLICO';
+    const isAdmin = user?.roles?.includes('admin') || false;
     
     const hasAccess = 
+      isAdmin || // Admin pode visualizar qualquer arquivo
       file.owner.toString() === req.usuario.id || 
       file.isPublic || 
       file.sharedWith.some(share => share.user.toString() === req.usuario.id) ||
@@ -331,15 +388,19 @@ const getFilePreview = async (req, res) => {
       file.departamentoVisibilidade.includes(userDepartment);
       
     if (!hasAccess) {
+      console.log('Acesso negado ao preview');
       return res.status(401).json({ msg: 'Acesso negado' });
     }
     
     // Verificar se o arquivo físico existe
     if (!fs.existsSync(file.path)) {
+      console.log('Arquivo físico não encontrado:', file.path);
       return res.status(404).json({ msg: 'Arquivo físico não encontrado' });
     }
     
-    // Resto da lógica de preview permanece igual...
+    console.log('Preview autorizado');
+    
+    // Lógica de preview baseada no tipo MIME
     const mimeType = file.mimeType.toLowerCase();
     
     if (mimeType.startsWith('image/')) {
@@ -402,11 +463,10 @@ const getFilePreview = async (req, res) => {
     
   } catch (err) {
     console.error('Erro ao obter preview do arquivo:', err.message);
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
-// Resto das funções permanecem iguais...
 const shareItem = async (req, res) => {
   try {
     const { itemId, itemType, userId, access } = req.body;
@@ -424,8 +484,12 @@ const shareItem = async (req, res) => {
       return res.status(404).json({ msg: 'Item não encontrado' });
     }
     
-    if (item.owner.toString() !== req.usuario.id) {
-      return res.status(401).json({ msg: 'Apenas o proprietário pode compartilhar' });
+    // CORREÇÃO: Verificar se é proprietário ou admin
+    const user = await User.findById(req.usuario.id);
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    if (!isAdmin && item.owner.toString() !== req.usuario.id) {
+      return res.status(401).json({ msg: 'Apenas o proprietário ou administradores podem compartilhar' });
     }
     
     const shareIndex = item.sharedWith.findIndex(
@@ -442,13 +506,19 @@ const shareItem = async (req, res) => {
     res.json(item);
   } catch (err) {
     console.error('Erro ao compartilhar item:', err.message);
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
 const deleteItem = async (req, res) => {
   try {
     const { itemId, itemType } = req.params;
+    
+    console.log('=== DELETE ITEM DEBUG ===');
+    console.log('itemId:', itemId);
+    console.log('itemType:', itemType);
+    console.log('usuarioId:', req.usuario.id);
+    
     let item;
     
     if (itemType === 'file') {
@@ -457,23 +527,41 @@ const deleteItem = async (req, res) => {
         return res.status(404).json({ msg: 'Arquivo não encontrado' });
       }
       
-      if (item.owner.toString() !== req.usuario.id) {
+      // CORREÇÃO: Verificar se é proprietário ou admin
+      const user = await User.findById(req.usuario.id);
+      const isAdmin = user?.roles?.includes('admin') || false;
+      
+      console.log('Verificação de permissão:', {
+        isAdmin,
+        isOwner: item.owner.toString() === req.usuario.id,
+        fileOwner: item.owner.toString(),
+        currentUser: req.usuario.id
+      });
+      
+      if (!isAdmin && item.owner.toString() !== req.usuario.id) {
         return res.status(401).json({ msg: 'Não autorizado' });
       }
       
       // Deletar arquivo físico apenas se for um arquivo, não um link
       if (item.type === 'file' && item.path && fs.existsSync(item.path)) {
+        console.log('Deletando arquivo físico:', item.path);
         fs.unlinkSync(item.path);
       }
       
       await item.deleteOne();
+      console.log('Arquivo excluído do banco de dados');
+      
     } else if (itemType === 'folder') {
       item = await Folder.findById(itemId);
       if (!item) {
         return res.status(404).json({ msg: 'Pasta não encontrada' });
       }
       
-      if (item.owner.toString() !== req.usuario.id) {
+      // CORREÇÃO: Verificar se é proprietário ou admin
+      const user = await User.findById(req.usuario.id);
+      const isAdmin = user?.roles?.includes('admin') || false;
+      
+      if (!isAdmin && item.owner.toString() !== req.usuario.id) {
         return res.status(401).json({ msg: 'Não autorizado' });
       }
       
@@ -481,12 +569,16 @@ const deleteItem = async (req, res) => {
         const folder = await Folder.findById(folderId);
         if (!folder) return;
         
+        console.log('Deletando pasta:', folder.name);
+        
+        // Deletar imagem de capa se existir
         if (folder.coverImage) {
           try {
             const imagePath = folder.coverImage.replace(/^\/uploads\//, '');
             const fullImagePath = path.join(__dirname, '..', 'uploads', imagePath);
             
             if (fs.existsSync(fullImagePath)) {
+              console.log('Deletando imagem de capa:', fullImagePath);
               fs.unlinkSync(fullImagePath);
             }
           } catch (err) {
@@ -494,23 +586,29 @@ const deleteItem = async (req, res) => {
           }
         }
         
+        // Deletar todos os arquivos da pasta
         const files = await File.find({ folderId });
         for (const file of files) {
+          console.log('Deletando arquivo da pasta:', file.name);
           if (file.type === 'file' && file.path && fs.existsSync(file.path)) {
             fs.unlinkSync(file.path);
           }
           await file.deleteOne();
         }
         
+        // Deletar subpastas recursivamente
         const subFolders = await Folder.find({ parentId: folderId });
         for (const subFolder of subFolders) {
           await deleteFolder(subFolder._id);
         }
         
+        // Deletar a pasta
         await Folder.findByIdAndDelete(folderId);
       };
       
       await deleteFolder(itemId);
+      console.log('Pasta e conteúdo excluídos');
+      
     } else {
       return res.status(400).json({ msg: 'Tipo de item inválido' });
     }
@@ -521,21 +619,28 @@ const deleteItem = async (req, res) => {
     if (err.kind === 'ObjectId') {
       return res.status(404).json({ msg: 'Item não encontrado' });
     }
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
 const getFileInfo = async (req, res) => {
   try {
+    console.log('=== GET FILE INFO DEBUG ===');
+    console.log('fileId:', req.params.id);
+    console.log('usuarioId:', req.usuario.id);
+    
     const file = await File.findById(req.params.id);
     if (!file) {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
     }
     
+    // Verificar acesso - CORREÇÃO: Permitir acesso para admins
     const user = await User.findById(req.usuario.id);
     const userDepartment = user?.departamento || 'PUBLICO';
+    const isAdmin = user?.roles?.includes('admin') || false;
     
     const hasAccess = 
+      isAdmin || // Admin pode ver qualquer arquivo
       file.owner.toString() === req.usuario.id || 
       file.isPublic || 
       file.sharedWith.some(share => share.user.toString() === req.usuario.id) ||
@@ -543,8 +648,11 @@ const getFileInfo = async (req, res) => {
       file.departamentoVisibilidade.includes(userDepartment);
       
     if (!hasAccess) {
+      console.log('Acesso negado às informações do arquivo');
       return res.status(401).json({ msg: 'Acesso negado' });
     }
+    
+    console.log('Acesso autorizado às informações do arquivo');
     
     res.json({
       _id: file._id,
@@ -566,7 +674,7 @@ const getFileInfo = async (req, res) => {
     if (err.kind === 'ObjectId') {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
     }
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 

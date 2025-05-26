@@ -1,4 +1,4 @@
-// routes/files.js - Versão atualizada
+// routes/files.js - Versão com Permissões Corrigidas
 const express = require('express');
 const router = express.Router();
 const filesController = require('../controllers/filesController');
@@ -68,17 +68,155 @@ const uploadFolderCover = multer({
   fileFilter: imageFilter
 });
 
+// Middleware personalizado para verificar permissões de arquivo/pasta
+const checkFilePermission = (action) => {
+  return async (req, res, next) => {
+    try {
+      const { User } = require('../models');
+      
+      // Verificar se o usuário está autenticado
+      if (!req.usuario || !req.usuario.id) {
+        return res.status(401).json({ msg: 'Não autenticado' });
+      }
+      
+      // Buscar usuário com permissões
+      const user = await User.findById(req.usuario.id);
+      if (!user) {
+        return res.status(404).json({ msg: 'Usuário não encontrado' });
+      }
+      
+      console.log(`Verificando permissão de arquivo: ${action}`);
+      console.log('Usuário:', { id: user._id, roles: user.roles, permissions: user.permissions });
+      
+      // Se é admin, pode fazer qualquer coisa
+      if (user.roles?.includes('admin')) {
+        console.log('Usuário é admin - acesso liberado');
+        return next();
+      }
+      
+      // Verificar permissão específica
+      const hasDirectPermission = user.permissions?.includes(action);
+      
+      if (hasDirectPermission) {
+        console.log(`Permissão '${action}' encontrada diretamente`);
+        return next();
+      }
+      
+      // Verificar permissões por papel
+      if (user.roles && user.roles.length > 0) {
+        const { Role } = require('../models');
+        const userRoles = await Role.find({ name: { $in: user.roles } });
+        
+        for (const role of userRoles) {
+          if (role.permissions?.includes(action)) {
+            console.log(`Permissão '${action}' encontrada no papel '${role.name}'`);
+            return next();
+          }
+        }
+      }
+      
+      console.log(`Acesso negado - permissão '${action}' não encontrada`);
+      return res.status(403).json({ 
+        msg: 'Acesso negado. Você não tem permissão para esta ação.',
+        requiredPermission: action
+      });
+    } catch (err) {
+      console.error('Erro na verificação de permissões:', err);
+      return res.status(500).json({ 
+        msg: 'Erro ao verificar permissões',
+        error: err.message 
+      });
+    }
+  };
+};
+
+// Middleware para verificar se o usuário pode editar/excluir um item específico
+const checkItemPermission = (action) => {
+  return async (req, res, next) => {
+    try {
+      const { itemType, itemId } = req.params;
+      const { User } = require('../models');
+      
+      // Verificar se o usuário está autenticado
+      if (!req.usuario || !req.usuario.id) {
+        return res.status(401).json({ msg: 'Não autenticado' });
+      }
+      
+      // Buscar usuário
+      const user = await User.findById(req.usuario.id);
+      if (!user) {
+        return res.status(404).json({ msg: 'Usuário não encontrado' });
+      }
+      
+      console.log(`Verificando permissão de item: ${action} para ${itemType}/${itemId}`);
+      
+      // Se é admin, pode fazer qualquer coisa
+      if (user.roles?.includes('admin')) {
+        console.log('Usuário é admin - acesso liberado');
+        return next();
+      }
+      
+      // Buscar o item
+      const Model = itemType === 'file' ? File : Folder;
+      const item = await Model.findById(itemId);
+      
+      if (!item) {
+        return res.status(404).json({ msg: 'Item não encontrado' });
+      }
+      
+      // Verificar se é proprietário
+      if (item.owner.toString() === req.usuario.id) {
+        console.log('Usuário é proprietário - acesso liberado');
+        return next();
+      }
+      
+      // Verificar permissão especial para gerenciar qualquer arquivo
+      const specialPermission = `files:${action}_any`;
+      const hasSpecialPermission = user.permissions?.includes(specialPermission);
+      
+      if (hasSpecialPermission) {
+        console.log(`Permissão especial '${specialPermission}' encontrada`);
+        return next();
+      }
+      
+      // Verificar permissões por papel
+      if (user.roles && user.roles.length > 0) {
+        const { Role } = require('../models');
+        const userRoles = await Role.find({ name: { $in: user.roles } });
+        
+        for (const role of userRoles) {
+          if (role.permissions?.includes(specialPermission)) {
+            console.log(`Permissão especial '${specialPermission}' encontrada no papel '${role.name}'`);
+            return next();
+          }
+        }
+      }
+      
+      console.log('Acesso negado - não é proprietário nem tem permissão especial');
+      return res.status(403).json({ 
+        msg: 'Apenas o proprietário ou administradores podem realizar esta ação.'
+      });
+    } catch (err) {
+      console.error('Erro na verificação de permissões do item:', err);
+      return res.status(500).json({ 
+        msg: 'Erro ao verificar permissões',
+        error: err.message 
+      });
+    }
+  };
+};
+
 // @route   GET api/files
 // @desc    Obter arquivos e pastas com filtro de departamento
 // @access  Private
-router.get('/', auth, hasPermission('files:view'), filesController.getFiles);
+router.get('/', auth, checkFilePermission('files:view'), filesController.getFiles);
 
 // @route   POST api/files/folders
 // @desc    Criar nova pasta com suporte a departamentos
 // @access  Private
 router.post('/folders', 
   auth, 
-  hasPermission('files:create_folder'),
+  checkFilePermission('files:create_folder'),
   uploadFolderCover.single('coverImage'), 
   filesController.createFolder
 );
@@ -88,7 +226,7 @@ router.post('/folders',
 // @access  Private
 router.post('/folder', 
   auth, 
-  hasPermission('files:create_folder'),
+  checkFilePermission('files:create_folder'),
   uploadFolderCover.single('coverImage'),
   filesController.createFolder
 );
@@ -98,7 +236,7 @@ router.post('/folder',
 // @access  Private
 router.post('/upload', 
   auth, 
-  hasPermission('files:upload'), 
+  checkFilePermission('files:upload'), 
   upload.single('file'), 
   filesController.uploadFile
 );
@@ -106,33 +244,29 @@ router.post('/upload',
 // @route   GET api/files/info/:id
 // @desc    Obter informações detalhadas do arquivo/link
 // @access  Private
-router.get('/info/:id', auth, hasPermission('files:view'), filesController.getFileInfo);
+router.get('/info/:id', auth, checkFilePermission('files:view'), filesController.getFileInfo);
 
 // @route   GET api/files/download/:id
 // @desc    Download de arquivo (com verificação de permissão)
 // @access  Private
-router.get('/download/:id', auth, hasPermission('files:download'), filesController.downloadFile);
+router.get('/download/:id', auth, checkFilePermission('files:download'), filesController.downloadFile);
 
 // @route   GET api/files/preview/:id
 // @desc    Visualizar/preview do arquivo ou redirecionar link
 // @access  Private
-router.get('/preview/:id', auth, hasPermission('files:view'), filesController.getFilePreview);
+router.get('/preview/:id', auth, checkFilePermission('files:view'), filesController.getFilePreview);
 
 // @route   POST api/files/share
 // @desc    Compartilhar arquivo ou pasta
 // @access  Private
-router.post('/share', auth, hasPermission('files:share'), filesController.shareItem);
+router.post('/share', auth, checkFilePermission('files:share'), filesController.shareItem);
 
 // @route   PUT api/files/:itemType/:itemId/public
 // @desc    Alterar visibilidade pública do item
 // @access  Private
 router.put('/:itemType/:itemId/public', 
   auth,
-  (req, res, next) => {
-    const model = req.params.itemType === 'file' ? File : Folder;
-    const specialPermission = 'files:manage_any';
-    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
-  }, 
+  checkItemPermission('edit'),
   async (req, res) => {
     try {
       const { itemType, itemId } = req.params;
@@ -159,7 +293,7 @@ router.put('/:itemType/:itemId/public',
       });
     } catch (err) {
       console.error('Erro ao atualizar visibilidade do item:', err.message);
-      res.status(500).send('Erro no servidor');
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
     }
   }
 );
@@ -169,11 +303,7 @@ router.put('/:itemType/:itemId/public',
 // @access  Private
 router.put('/:itemType/:itemId/departments', 
   auth,
-  (req, res, next) => {
-    const model = req.params.itemType === 'file' ? File : Folder;
-    const specialPermission = 'files:manage_any';
-    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
-  }, 
+  checkItemPermission('edit'),
   async (req, res) => {
     try {
       const { itemType, itemId } = req.params;
@@ -202,7 +332,7 @@ router.put('/:itemType/:itemId/departments',
       });
     } catch (err) {
       console.error('Erro ao atualizar departamentos do item:', err.message);
-      res.status(500).send('Erro no servidor');
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
     }
   }
 );
@@ -212,9 +342,7 @@ router.put('/:itemType/:itemId/departments',
 // @access  Private
 router.put('/file/:fileId/download-permission', 
   auth,
-  (req, res, next) => {
-    return isOwnerOrHasPermission(File, 'fileId', 'files:manage_any')(req, res, next);
-  }, 
+  checkItemPermission('edit'),
   async (req, res) => {
     try {
       const { fileId } = req.params;
@@ -240,7 +368,7 @@ router.put('/file/:fileId/download-permission',
       });
     } catch (err) {
       console.error('Erro ao atualizar permissão de download:', err.message);
-      res.status(500).send('Erro no servidor');
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
     }
   }
 );
@@ -250,11 +378,7 @@ router.put('/file/:fileId/download-permission',
 // @access  Private
 router.put('/:itemType/:itemId/rename', 
   auth,
-  (req, res, next) => {
-    const model = req.params.itemType === 'file' ? File : Folder;
-    const specialPermission = 'files:edit_any';
-    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
-  }, 
+  checkItemPermission('edit'),
   async (req, res) => {
     try {
       const { itemType, itemId } = req.params;
@@ -287,7 +411,7 @@ router.put('/:itemType/:itemId/rename',
       });
     } catch (err) {
       console.error('Erro ao renomear item:', err.message);
-      res.status(500).send('Erro no servidor');
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
     }
   }
 );
@@ -297,11 +421,7 @@ router.put('/:itemType/:itemId/rename',
 // @access  Private
 router.put('/:itemType/:itemId/description', 
   auth,
-  (req, res, next) => {
-    const model = req.params.itemType === 'file' ? File : Folder;
-    const specialPermission = 'files:edit_any';
-    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
-  }, 
+  checkItemPermission('edit'),
   async (req, res) => {
     try {
       const { itemType, itemId } = req.params;
@@ -330,7 +450,7 @@ router.put('/:itemType/:itemId/description',
       });
     } catch (err) {
       console.error('Erro ao atualizar descrição:', err.message);
-      res.status(500).send('Erro no servidor');
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
     }
   }
 );
@@ -340,11 +460,7 @@ router.put('/:itemType/:itemId/description',
 // @access  Private
 router.delete('/:itemType/:itemId', 
   auth,
-  (req, res, next) => {
-    const model = req.params.itemType === 'file' ? File : Folder;
-    const specialPermission = 'files:delete_any';
-    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
-  }, 
+  checkItemPermission('delete'),
   filesController.deleteItem
 );
 
@@ -366,8 +482,146 @@ router.get('/link/:linkId/redirect', async (req, res) => {
     res.redirect(link.linkUrl);
   } catch (err) {
     console.error('Erro ao redirecionar link:', err.message);
-    res.status(500).send('Erro no servidor');
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 });
+
+// @route   GET api/files/stats
+// @desc    Obter estatísticas de arquivos (para admins)
+// @access  Private (Admin only)
+router.get('/stats', 
+  auth, 
+  checkFilePermission('admin:access'),
+  async (req, res) => {
+    try {
+      console.log('Obtendo estatísticas de arquivos...');
+      
+      // Estatísticas básicas
+      const totalFiles = await File.countDocuments({ type: 'file' });
+      const totalLinks = await File.countDocuments({ type: 'link' });
+      const totalFolders = await Folder.countDocuments();
+      
+      // Estatísticas por departamento
+      const filesByDepartment = await File.aggregate([
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'owner',
+            foreignField: '_id',
+            as: 'ownerInfo'
+          }
+        },
+        {
+          $unwind: '$ownerInfo'
+        },
+        {
+          $group: {
+            _id: '$ownerInfo.departamento',
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $sort: { count: -1 }
+        }
+      ]);
+      
+      // Estatísticas por tipo de arquivo
+      const filesByType = await File.aggregate([
+        {
+          $match: { type: 'file' }
+        },
+        {
+          $group: {
+            _id: '$extension',
+            count: { $sum: 1 },
+            totalSize: { $sum: '$size' }
+          }
+        },
+        {
+          $sort: { count: -1 }
+        },
+        {
+          $limit: 10
+        }
+      ]);
+      
+      // Usuários mais ativos
+      const mostActiveUsers = await File.aggregate([
+        {
+          $group: {
+            _id: '$owner',
+            fileCount: { $sum: 1 }
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'userInfo'
+          }
+        },
+        {
+          $unwind: '$userInfo'
+        },
+        {
+          $project: {
+            _id: 0,
+            userId: '$_id',
+            userName: '$userInfo.nome',
+            userDepartment: '$userInfo.departamento',
+            fileCount: 1
+          }
+        },
+        {
+          $sort: { fileCount: -1 }
+        },
+        {
+          $limit: 10
+        }
+      ]);
+      
+      // Calcular tamanho total usado
+      const totalSizeResult = await File.aggregate([
+        {
+          $match: { type: 'file', size: { $exists: true } }
+        },
+        {
+          $group: {
+            _id: null,
+            totalSize: { $sum: '$size' }
+          }
+        }
+      ]);
+      
+      const totalSize = totalSizeResult.length > 0 ? totalSizeResult[0].totalSize : 0;
+      
+      res.json({
+        summary: {
+          totalFiles,
+          totalLinks,
+          totalFolders,
+          totalSize,
+          totalSizeFormatted: formatFileSize(totalSize)
+        },
+        filesByDepartment,
+        filesByType,
+        mostActiveUsers
+      });
+    } catch (err) {
+      console.error('Erro ao obter estatísticas:', err.message);
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+    }
+  }
+);
+
+// Função auxiliar para formatar tamanho de arquivo
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 module.exports = router;

@@ -138,23 +138,45 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   
+  // CORREÇÃO: Melhorar verificação de acesso
   const canUserAccessItem = (item: FileItem): boolean => {
+    // Debug
+    console.log('Verificando acesso ao item:', {
+      itemName: item.name,
+      itemType: item.type,
+      itemOwner: item.owner?.id,
+      currentUser: user?.id,
+      userRoles: user?.roles,
+      isPublic: item.isPublic,
+      departamentoVisibilidade: item.departamentoVisibilidade,
+      userDepartment
+    });
+    
+    // Se o usuário é admin, pode acessar tudo
+    if (user?.roles?.includes('admin')) {
+      console.log('Usuário é admin - acesso liberado');
+      return true;
+    }
+    
+    // Se é proprietário
     if (item.owner?.id === user?.id) {
+      console.log('Usuário é proprietário - acesso liberado');
       return true;
     }
     
-    if (item.isPublic || !item.isRestrito || !item.departamentoVisibilidade || item.departamentoVisibilidade.length === 0) {
+    // Se é público
+    if (item.isPublic || (item.departamentoVisibilidade && item.departamentoVisibilidade.includes('TODOS'))) {
+      console.log('Item é público - acesso liberado');
       return true;
     }
     
-    if (item.departamentoVisibilidade.includes('TODOS')) {
+    // Se tem visibilidade para o departamento do usuário
+    if (userDepartment && item.departamentoVisibilidade && item.departamentoVisibilidade.includes(userDepartment)) {
+      console.log('Item visível para departamento do usuário - acesso liberado');
       return true;
     }
     
-    if (userDepartment && item.departamentoVisibilidade.includes(userDepartment)) {
-      return true;
-    }
-    
+    console.log('Acesso negado');
     return false;
   };
   
@@ -187,76 +209,89 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAvailableDepartments(departments);
   };
   
+  // CORREÇÃO: Melhorar carregamento de arquivos
   const loadFiles = async (folderId: string | null = null) => {
     setIsLoading(true);
     setError(null);
     
     try {
       console.log(`Buscando arquivos da pasta ${folderId || 'raiz'}`);
-      const params = folderId ? { folderId } : {};
-      const response = await api.get('/files', { params });
       
-      console.log('Resposta da API:', response);
-      
-      // CORREÇÃO: Verificar se response tem a estrutura esperada
-      if (!response || (!response.folders && !response.files)) {
-        console.error('Resposta da API inválida:', response);
-        throw new Error('Formato de resposta inválido da API');
+      // CORREÇÃO: Usar parâmetros de query corretamente
+      const queryParams = new URLSearchParams();
+      if (folderId) {
+        queryParams.append('folderId', folderId);
       }
       
-      const folders = response.folders || [];
-      const filesData = response.files || [];
+      const url = `/files${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      console.log('URL da requisição:', url);
+      
+      const response = await api.get(url);
+      console.log('Resposta da API:', response);
+      
+      // CORREÇÃO: Verificar estrutura da resposta
+      if (!response) {
+        throw new Error('Resposta vazia da API');
+      }
+      
+      // Garantir que folders e files sejam arrays
+      const folders = Array.isArray(response.folders) ? response.folders : [];
+      const filesData = Array.isArray(response.files) ? response.files : [];
       
       console.log(`Recebidos ${folders.length} pastas e ${filesData.length} arquivos`);
       
       const mappedFiles: FileItem[] = [
-        // Mapear pastas - CORREÇÃO: Verificar se é array
-        ...(Array.isArray(folders) ? folders.map((folder: any) => ({
+        // Mapear pastas
+        ...folders.map((folder: any) => ({
           id: folder._id,
           name: folder.name,
           description: folder.description,
           type: 'folder' as const,
-          modified: new Date(folder.createdAt).toLocaleDateString('pt-BR'),
+          modified: new Date(folder.createdAt || folder.updatedAt || Date.now()).toLocaleDateString('pt-BR'),
           coverImage: folder.coverImage,
           parentId: folder.parentId,
-          departamentoVisibilidade: folder.departamentoVisibilidade || [],
+          departamentoVisibilidade: folder.departamentoVisibilidade || ['TODOS'],
           isRestrito: folder.departamentoVisibilidade && folder.departamentoVisibilidade.length > 0 && !folder.departamentoVisibilidade.includes('TODOS'),
-          isPublic: folder.isPublic,
+          isPublic: folder.isPublic !== false, // Default true se não especificado
           owner: {
-            id: folder.owner?._id || folder.owner?.id,
+            id: folder.owner?._id || folder.owner?.id || folder.owner,
             name: folder.owner?.nome || folder.owner?.name,
             nome: folder.owner?.nome,
             departamento: folder.owner?.departamento
           }
-        })) : []),
+        })),
         
-        // Mapear arquivos e links - CORREÇÃO: Verificar se é array
-        ...(Array.isArray(filesData) ? filesData.map((file: any) => ({
+        // Mapear arquivos e links
+        ...filesData.map((file: any) => ({
           id: file._id,
           name: file.name,
           description: file.description,
           type: file.type || 'file',
           size: file.size ? formatFileSize(file.size) : undefined,
-          modified: new Date(file.createdAt).toLocaleDateString('pt-BR'),
+          modified: new Date(file.createdAt || file.updatedAt || Date.now()).toLocaleDateString('pt-BR'),
           extension: file.extension,
           mimeType: file.mimeType,
           linkUrl: file.linkUrl,
-          allowDownload: file.allowDownload,
-          departamentoVisibilidade: file.departamentoVisibilidade || [],
+          allowDownload: file.allowDownload !== false, // Default true se não especificado
+          departamentoVisibilidade: file.departamentoVisibilidade || ['TODOS'],
           isRestrito: file.departamentoVisibilidade && file.departamentoVisibilidade.length > 0 && !file.departamentoVisibilidade.includes('TODOS'),
-          isPublic: file.isPublic,
+          isPublic: file.isPublic !== false, // Default true se não especificado
           folderId: file.folderId,
           originalName: file.originalName,
           owner: {
-            id: file.owner?._id || file.owner?.id,
+            id: file.owner?._id || file.owner?.id || file.owner,
             name: file.owner?.nome || file.owner?.name,
             nome: file.owner?.nome,
             departamento: file.owner?.departamento
           }
-        })) : [])
+        }))
       ];
       
-      const accessibleItems = mappedFiles.filter(canUserAccessItem);
+      // CORREÇÃO: Para admins, mostrar todos os itens; para outros, filtrar por acesso
+      let accessibleItems = mappedFiles;
+      if (!user?.roles?.includes('admin')) {
+        accessibleItems = mappedFiles.filter(canUserAccessItem);
+      }
       
       console.log(`${accessibleItems.length} itens acessíveis para o usuário`);
       
@@ -320,7 +355,8 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
     
-    if (!canUserAccessItem(folder)) {
+    // CORREÇÃO: Para admins, permitir acesso a qualquer pasta
+    if (!user?.roles?.includes('admin') && !canUserAccessItem(folder)) {
       toast({
         title: "Acesso negado",
         description: "Você não tem permissão para acessar esta pasta.",
@@ -331,7 +367,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     console.log(`Navegando para a pasta: ${folder.name} (ID: ${folder.id})`);
     
-    // CORREÇÃO: Atualizar corretamente o histórico de navegação
+    // Atualizar corretamente o histórico de navegação
     const newPath = [...currentPath, folder.name];
     const newHistory = [...pathHistory, { name: folder.name, id: folder.id }];
     
@@ -372,6 +408,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
   
+  // CORREÇÃO: Melhorar upload
   const uploadFile = async (file: File | null, options: UploadOptions = {}) => {
     setIsLoading(true);
     
@@ -402,6 +439,13 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const departamentos = options.departamentoVisibilidade || (userDepartment ? [userDepartment] : ['TODOS']);
       formData.append('departamentoVisibilidade', JSON.stringify(departamentos));
       
+      console.log('Enviando upload:', {
+        type: options.type || 'file',
+        fileName: file?.name,
+        currentParentId,
+        departamentos
+      });
+      
       await api.upload('/files/upload', formData);
       
       toast({
@@ -411,6 +455,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       await loadFiles(currentParentId);
     } catch (err: any) {
+      console.error('Erro no upload:', err);
       const errorMessage = err.response?.data?.msg || err.message || 'Erro no upload';
       toast({
         title: "Erro",
@@ -450,6 +495,14 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const departamentos = options.departamentoVisibilidade || (userDepartment ? [userDepartment] : ['TODOS']);
       formData.append('departamentoVisibilidade', JSON.stringify(departamentos));
       
+      console.log('Criando pasta:', {
+        name,
+        description,
+        currentParentId,
+        departamentos,
+        hasCoverImage: !!coverImage
+      });
+      
       await api.upload('/files/folders', formData);
       
       toast({
@@ -460,6 +513,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await loadFiles(currentParentId);
       setSearchQuery('');
     } catch (error: any) {
+      console.error('Erro ao criar pasta:', error);
       const errorMessage = error.response?.data?.msg || error.message || 'Erro ao criar pasta';
       toast({
         title: "Erro",
@@ -472,11 +526,13 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
   
+  // CORREÇÃO: Melhorar download
   const downloadFile = async (fileId: string, fileName?: string) => {
     try {
       const file = files.find(f => f.id === fileId);
       
-      if (file && !canUserAccessItem(file)) {
+      // CORREÇÃO: Para admins, permitir download de qualquer arquivo
+      if (file && !user?.roles?.includes('admin') && !canUserAccessItem(file)) {
         toast({
           title: "Acesso negado",
           description: "Você não tem permissão para baixar este arquivo.",
@@ -485,7 +541,8 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return;
       }
       
-      // CORREÇÃO: Usar a URL da API correta
+      console.log('Iniciando download do arquivo:', fileId);
+      
       const baseUrl = api.getBaseUrl();
       const response = await fetch(`${baseUrl}/files/download/${fileId}`, {
         headers: {
@@ -503,7 +560,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = fileName || file?.originalName || 'arquivo';
+      a.download = fileName || file?.originalName || file?.name || 'arquivo';
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -514,6 +571,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         description: "Download iniciado"
       });
     } catch (err: any) {
+      console.error('Erro no download:', err);
       toast({
         title: "Erro",
         description: err.message || 'Erro ao baixar arquivo',
@@ -522,6 +580,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
   
+  // CORREÇÃO: Melhorar exclusão
   const deleteItem = async (itemId: string, itemType?: string) => {
     setIsLoading(true);
     
@@ -531,16 +590,19 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         throw new Error('Item não encontrado');
       }
       
-      if (item.owner?.id !== user?.id) {
+      // CORREÇÃO: Para admins, permitir exclusão de qualquer item
+      if (!user?.roles?.includes('admin') && item.owner?.id !== user?.id) {
         toast({
           title: "Acesso negado",
-          description: "Apenas o proprietário pode excluir este item.",
+          description: "Apenas o proprietário ou administradores podem excluir este item.",
           variant: "destructive"
         });
         return;
       }
       
       const type = itemType || item?.type || 'file';
+      console.log('Excluindo item:', { itemId, type, itemName: item.name });
+      
       await api.delete(`/files/${type}/${itemId}`);
       
       toast({
@@ -550,6 +612,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       await loadFiles(currentParentId);
     } catch (err: any) {
+      console.error('Erro ao excluir item:', err);
       const errorMessage = err.response?.data?.msg || err.message || 'Erro ao excluir item';
       toast({
         title: "Erro",
@@ -563,11 +626,38 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
   
   const renameItem = async (itemId: string, newName: string) => {
-    toast({
-      title: "Aviso",
-      description: "Função de renomear ainda não implementada",
-      variant: "default"
-    });
+    try {
+      const item = files.find(f => f.id === itemId);
+      if (!item) {
+        throw new Error('Item não encontrado');
+      }
+      
+      // CORREÇÃO: Para admins, permitir renomear qualquer item
+      if (!user?.roles?.includes('admin') && item.owner?.id !== user?.id) {
+        toast({
+          title: "Acesso negado",
+          description: "Apenas o proprietário ou administradores podem renomear este item.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      await api.put(`/files/${item.type}/${itemId}/rename`, { newName });
+      
+      toast({
+        title: "Item renomeado",
+        description: `${item.type === 'folder' ? 'Pasta' : 'Item'} renomeado com sucesso`
+      });
+      
+      await loadFiles(currentParentId);
+    } catch (error: any) {
+      console.error('Erro ao renomear item:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível renomear o item",
+        variant: "destructive"
+      });
+    }
   };
   
   const updateItemDepartments = async (itemId: string, itemType: 'file' | 'folder', departamentos: string[]) => {
@@ -604,7 +694,8 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   // CORREÇÃO: Melhorar preview de arquivos
   const openFilePreview = async (file: FileItem) => {
-    if (!canUserAccessItem(file)) {
+    // CORREÇÃO: Para admins, permitir preview de qualquer arquivo
+    if (!user?.roles?.includes('admin') && !canUserAccessItem(file)) {
       toast({
         title: "Acesso negado",
         description: "Você não tem permissão para visualizar este arquivo.",
@@ -620,7 +711,6 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     if (file.type === 'file') {
       try {
-        // CORREÇÃO: Verificar se pode fazer preview
         const canPreview = file.mimeType && (
           file.mimeType.startsWith('image/') ||
           file.mimeType === 'application/pdf' ||
