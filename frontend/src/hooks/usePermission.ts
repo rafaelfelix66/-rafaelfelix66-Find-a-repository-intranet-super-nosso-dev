@@ -54,7 +54,14 @@ export const usePermission = (): UsePermissionResult => {
     
     // Permissões básicas que todos os usuários devem ter
     // Isso é uma solução temporária para evitar bloqueios indesejados
-    const basicPermissions = ['timeline:view', 'knowledge:view', 'files:view', 'timeline:like', 'timeline:like_comment','timeline:react'];
+    const basicPermissions = ['timeline:view', 
+	                          'knowledge:view', 
+							  'files:view', 
+							  'timeline:like', 
+							  'timeline:like_comment',
+							  'timeline:react',
+							  'useful_links:view',
+							  'jobs:view'];
     if (basicPermissions.includes(permission)) {
       // console.log(`Permissão básica '${permission}' concedida a todos`);
       return true;

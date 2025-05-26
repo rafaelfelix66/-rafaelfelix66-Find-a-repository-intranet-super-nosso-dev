@@ -2,7 +2,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const Role = mongoose.model('Role', require('./Role').schema);
-
+const UsefulLink = require('./UsefulLink');
+const JobPosition = require('./JobPosition');
 const UserSchema = new mongoose.Schema({
   nome: String,
   cpf: { 
@@ -189,34 +190,162 @@ const MessageSchema = new mongoose.Schema({
 });
 
 const FileSchema = new mongoose.Schema({
-  name: String,
-  path: String,
-  originalName: String,
-  mimeType: String,
-  size: Number,
-  extension: String,
-  folderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null },
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  name: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String,
+    default: ''
+  },
+  path: {
+    type: String,
+    required: function() {
+      return this.type === 'file'; // Só obrigatório para arquivos físicos
+    }
+  },
+  originalName: {
+    type: String,
+    required: function() {
+      return this.type === 'file';
+    }
+  },
+  mimeType: {
+    type: String,
+    required: function() {
+      return this.type === 'file';
+    }
+  },
+  size: {
+    type: Number,
+    required: function() {
+      return this.type === 'file';
+    }
+  },
+  extension: {
+    type: String
+  },
+  // NOVO: Tipo do item (file ou link)
+  type: {
+    type: String,
+    enum: ['file', 'link'],
+    default: 'file'
+  },
+  // NOVO: URL para links
+  linkUrl: {
+    type: String,
+    required: function() {
+      return this.type === 'link';
+    }
+  },
+  folderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Folder',
+    default: null
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   sharedWith: [{
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    access: { type: String, enum: ['read', 'write'], default: 'read' }
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    access: {
+      type: String,
+      enum: ['read', 'edit'],
+      default: 'read'
+    }
   }],
-  isPublic: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now }
+  isPublic: {
+    type: Boolean,
+    default: false
+  },
+  // NOVO: Controle de download
+  allowDownload: {
+    type: Boolean,
+    default: true
+  },
+  // NOVO: Departamentos que podem visualizar
+  departamentoVisibilidade: {
+    type: [String],
+    default: ['TODOS'],
+    validate: {
+      validator: function(v) {
+        return Array.isArray(v);
+      },
+      message: props => `${props.value} não é um array válido!`
+    }
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
 const FolderSchema = new mongoose.Schema({
-  name: String,
-  description: { type: String, default: '' },
-  coverImage: { type: String, default: null },
-  parentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null },
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  name: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String, 
+    default: '' 
+  },
+  coverImage: { 
+    type: String, 
+    default: null 
+  },
+  parentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Folder',
+    default: null
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   sharedWith: [{
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    access: { type: String, enum: ['read', 'write'], default: 'read' }
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    access: {
+      type: String,
+      enum: ['read', 'edit'],
+      default: 'read'
+    }
   }],
-  isPublic: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now }
+  isPublic: {
+    type: Boolean,
+    default: false
+  },
+  // NOVO: Departamentos que podem visualizar
+  departamentoVisibilidade: {
+    type: [String],
+    default: ['TODOS'],
+    validate: {
+      validator: function(v) {
+        return Array.isArray(v);
+      },
+      message: props => `${props.value} não é um array válido!`
+    }
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
 // Schema para Banner
@@ -267,5 +396,7 @@ module.exports = {
   File: mongoose.model('File', FileSchema),
   Folder: mongoose.model('Folder', FolderSchema),
   Banner: mongoose.model('Banner', BannerSchema),
-  Role
+  UsefulLink,
+  Role,
+  JobPosition
 };

@@ -1,4 +1,4 @@
-// routes/files.js
+// routes/files.js - Versão atualizada
 const express = require('express');
 const router = express.Router();
 const filesController = require('../controllers/filesController');
@@ -69,12 +69,12 @@ const uploadFolderCover = multer({
 });
 
 // @route   GET api/files
-// @desc    Obter arquivos e pastas
+// @desc    Obter arquivos e pastas com filtro de departamento
 // @access  Private
 router.get('/', auth, hasPermission('files:view'), filesController.getFiles);
 
-// @route   POST api/files/folders (atualizado para folders com 's')
-// @desc    Criar nova pasta
+// @route   POST api/files/folders
+// @desc    Criar nova pasta com suporte a departamentos
 // @access  Private
 router.post('/folders', 
   auth, 
@@ -83,17 +83,18 @@ router.post('/folders',
   filesController.createFolder
 );
 
-// @route   POST api/files/folder (mantém a rota antiga para compatibilidade)
+// @route   POST api/files/folder (mantém compatibilidade)
 // @desc    Criar nova pasta (rota antiga)
 // @access  Private
 router.post('/folder', 
   auth, 
   hasPermission('files:create_folder'),
+  uploadFolderCover.single('coverImage'),
   filesController.createFolder
 );
 
 // @route   POST api/files/upload
-// @desc    Upload de arquivo
+// @desc    Upload de arquivo ou criação de link
 // @access  Private
 router.post('/upload', 
   auth, 
@@ -103,17 +104,17 @@ router.post('/upload',
 );
 
 // @route   GET api/files/info/:id
-// @desc    Obter informações do arquivo
+// @desc    Obter informações detalhadas do arquivo/link
 // @access  Private
 router.get('/info/:id', auth, hasPermission('files:view'), filesController.getFileInfo);
 
 // @route   GET api/files/download/:id
-// @desc    Download de arquivo
+// @desc    Download de arquivo (com verificação de permissão)
 // @access  Private
 router.get('/download/:id', auth, hasPermission('files:download'), filesController.downloadFile);
 
 // @route   GET api/files/preview/:id
-// @desc    Visualizar/preview do arquivo
+// @desc    Visualizar/preview do arquivo ou redirecionar link
 // @access  Private
 router.get('/preview/:id', auth, hasPermission('files:view'), filesController.getFilePreview);
 
@@ -122,8 +123,220 @@ router.get('/preview/:id', auth, hasPermission('files:view'), filesController.ge
 // @access  Private
 router.post('/share', auth, hasPermission('files:share'), filesController.shareItem);
 
+// @route   PUT api/files/:itemType/:itemId/public
+// @desc    Alterar visibilidade pública do item
+// @access  Private
+router.put('/:itemType/:itemId/public', 
+  auth,
+  (req, res, next) => {
+    const model = req.params.itemType === 'file' ? File : Folder;
+    const specialPermission = 'files:manage_any';
+    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
+  }, 
+  async (req, res) => {
+    try {
+      const { itemType, itemId } = req.params;
+      const { isPublic } = req.body;
+      
+      if (itemType !== 'file' && itemType !== 'folder') {
+        return res.status(400).json({ msg: 'Tipo de item inválido' });
+      }
+      
+      const Model = itemType === 'file' ? File : Folder;
+      const item = await Model.findById(itemId);
+      
+      if (!item) {
+        return res.status(404).json({ msg: 'Item não encontrado' });
+      }
+      
+      // Atualizar visibilidade
+      item.isPublic = isPublic;
+      await item.save();
+      
+      res.json({ 
+        _id: item._id,
+        isPublic: item.isPublic 
+      });
+    } catch (err) {
+      console.error('Erro ao atualizar visibilidade do item:', err.message);
+      res.status(500).send('Erro no servidor');
+    }
+  }
+);
+
+// @route   PUT api/files/:itemType/:itemId/departments
+// @desc    Alterar departamentos de visibilidade do item
+// @access  Private
+router.put('/:itemType/:itemId/departments', 
+  auth,
+  (req, res, next) => {
+    const model = req.params.itemType === 'file' ? File : Folder;
+    const specialPermission = 'files:manage_any';
+    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
+  }, 
+  async (req, res) => {
+    try {
+      const { itemType, itemId } = req.params;
+      const { departamentoVisibilidade } = req.body;
+      
+      if (itemType !== 'file' && itemType !== 'folder') {
+        return res.status(400).json({ msg: 'Tipo de item inválido' });
+      }
+      
+      const Model = itemType === 'file' ? File : Folder;
+      const item = await Model.findById(itemId);
+      
+      if (!item) {
+        return res.status(404).json({ msg: 'Item não encontrado' });
+      }
+      
+      // Atualizar departamentos de visibilidade
+      item.departamentoVisibilidade = departamentoVisibilidade || ['TODOS'];
+      item.isPublic = departamentoVisibilidade.includes('TODOS');
+      await item.save();
+      
+      res.json({ 
+        _id: item._id,
+        departamentoVisibilidade: item.departamentoVisibilidade,
+        isPublic: item.isPublic
+      });
+    } catch (err) {
+      console.error('Erro ao atualizar departamentos do item:', err.message);
+      res.status(500).send('Erro no servidor');
+    }
+  }
+);
+
+// @route   PUT api/files/file/:fileId/download-permission
+// @desc    Alterar permissão de download do arquivo
+// @access  Private
+router.put('/file/:fileId/download-permission', 
+  auth,
+  (req, res, next) => {
+    return isOwnerOrHasPermission(File, 'fileId', 'files:manage_any')(req, res, next);
+  }, 
+  async (req, res) => {
+    try {
+      const { fileId } = req.params;
+      const { allowDownload } = req.body;
+      
+      const file = await File.findById(fileId);
+      
+      if (!file) {
+        return res.status(404).json({ msg: 'Arquivo não encontrado' });
+      }
+      
+      if (file.type === 'link') {
+        return res.status(400).json({ msg: 'Links não possuem permissão de download' });
+      }
+      
+      // Atualizar permissão de download
+      file.allowDownload = allowDownload;
+      await file.save();
+      
+      res.json({ 
+        _id: file._id,
+        allowDownload: file.allowDownload
+      });
+    } catch (err) {
+      console.error('Erro ao atualizar permissão de download:', err.message);
+      res.status(500).send('Erro no servidor');
+    }
+  }
+);
+
+// @route   PUT api/files/:itemType/:itemId/rename
+// @desc    Renomear arquivo, pasta ou link
+// @access  Private
+router.put('/:itemType/:itemId/rename', 
+  auth,
+  (req, res, next) => {
+    const model = req.params.itemType === 'file' ? File : Folder;
+    const specialPermission = 'files:edit_any';
+    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
+  }, 
+  async (req, res) => {
+    try {
+      const { itemType, itemId } = req.params;
+      const { newName } = req.body;
+      
+      if (!newName || !newName.trim()) {
+        return res.status(400).json({ msg: 'Nome é obrigatório' });
+      }
+      
+      if (itemType !== 'file' && itemType !== 'folder') {
+        return res.status(400).json({ msg: 'Tipo de item inválido' });
+      }
+      
+      const Model = itemType === 'file' ? File : Folder;
+      const item = await Model.findById(itemId);
+      
+      if (!item) {
+        return res.status(404).json({ msg: 'Item não encontrado' });
+      }
+      
+      // Atualizar nome
+      item.name = newName.trim();
+      item.updatedAt = new Date();
+      await item.save();
+      
+      res.json({ 
+        _id: item._id,
+        name: item.name,
+        updatedAt: item.updatedAt
+      });
+    } catch (err) {
+      console.error('Erro ao renomear item:', err.message);
+      res.status(500).send('Erro no servidor');
+    }
+  }
+);
+
+// @route   PUT api/files/:itemType/:itemId/description
+// @desc    Atualizar descrição do item
+// @access  Private
+router.put('/:itemType/:itemId/description', 
+  auth,
+  (req, res, next) => {
+    const model = req.params.itemType === 'file' ? File : Folder;
+    const specialPermission = 'files:edit_any';
+    return isOwnerOrHasPermission(model, 'itemId', specialPermission)(req, res, next);
+  }, 
+  async (req, res) => {
+    try {
+      const { itemType, itemId } = req.params;
+      const { description } = req.body;
+      
+      if (itemType !== 'file' && itemType !== 'folder') {
+        return res.status(400).json({ msg: 'Tipo de item inválido' });
+      }
+      
+      const Model = itemType === 'file' ? File : Folder;
+      const item = await Model.findById(itemId);
+      
+      if (!item) {
+        return res.status(404).json({ msg: 'Item não encontrado' });
+      }
+      
+      // Atualizar descrição
+      item.description = description || '';
+      item.updatedAt = new Date();
+      await item.save();
+      
+      res.json({ 
+        _id: item._id,
+        description: item.description,
+        updatedAt: item.updatedAt
+      });
+    } catch (err) {
+      console.error('Erro ao atualizar descrição:', err.message);
+      res.status(500).send('Erro no servidor');
+    }
+  }
+);
+
 // @route   DELETE api/files/:itemType/:itemId
-// @desc    Excluir arquivo ou pasta
+// @desc    Excluir arquivo, pasta ou link
 // @access  Private
 router.delete('/:itemType/:itemId', 
   auth,
@@ -134,5 +347,27 @@ router.delete('/:itemType/:itemId',
   }, 
   filesController.deleteItem
 );
+
+// @route   GET api/files/link/:linkId/redirect
+// @desc    Redirecionar para URL do link (com tracking)
+// @access  Public (com token opcional)
+router.get('/link/:linkId/redirect', async (req, res) => {
+  try {
+    const { linkId } = req.params;
+    
+    const link = await File.findById(linkId);
+    if (!link || link.type !== 'link') {
+      return res.status(404).json({ msg: 'Link não encontrado' });
+    }
+    
+    // TODO: Registrar acesso ao link para analytics
+    
+    // Redirecionar para a URL
+    res.redirect(link.linkUrl);
+  } catch (err) {
+    console.error('Erro ao redirecionar link:', err.message);
+    res.status(500).send('Erro no servidor');
+  }
+});
 
 module.exports = router;

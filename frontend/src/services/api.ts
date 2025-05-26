@@ -316,5 +316,36 @@ export const api = {
     toggleActive: async (id: string, isActive: boolean) => {
       return api.put(`/banners/${id}`, { active: isActive });
     }
-  }
+  },
+  
+  // Funções específicas para links úteis
+	usefulLinks: {
+	  getAll: async () => {
+		return api.get('/useful-links');
+	  },
+	  
+	  getById: async (id: string) => {
+		return api.get(`/useful-links/${id}`);
+	  },
+	  
+	  create: async (linkData: any) => {
+		return api.post('/useful-links', linkData);
+	  },
+	  
+	  update: async (id: string, linkData: any) => {
+		return api.put(`/useful-links/${id}`, linkData);
+	  },
+	  
+	  delete: async (id: string) => {
+		return api.delete(`/useful-links/${id}`);
+	  },
+	  
+	  getCategories: async () => {
+		return api.get('/useful-links/categories');
+	  },
+	  
+	  reorder: async (links: { id: string; order: number }[]) => {
+		return api.put('/useful-links/reorder/links', { links });
+	  }
+	}
 };

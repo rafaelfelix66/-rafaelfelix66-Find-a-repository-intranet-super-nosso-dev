@@ -187,7 +187,29 @@ export function PermissionManagement() {
 		{ key: 'institutional:manage', description: 'Gerenciar todas as áreas' },
 	  ],
 	},
-	  ];
+	{
+	  name: 'Links Úteis',
+	  key: 'useful_links',
+	  permissions: [
+		{ key: 'useful_links:view', description: 'Visualizar links úteis' },
+		{ key: 'useful_links:create', description: 'Criar links úteis' },
+		{ key: 'useful_links:edit', description: 'Editar links úteis' },
+		{ key: 'useful_links:delete', description: 'Excluir links úteis' },
+		{ key: 'useful_links:manage', description: 'Gerenciar todos os links úteis' },
+	  ],
+	},
+	{
+	  name: 'Vagas',
+	  key: 'jobs',
+	  permissions: [
+		{ key: 'jobs:view', description: 'Visualizar vagas' },
+		{ key: 'jobs:create', description: 'Criar vagas' },
+		{ key: 'jobs:edit', description: 'Editar vagas' },
+		{ key: 'jobs:delete', description: 'Excluir vagas' },
+		{ key: 'jobs:manage', description: 'Gerenciar todas as vagas' },
+	  ],
+	},
+];
 
   // Recuperar todos os permissões como lista plana
   const getAllPermissions = (): Permission[] => {

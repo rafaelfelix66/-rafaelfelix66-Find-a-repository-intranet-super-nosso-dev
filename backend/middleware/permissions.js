@@ -213,6 +213,13 @@ const AVAILABLE_PERMISSIONS = {
   'institutional:delete': 'Excluir áreas institucionais',
   'institutional:manage': 'Gerenciar áreas institucionais (incluindo reordenação e visualização de inativas)',
   
+  // Links Úteis - NOVAS PERMISSÕES
+  'useful_links:view': 'Visualizar links úteis',
+  'useful_links:create': 'Criar links úteis',
+  'useful_links:edit': 'Editar links úteis',
+  'useful_links:delete': 'Excluir links úteis',
+  'useful_links:manage': 'Gerenciar todos os links úteis',
+  
   // Chat
   'chat:access': 'Acessar chat',
   'chat:create_group': 'Criar grupos de chat',
@@ -229,7 +236,14 @@ const AVAILABLE_PERMISSIONS = {
   
   // SuperCoins
   'supercoins:send_message': 'Enviar mensagem no atributo',
-  'supercoins:manage': 'Gerenciar sistema SuperCoins'
+  'supercoins:manage': 'Gerenciar sistema SuperCoins',
+  
+  // Vagas - NOVAS PERMISSÕES
+  'jobs:view': 'Visualizar vagas',
+  'jobs:create': 'Criar vagas',
+  'jobs:edit': 'Editar vagas',
+  'jobs:delete': 'Excluir vagas',
+  'jobs:manage': 'Gerenciar todas as vagas (incluindo reordenação e visualização de inativas)'
 };
 
 // Função para verificar se uma permissão existe

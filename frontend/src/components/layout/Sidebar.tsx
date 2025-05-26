@@ -16,7 +16,9 @@ import {
   BarChart,
   Coins,
   User,
-  Building2  
+  Building2,
+  Link2,
+  Briefcase  
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -181,6 +183,13 @@ export function Sidebar() {
             active={getActivePath("/arquivos")} 
             isOpen={isOpen}
           />
+          <SidebarItem 
+            icon={HelpCircle} 
+            to="/base-conhecimento" 
+            label="Base de Conhecimento" 
+            active={getActivePath("/base-conhecimento")} 
+            isOpen={isOpen}
+          />
 		  {hasPermission('roles:manage') && (
           <SidebarItem 
             icon={MessageSquare} 
@@ -189,14 +198,7 @@ export function Sidebar() {
             active={getActivePath("/chat")} 
             isOpen={isOpen}
           />
-		  )}
-          <SidebarItem 
-            icon={HelpCircle} 
-            to="/base-conhecimento" 
-            label="Base de Conhecimento" 
-            active={getActivePath("/base-conhecimento")} 
-            isOpen={isOpen}
-          />
+		  )}		  
           {hasPermission('roles:manage') && (
           <SidebarItem 
             icon={Shield} 
@@ -233,6 +235,22 @@ export function Sidebar() {
 			isOpen={isOpen}
 		  />
 		  )}
+		  {hasPermission('roles:manage') && (
+          <SidebarItem 
+            icon={Link2} 
+            to="/links-uteis" 
+            label="Links Úteis" 
+            active={getActivePath("/links-uteis")} 
+            isOpen={isOpen}
+          />
+         )}
+		  <SidebarItem 
+		    icon={Briefcase} 
+		    to="/vagas" 
+		    label="Vagas" 
+		    active={getActivePath("/vagas")} 
+		    isOpen={isOpen}
+		  />		 
 		  <SidebarItem 
             icon={User} 
             to="/configuracoes" 

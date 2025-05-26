@@ -1,11 +1,19 @@
-// controllers/filesController.js (Versão corrigida)
-const { File, Folder } = require('../models');
+// controllers/filesController.js - Versão atualizada
+const { File, Folder, User } = require('../models');
 const path = require('path');
 const fs = require('fs');
 
 const getFiles = async (req, res) => {
   try {
     const { folderId } = req.query;
+    
+    // Obter dados do usuário para filtrar por departamento
+    const user = await User.findById(req.usuario.id);
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuário não encontrado' });
+    }
+    
+    const userDepartment = user.departamento || 'PUBLICO';
     
     // Definir consultas base
     let fileQuery = {};
@@ -20,21 +28,28 @@ const getFiles = async (req, res) => {
       folderQuery.parentId = null;
     }
     
-    // CORREÇÃO: Modificar as consultas para mostrar:
-    // 1. Arquivos/pastas do próprio usuário
-    // 2. Arquivos/pastas compartilhados com o usuário
-    // 3. Arquivos/pastas públicas (acessíveis a todos)
-    fileQuery.$or = [
-      { owner: req.usuario.id },
-      { 'sharedWith.user': req.usuario.id },
-      { isPublic: true }
-    ];
+    // Aplicar filtros de acesso e departamento
+    const accessFilter = {
+      $and: [
+        {
+          $or: [
+            { owner: req.usuario.id },
+            { 'sharedWith.user': req.usuario.id },
+            { isPublic: true }
+          ]
+        },
+        {
+          $or: [
+            { departamentoVisibilidade: 'TODOS' },
+            { departamentoVisibilidade: userDepartment },
+            { owner: req.usuario.id } // Proprietário sempre vê seus arquivos
+          ]
+        }
+      ]
+    };
     
-    folderQuery.$or = [
-      { owner: req.usuario.id },
-      { 'sharedWith.user': req.usuario.id },
-      { isPublic: true }
-    ];
+    fileQuery = { ...fileQuery, ...accessFilter };
+    folderQuery = { ...folderQuery, ...accessFilter };
     
     // Buscar arquivos e pastas
     const files = await File.find(fileQuery)
@@ -45,8 +60,7 @@ const getFiles = async (req, res) => {
       .populate('owner', ['nome'])
       .sort({ name: 1 });
     
-    // Log para debug
-    console.log(`Usuário ${req.usuario.id} acessando pasta ${folderId || 'root'}`);
+    console.log(`Usuário ${req.usuario.id} (${userDepartment}) acessando pasta ${folderId || 'root'}`);
     console.log(`Encontrados ${folders.length} pastas e ${files.length} arquivos`);
     
     res.json({ folders, files });
@@ -58,17 +72,17 @@ const getFiles = async (req, res) => {
 
 const createFolder = async (req, res) => {
   try {
-	
-	console.log('=== CREATE FOLDER DEBUG ===');
+    console.log('=== CREATE FOLDER DEBUG ===');
     console.log('Body recebido:', req.body);
     console.log('Arquivo recebido:', req.file);
-	  
-    const { name, parentId, description } = req.body;
-	
-	console.log('Dados extraídos:', {
+    
+    const { name, parentId, description, departamentoVisibilidade } = req.body;
+    
+    console.log('Dados extraídos:', {
       name,
       description,
       parentId,
+      departamentoVisibilidade,
       hasFile: !!req.file
     });
     
@@ -78,7 +92,7 @@ const createFolder = async (req, res) => {
       parentId: parentId || null,
       $or: [
         { owner: req.usuario.id },
-        { 'sharedWith.user': req.usuario.id, 'sharedWith.access': 'write' }
+        { 'sharedWith.user': req.usuario.id, 'sharedWith.access': 'edit' }
       ]
     });
     
@@ -86,25 +100,41 @@ const createFolder = async (req, res) => {
       return res.status(400).json({ msg: 'Já existe uma pasta com este nome neste local' });
     }
     
-	// Processar a imagem de capa se foi enviada
+    // Processar a imagem de capa se foi enviada
     let coverImageUrl = null;
     if (req.file) {
-      // A imagem foi salva pelo multer, pegar o caminho
       coverImageUrl = `/uploads/folders/${req.file.filename}`;
     }
-	
-    // Criar nova pasta - Por padrão, definir como pública para compartilhamento
+    
+    // Processar departamentos de visibilidade
+    let deptVisibilidade = ['TODOS'];
+    if (departamentoVisibilidade) {
+      try {
+        if (typeof departamentoVisibilidade === 'string') {
+          deptVisibilidade = JSON.parse(departamentoVisibilidade);
+        } else if (Array.isArray(departamentoVisibilidade)) {
+          deptVisibilidade = departamentoVisibilidade;
+        }
+      } catch (e) {
+        console.error('Erro ao processar departamentoVisibilidade:', e);
+      }
+    }
+    
+    // Criar nova pasta
     const newFolder = new Folder({
       name,
-	  description: description || '',
-	  coverImage: coverImageUrl,
+      description: description || '',
+      coverImage: coverImageUrl,
       parentId: parentId || null,
       owner: req.usuario.id,
-      isPublic: true // CORREÇÃO: Tornar pastas públicas por padrão
+      departamentoVisibilidade: deptVisibilidade,
+      isPublic: deptVisibilidade.includes('TODOS')
     });
     
     const folder = await newFolder.save();
-    res.json(folder);
+    const populatedFolder = await Folder.findById(folder._id).populate('owner', ['nome']);
+    
+    res.json(populatedFolder);
   } catch (err) {
     console.error('Erro ao criar pasta:', err.message);
     res.status(500).send('Erro no servidor');
@@ -113,50 +143,114 @@ const createFolder = async (req, res) => {
 
 const uploadFile = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ msg: 'Nenhum arquivo enviado' });
-    }
+    const { 
+      folderId, 
+      description, 
+      departamentoVisibilidade, 
+      allowDownload,
+      type,
+      linkUrl,
+      linkName
+    } = req.body;
     
-    const { folderId } = req.body;
-    const file = req.file;
-    const fileExt = path.extname(file.originalname).substring(1);
+    console.log('=== UPLOAD FILE DEBUG ===');
+    console.log('Body recebido:', req.body);
+    console.log('Arquivo recebido:', req.file);
+    console.log('Tipo:', type);
     
-	console.log('--- DEBUG INFORMAÇÕES DO ARQUIVO RECEBIDO ---');
-    console.log('file.originalname:', file.originalname);
-    console.log('Nome original (charCodes):', [...file.originalname].map(c => c.charCodeAt(0)));
+    // Validar tipo
+    const fileType = type || 'file';
     
-    // Corrigir encoding: o nome está vindo em UTF-8 mas sendo lido como Latin1
-    let fixedName = file.originalname;
-    
-    // Se contém "Ã¡" ou outros padrões UTF-8 mal interpretados
-    if (fixedName.includes('Ã¡') || fixedName.includes('Ã©') || fixedName.includes('Ã§')) {
-      // Converter de Latin1 para UTF-8
-      fixedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-      console.log('Nome corrigido:', fixedName);
-    }
-	
-    // CORREÇÃO: Arquivos são públicos por padrão para compartilhamento
-    const newFile = new File({
-      name: path.basename(fixedName, path.extname(fixedName)),
-      path: file.path,
-      originalName: fixedName,
-      mimeType: file.mimetype,
-      size: file.size,
-      extension: fileExt,
-      folderId: folderId || null,
-      owner: req.usuario.id,
-      isPublic: true
-    });
- 
-    const savedFile = await newFile.save();
-    
-    // Retornar arquivo com informações do proprietário
-    const populatedFile = await File.findById(savedFile._id)
-      .populate('owner', ['nome']);
+    if (fileType === 'link') {
+      // Para links, não precisamos de arquivo físico
+      if (!linkUrl || !linkName) {
+        return res.status(400).json({ msg: 'URL e nome são obrigatórios para links' });
+      }
       
-    res.json(populatedFile);
+      // Processar departamentos de visibilidade
+      let deptVisibilidade = ['TODOS'];
+      if (departamentoVisibilidade) {
+        try {
+          if (typeof departamentoVisibilidade === 'string') {
+            deptVisibilidade = JSON.parse(departamentoVisibilidade);
+          } else if (Array.isArray(departamentoVisibilidade)) {
+            deptVisibilidade = departamentoVisibilidade;
+          }
+        } catch (e) {
+          console.error('Erro ao processar departamentoVisibilidade:', e);
+        }
+      }
+      
+      // Criar link
+      const newLink = new File({
+        name: linkName,
+        description: description || '',
+        type: 'link',
+        linkUrl: linkUrl,
+        folderId: folderId || null,
+        owner: req.usuario.id,
+        departamentoVisibilidade: deptVisibilidade,
+        isPublic: deptVisibilidade.includes('TODOS'),
+        allowDownload: false // Links não têm download
+      });
+      
+      const savedLink = await newLink.save();
+      const populatedLink = await File.findById(savedLink._id).populate('owner', ['nome']);
+      
+      return res.json(populatedLink);
+    } else {
+      // Para arquivos físicos
+      if (!req.file) {
+        return res.status(400).json({ msg: 'Nenhum arquivo enviado' });
+      }
+      
+      const file = req.file;
+      const fileExt = path.extname(file.originalname).substring(1);
+      
+      // Corrigir encoding do nome
+      let fixedName = file.originalname;
+      if (fixedName.includes('Ã¡') || fixedName.includes('Ã©') || fixedName.includes('Ã§')) {
+        fixedName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      }
+      
+      // Processar departamentos de visibilidade
+      let deptVisibilidade = ['TODOS'];
+      if (departamentoVisibilidade) {
+        try {
+          if (typeof departamentoVisibilidade === 'string') {
+            deptVisibilidade = JSON.parse(departamentoVisibilidade);
+          } else if (Array.isArray(departamentoVisibilidade)) {
+            deptVisibilidade = departamentoVisibilidade;
+          }
+        } catch (e) {
+          console.error('Erro ao processar departamentoVisibilidade:', e);
+        }
+      }
+      
+      // Criar arquivo
+      const newFile = new File({
+        name: path.basename(fixedName, path.extname(fixedName)),
+        description: description || '',
+        path: file.path,
+        originalName: fixedName,
+        mimeType: file.mimetype,
+        size: file.size,
+        extension: fileExt,
+        type: 'file',
+        folderId: folderId || null,
+        owner: req.usuario.id,
+        departamentoVisibilidade: deptVisibilidade,
+        isPublic: deptVisibilidade.includes('TODOS'),
+        allowDownload: allowDownload !== 'false' // Permitir download por padrão
+      });
+      
+      const savedFile = await newFile.save();
+      const populatedFile = await File.findById(savedFile._id).populate('owner', ['nome']);
+      
+      return res.json(populatedFile);
+    }
   } catch (err) {
-    console.error('Erro ao fazer upload de arquivo:', err.message);
+    console.error('Erro ao fazer upload:', err.message);
     res.status(500).send('Erro no servidor');
   }
 };
@@ -168,11 +262,26 @@ const downloadFile = async (req, res) => {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
     }
     
+    // Verificar se é um link
+    if (file.type === 'link') {
+      return res.status(400).json({ msg: 'Este é um link, não um arquivo para download' });
+    }
+    
+    // Verificar se download é permitido
+    if (!file.allowDownload) {
+      return res.status(403).json({ msg: 'Download não permitido para este arquivo' });
+    }
+    
     // Verificar acesso
+    const user = await User.findById(req.usuario.id);
+    const userDepartment = user?.departamento || 'PUBLICO';
+    
     const hasAccess = 
       file.owner.toString() === req.usuario.id || 
       file.isPublic || 
-      file.sharedWith.some(share => share.user.toString() === req.usuario.id);
+      file.sharedWith.some(share => share.user.toString() === req.usuario.id) ||
+      file.departamentoVisibilidade.includes('TODOS') ||
+      file.departamentoVisibilidade.includes(userDepartment);
       
     if (!hasAccess) {
       return res.status(401).json({ msg: 'Acesso negado' });
@@ -182,9 +291,6 @@ const downloadFile = async (req, res) => {
     if (!fs.existsSync(file.path)) {
       return res.status(404).json({ msg: 'Arquivo físico não encontrado' });
     }
-    
-    // Função para registrar visualização do arquivo - implementação futura
-    // await registerFileView(file._id, req.usuario.id);
     
     res.download(file.path, file.originalName);
   } catch (err) {
@@ -196,7 +302,6 @@ const downloadFile = async (req, res) => {
   }
 };
 
-// NOVA FUNÇÃO: Obter preview/visualização do arquivo
 const getFilePreview = async (req, res) => {
   try {
     const file = await File.findById(req.params.id);
@@ -204,11 +309,26 @@ const getFilePreview = async (req, res) => {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
     }
     
+    // Se for um link, redirecionar
+    if (file.type === 'link') {
+      return res.json({
+        type: 'link',
+        url: file.linkUrl,
+        name: file.name,
+        description: file.description
+      });
+    }
+    
     // Verificar acesso
+    const user = await User.findById(req.usuario.id);
+    const userDepartment = user?.departamento || 'PUBLICO';
+    
     const hasAccess = 
       file.owner.toString() === req.usuario.id || 
       file.isPublic || 
-      file.sharedWith.some(share => share.user.toString() === req.usuario.id);
+      file.sharedWith.some(share => share.user.toString() === req.usuario.id) ||
+      file.departamentoVisibilidade.includes('TODOS') ||
+      file.departamentoVisibilidade.includes(userDepartment);
       
     if (!hasAccess) {
       return res.status(401).json({ msg: 'Acesso negado' });
@@ -219,22 +339,19 @@ const getFilePreview = async (req, res) => {
       return res.status(404).json({ msg: 'Arquivo físico não encontrado' });
     }
     
-    // Mapear tipos MIME para tratamento específico
+    // Resto da lógica de preview permanece igual...
     const mimeType = file.mimeType.toLowerCase();
     
-    // 1. Para imagens: enviar diretamente
     if (mimeType.startsWith('image/')) {
       res.setHeader('Content-Type', file.mimeType);
       return fs.createReadStream(file.path).pipe(res);
     }
     
-    // 2. Para PDFs: enviar diretamente
     if (mimeType === 'application/pdf') {
       res.setHeader('Content-Type', 'application/pdf');
       return fs.createReadStream(file.path).pipe(res);
     }
     
-    // 3. Para vídeos: streaming
     if (mimeType.startsWith('video/')) {
       const stat = fs.statSync(file.path);
       const fileSize = stat.size;
@@ -265,21 +382,17 @@ const getFilePreview = async (req, res) => {
       }
     }
     
-    // 4. Para textos: enviar preview
     if (mimeType.startsWith('text/') || 
         mimeType === 'application/json' ||
         mimeType === 'application/xml') {
       res.setHeader('Content-Type', 'text/plain');
       
-      // Ler apenas o início do arquivo para preview
       const fileContent = fs.readFileSync(file.path, { encoding: 'utf8', flag: 'r' });
-      // Limitar a 10KB para preview
       const preview = fileContent.substring(0, 10240);
       
       return res.send(preview);
     }
     
-    // 5. Para outros tipos, enviar informações sobre como baixar
     return res.json({
       fileName: file.originalName,
       fileType: file.mimeType,
@@ -293,6 +406,7 @@ const getFilePreview = async (req, res) => {
   }
 };
 
+// Resto das funções permanecem iguais...
 const shareItem = async (req, res) => {
   try {
     const { itemId, itemType, userId, access } = req.body;
@@ -314,7 +428,6 @@ const shareItem = async (req, res) => {
       return res.status(401).json({ msg: 'Apenas o proprietário pode compartilhar' });
     }
     
-    // Atualizar compartilhamento
     const shareIndex = item.sharedWith.findIndex(
       share => share.user.toString() === userId
     );
@@ -348,8 +461,8 @@ const deleteItem = async (req, res) => {
         return res.status(401).json({ msg: 'Não autorizado' });
       }
       
-      // Deletar arquivo físico
-      if (fs.existsSync(item.path)) {
+      // Deletar arquivo físico apenas se for um arquivo, não um link
+      if (item.type === 'file' && item.path && fs.existsSync(item.path)) {
         fs.unlinkSync(item.path);
       }
       
@@ -364,47 +477,36 @@ const deleteItem = async (req, res) => {
         return res.status(401).json({ msg: 'Não autorizado' });
       }
       
-      // Função recursiva para deletar pasta e seu conteúdo
       const deleteFolder = async (folderId) => {
         const folder = await Folder.findById(folderId);
         if (!folder) return;
         
-        // Se a pasta tem imagem de capa, deletar o arquivo físico
         if (folder.coverImage) {
           try {
-            // Extrair o caminho do arquivo da URL
             const imagePath = folder.coverImage.replace(/^\/uploads\//, '');
             const fullImagePath = path.join(__dirname, '..', 'uploads', imagePath);
             
-            console.log(`Deletando imagem de capa: ${fullImagePath}`);
-            
             if (fs.existsSync(fullImagePath)) {
               fs.unlinkSync(fullImagePath);
-              console.log(`Imagem de capa deletada: ${fullImagePath}`);
-            } else {
-              console.log(`Imagem de capa não encontrada: ${fullImagePath}`);
             }
           } catch (err) {
             console.error(`Erro ao deletar imagem de capa: ${err.message}`);
           }
         }
         
-        // Deletar todos os arquivos da pasta
         const files = await File.find({ folderId });
         for (const file of files) {
-          if (fs.existsSync(file.path)) {
+          if (file.type === 'file' && file.path && fs.existsSync(file.path)) {
             fs.unlinkSync(file.path);
           }
           await file.deleteOne();
         }
         
-        // Deletar todas as subpastas recursivamente
         const subFolders = await Folder.find({ parentId: folderId });
         for (const subFolder of subFolders) {
           await deleteFolder(subFolder._id);
         }
         
-        // Finalmente, deletar a pasta
         await Folder.findByIdAndDelete(folderId);
       };
       
@@ -430,10 +532,15 @@ const getFileInfo = async (req, res) => {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
     }
     
+    const user = await User.findById(req.usuario.id);
+    const userDepartment = user?.departamento || 'PUBLICO';
+    
     const hasAccess = 
       file.owner.toString() === req.usuario.id || 
       file.isPublic || 
-      file.sharedWith.some(share => share.user.toString() === req.usuario.id);
+      file.sharedWith.some(share => share.user.toString() === req.usuario.id) ||
+      file.departamentoVisibilidade.includes('TODOS') ||
+      file.departamentoVisibilidade.includes(userDepartment);
       
     if (!hasAccess) {
       return res.status(401).json({ msg: 'Acesso negado' });
@@ -442,10 +549,15 @@ const getFileInfo = async (req, res) => {
     res.json({
       _id: file._id,
       name: file.name,
+      description: file.description,
       originalName: file.originalName,
       extension: file.extension,
       mimeType: file.mimeType,
       size: file.size,
+      type: file.type,
+      linkUrl: file.linkUrl,
+      allowDownload: file.allowDownload,
+      departamentoVisibilidade: file.departamentoVisibilidade,
       createdAt: file.createdAt,
       owner: file.owner
     });
@@ -466,5 +578,5 @@ module.exports = {
   shareItem, 
   deleteItem,
   getFileInfo,
-  getFilePreview // Nova função
+  getFilePreview
 };

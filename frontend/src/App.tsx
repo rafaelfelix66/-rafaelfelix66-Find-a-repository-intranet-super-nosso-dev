@@ -28,6 +28,8 @@ import Unauthorized from "./pages/Unauthorized";
 import Chat from "./pages/Chat";
 import SuperCoinsAdmin from "./pages/SuperCoinsAdmin";
 import Institutional from "./pages/Institutional";
+import UsefulLinksPage from "./pages/UsefulLinksPage";
+import JobPositions from "./pages/JobPositions";
 
 // Update Tailwind CSS variables to include the new red color
 import { useEffect } from "react";
@@ -206,6 +208,22 @@ const App = () => {
 				  element={
 					<PrivateRoute>
 					  <Institutional />
+					</PrivateRoute>
+				  } 
+				/>
+			  <Route 
+				 path="/links-uteis" 
+				 element={
+				<PrivateRoute requiredPermission="useful_links:view">
+				  <UsefulLinksPage />
+				</PrivateRoute>
+			      } 
+				/>
+		      <Route 
+				  path="/vagas" 
+				  element={
+					<PrivateRoute>
+					  <JobPositions />
 					</PrivateRoute>
 				  } 
 				/>
