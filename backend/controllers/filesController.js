@@ -364,7 +364,8 @@ const getFilePreview = async (req, res) => {
   try {
     console.log('=== GET FILE PREVIEW DEBUG ===');
     console.log('fileId:', req.params.id);
-    console.log('usuarioId:', req.usuario.id);
+    console.log('usuarioId:', req.usuario?.id);
+    console.log('Query params:', req.query);
     
     const file = await File.findById(req.params.id);
     if (!file) {
@@ -390,8 +391,19 @@ const getFilePreview = async (req, res) => {
       });
     }
     
-    // Buscar dados do usuário
+    // Buscar dados do usuário - CORREÇÃO: Verificar se req.usuario existe
+    if (!req.usuario || !req.usuario.id) {
+      console.log('ERRO: Usuário não autenticado no preview');
+      return res.status(401).json({ msg: 'Não autenticado' });
+    }
+    
+    const { User } = require('../models');
     const user = await User.findById(req.usuario.id);
+    if (!user) {
+      console.log('ERRO: Usuário não encontrado no banco');
+      return res.status(404).json({ msg: 'Usuário não encontrado' });
+    }
+    
     const userDepartment = user?.departamento || 'PUBLICO';
     const isAdmin = user?.roles?.includes('admin') || false;
     
@@ -458,12 +470,18 @@ const getFilePreview = async (req, res) => {
     console.log('ACESSO PERMITIDO ao preview');
     
     // Verificar se o arquivo físico existe
+    const fs = require('fs');
     if (!fs.existsSync(file.path)) {
       console.log('Arquivo físico não encontrado:', file.path);
       return res.status(404).json({ msg: 'Arquivo físico não encontrado' });
     }
     
     console.log('Preview autorizado, servindo arquivo');
+    
+    // CORREÇÃO: Definir headers apropriados para evitar problemas de CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, x-auth-token');
     
     // Lógica de preview baseada no tipo MIME
     const mimeType = file.mimeType.toLowerCase();
@@ -497,7 +515,8 @@ const getFilePreview = async (req, res) => {
           'Content-Range': `bytes ${start}-${end}/${fileSize}`,
           'Accept-Ranges': 'bytes',
           'Content-Length': chunksize,
-          'Content-Type': file.mimeType
+          'Content-Type': file.mimeType,
+          'Access-Control-Allow-Origin': '*'
         });
         
         return fileStream.pipe(res);
@@ -505,7 +524,8 @@ const getFilePreview = async (req, res) => {
         res.writeHead(200, {
           'Content-Length': fileSize,
           'Content-Type': file.mimeType,
-          'Accept-Ranges': 'bytes'
+          'Accept-Ranges': 'bytes',
+          'Access-Control-Allow-Origin': '*'
         });
         
         return fs.createReadStream(file.path).pipe(res);
@@ -515,6 +535,7 @@ const getFilePreview = async (req, res) => {
     if (mimeType.startsWith('audio/')) {
       res.setHeader('Content-Type', file.mimeType);
       res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Allow-Origin', '*');
       return fs.createReadStream(file.path).pipe(res);
     }
     
@@ -522,6 +543,7 @@ const getFilePreview = async (req, res) => {
         mimeType === 'application/json' ||
         mimeType === 'application/xml') {
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Access-Control-Allow-Origin', '*');
       
       const fileContent = fs.readFileSync(file.path, { encoding: 'utf8', flag: 'r' });
       const preview = fileContent.substring(0, 10240); // Primeiros 10KB

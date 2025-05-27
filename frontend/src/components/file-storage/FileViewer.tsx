@@ -1,10 +1,10 @@
-// src/components/file-storage/FileViewer.tsx - Integrado com FileService
-import React, { useState } from 'react';
+// src/components/file-storage/FileViewer.tsx - CORS Corrigido
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { X, Download, ExternalLink, FileText, AlertTriangle, Loader2 } from 'lucide-react';
 import { FileItem } from '@/contexts/FileContext';
-import { fileService } from '@/services/fileService';
+import { api } from '@/services/api';
 
 interface FileViewerProps {
   file: FileItem | null;
@@ -21,8 +21,105 @@ export const FileViewer: React.FC<FileViewerProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<string | null>(null);
   
-  // Manipulador para fazer download usando o fileService
+  // Limpar dados quando o arquivo muda
+  useEffect(() => {
+    if (file) {
+      setLoadError(null);
+      setPreviewData(null);
+      if (file.type === 'file' && canPreviewFile(file)) {
+        loadPreview();
+      }
+    }
+  }, [file]);
+  
+  // Verificar se pode fazer preview
+  const canPreviewFile = (file: FileItem): boolean => {
+    return file.type === 'file' && file.mimeType && (
+      file.mimeType.startsWith('image/') ||
+      file.mimeType === 'application/pdf' ||
+      file.mimeType.startsWith('text/') ||
+      file.mimeType.startsWith('video/') ||
+      file.mimeType.startsWith('audio/')
+    );
+  };
+  
+  // CORREÇÃO: Carregar preview sem credentials para evitar erro CORS
+  const loadPreview = async () => {
+    if (!file) return;
+    
+    setIsLoading(true);
+    setLoadError(null);
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Token de autenticação não encontrado');
+      }
+      
+      const baseUrl = api.getBaseUrl();
+      
+      // CORREÇÃO: Remover credentials: 'include' para evitar conflito CORS
+      const response = await fetch(`${baseUrl}/files/preview/${file.id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-auth-token': token,
+          'Accept': '*/*'
+        }
+        // REMOVIDO: credentials: 'include' - causa erro CORS com wildcard
+      });
+      
+      console.log('Preview response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Preview error response:', errorText);
+        
+        let errorMessage = `Erro ${response.status}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.msg || errorData.message || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || errorMessage;
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      const contentType = response.headers.get('Content-Type') || file.mimeType || '';
+      
+      if (contentType.startsWith('image/') || 
+          contentType === 'application/pdf' ||
+          contentType.startsWith('video/') ||
+          contentType.startsWith('audio/')) {
+        
+        // Para arquivos binários, criar blob URL
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        setPreviewData(blobUrl);
+        
+      } else if (contentType.startsWith('text/') || 
+                 contentType.includes('json') ||
+                 contentType.includes('xml')) {
+        
+        // Para arquivos de texto, obter como string
+        const text = await response.text();
+        setPreviewData(text);
+      } else {
+        throw new Error('Tipo de arquivo não suportado para visualização');
+      }
+      
+    } catch (error) {
+      console.error('Erro ao carregar preview:', error);
+      setLoadError(error instanceof Error ? error.message : 'Erro desconhecido');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Manipulador para fazer download
   const handleDownload = async () => {
     if (!file || !file.allowDownload) return;
     
@@ -31,8 +128,35 @@ export const FileViewer: React.FC<FileViewerProps> = ({
       if (onDownload) {
         await onDownload(file.id);
       } else {
-        // Usar fileService diretamente
-        await fileService.downloadFile(file.id, file.originalName || file.name);
+        // Fazer download direto - CORREÇÃO: sem credentials
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Token de autenticação não encontrado');
+        }
+        
+        const baseUrl = api.getBaseUrl();
+        const response = await fetch(`${baseUrl}/files/download/${file.id}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-auth-token': token
+          }
+          // REMOVIDO: credentials: 'include'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Erro ao baixar arquivo');
+        }
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.originalName || file.name;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
       }
     } catch (error) {
       console.error('Erro ao baixar arquivo:', error);
@@ -46,36 +170,64 @@ export const FileViewer: React.FC<FileViewerProps> = ({
   const handleOpenInNewTab = () => {
     if (!file) return;
     
-    // Para links, abrir a URL diretamente
     if (file.type === 'link' && file.linkUrl) {
       window.open(file.linkUrl, '_blank', 'noopener,noreferrer');
       return;
     }
     
-    // Para arquivos, abrir a URL de preview
-    try {
-      const previewUrl = fileService.getFilePreviewUrl(file.id);
-      window.open(previewUrl, '_blank', 'noopener,noreferrer');
-    } catch (error) {
-      console.error('Erro ao abrir preview:', error);
-      setLoadError('Não foi possível abrir o arquivo em nova aba');
+    if (previewData && previewData.startsWith('blob:')) {
+      window.open(previewData, '_blank', 'noopener,noreferrer');
     }
   };
   
-  // Verificar capacidades de preview usando fileService
-  const getPreviewCapability = () => {
-    if (!file || file.type === 'link') return { canPreview: false, previewType: 'none' as const };
-    
-    return fileService.getPreviewCapability(file.mimeType || '', file.extension);
-  };
+  // Cleanup quando componente desmonta ou arquivo muda
+  useEffect(() => {
+    return () => {
+      if (previewData && previewData.startsWith('blob:')) {
+        URL.revokeObjectURL(previewData);
+      }
+    };
+  }, [previewData]);
   
-  // Não exibir nada se não houver arquivo para visualizar
+  // Não exibir nada se não houver arquivo
   if (!file) return null;
-  
-  const previewCapability = getPreviewCapability();
   
   // Renderizar preview baseado no tipo
   const renderPreview = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-500 mx-auto mb-4" />
+            <p className="text-gray-600">Carregando preview...</p>
+          </div>
+        </div>
+      );
+    }
+    
+    if (loadError) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
+          <div className="text-center max-w-md">
+            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium mb-2">Erro ao carregar preview</h3>
+            <p className="text-red-600 text-sm mb-4">{loadError}</p>
+            <div className="flex gap-2 justify-center">
+              {file.allowDownload && (
+                <Button onClick={handleDownload} variant="outline">
+                  <Download className="h-4 w-4 mr-2" />
+                  Baixar arquivo
+                </Button>
+              )}
+              <Button onClick={() => setLoadError(null)} variant="outline">
+                Tentar novamente
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
     // Se for um link
     if (file.type === 'link') {
       return (
@@ -100,8 +252,8 @@ export const FileViewer: React.FC<FileViewerProps> = ({
       );
     }
     
-    // Se não puder fazer preview
-    if (!previewCapability.canPreview) {
+    // Se não pode fazer preview
+    if (!canPreviewFile(file)) {
       return (
         <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
           <FileText size={48} className="text-gray-400 mb-4" />
@@ -125,10 +277,6 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                 )}
               </Button>
             )}
-            <Button variant="outline" onClick={handleOpenInNewTab}>
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Tentar abrir
-            </Button>
           </div>
           {!file.allowDownload && (
             <p className="text-red-500 text-xs mt-2">Download não permitido para este arquivo</p>
@@ -137,122 +285,124 @@ export const FileViewer: React.FC<FileViewerProps> = ({
       );
     }
     
-    // Obter URL de preview usando fileService
-    const previewUrl = fileService.getFilePreviewUrl(file.id);
-    
-    // Renderizar baseado no tipo de preview
-    switch (previewCapability.previewType) {
-      case 'image':
-        return (
-          <div className="flex items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
-            <img 
-              src={previewUrl} 
-              alt={file.name} 
-              className="max-h-full max-w-full object-contain" 
-              onError={() => setLoadError('Erro ao carregar imagem')}
-              onLoad={() => setLoadError(null)}
-            />
+    // Se não tem dados de preview ainda
+    if (!previewData) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
+          <div className="text-center">
+            <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600">Preparando visualização...</p>
           </div>
-        );
-      
-      case 'pdf':
-        return (
-          <div className="h-[70vh]">
-            <iframe 
-              src={previewUrl} 
-              title={file.name}
-              className="w-full h-full border-0"
-              onError={() => setLoadError('Erro ao carregar PDF')}
-              onLoad={() => setLoadError(null)}
-            />
-          </div>
-        );
-      
-      case 'video':
-        return (
-          <div className="flex items-center justify-center h-[70vh] bg-black">
-            <video 
-              src={previewUrl}
-              controls
-              className="max-h-full max-w-full"
-              onError={() => setLoadError('Erro ao carregar vídeo')}
-              onLoadStart={() => setLoadError(null)}
-            >
-              Seu navegador não suporta a reprodução deste vídeo.
-            </video>
-          </div>
-        );
-      
-      case 'audio':
-        return (
-          <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
-            <div className="w-full max-w-md bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
-              <h3 className="text-center font-medium mb-4 text-gray-900 dark:text-gray-100">
-                {file.name}
-              </h3>
-              <audio 
-                src={previewUrl}
-                controls
-                className="w-full"
-                onError={() => setLoadError('Erro ao carregar áudio')}
-                onLoadStart={() => setLoadError(null)}
-              >
-                Seu navegador não suporta a reprodução deste áudio.
-              </audio>
-            </div>
-          </div>
-        );
-      
-      case 'text':
-        return (
-          <div className="h-[70vh] overflow-auto bg-gray-50 dark:bg-gray-900">
-            <iframe 
-              src={previewUrl}
-              title={file.name}
-              className="w-full h-full border-0"
-              onError={() => setLoadError('Erro ao carregar texto')}
-              onLoad={() => setLoadError(null)}
-            />
-          </div>
-        );
-      
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
-            <FileText size={48} className="text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium mb-2">Visualização não disponível</h3>
-            <p className="text-gray-500 text-sm mb-4">
-              Este tipo de arquivo não pode ser visualizado diretamente no navegador.
-            </p>
-            <div className="flex gap-2">
-              {file.allowDownload && (
-                <Button onClick={handleDownload} disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Baixando...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 h-4 w-4" />
-                      Baixar arquivo
-                    </>
-                  )}
-                </Button>
-              )}
-              <Button variant="outline" onClick={handleOpenInNewTab}>
-                <ExternalLink className="mr-2 h-4 w-4" />
-                Abrir em nova aba
-              </Button>
-            </div>
-          </div>
-        );
+        </div>
+      );
     }
+    
+    // Renderizar baseado no tipo de arquivo
+    const mimeType = file.mimeType?.toLowerCase() || '';
+    
+    if (mimeType.startsWith('image/')) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900 p-4">
+          <img 
+            src={previewData} 
+            alt={file.name} 
+            className="max-h-full max-w-full object-contain shadow-lg" 
+            onError={() => setLoadError('Erro ao carregar imagem')}
+          />
+        </div>
+      );
+    }
+    
+    if (mimeType === 'application/pdf') {
+      return (
+        <div className="h-[70vh]">
+          <iframe 
+            src={previewData} 
+            title={file.name}
+            className="w-full h-full border-0"
+            onError={() => setLoadError('Erro ao carregar PDF')}
+          />
+        </div>
+      );
+    }
+    
+    if (mimeType.startsWith('video/')) {
+      return (
+        <div className="flex items-center justify-center h-[70vh] bg-black">
+          <video 
+            src={previewData}
+            controls
+            className="max-h-full max-w-full"
+            onError={() => setLoadError('Erro ao carregar vídeo')}
+          >
+            Seu navegador não suporta a reprodução deste vídeo.
+          </video>
+        </div>
+      );
+    }
+    
+    if (mimeType.startsWith('audio/')) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
+          <div className="w-full max-w-md bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+            <h3 className="text-center font-medium mb-4 text-gray-900 dark:text-gray-100">
+              {file.name}
+            </h3>
+            <audio 
+              src={previewData}
+              controls
+              className="w-full"
+              onError={() => setLoadError('Erro ao carregar áudio')}
+            >
+              Seu navegador não suporta a reprodução deste áudio.
+            </audio>
+          </div>
+        </div>
+      );
+    }
+    
+    if (mimeType.startsWith('text/') || mimeType.includes('json') || mimeType.includes('xml')) {
+      return (
+        <div className="h-[70vh] overflow-auto bg-gray-50 dark:bg-gray-900 p-4">
+          <pre className="text-sm whitespace-pre-wrap bg-white dark:bg-gray-800 p-4 rounded-md shadow-sm">
+            {previewData}
+          </pre>
+        </div>
+      );
+    }
+    
+    // Fallback
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
+        <FileText size={48} className="text-gray-400 mb-4" />
+        <h3 className="text-lg font-medium mb-2">Tipo de arquivo não suportado</h3>
+        <p className="text-gray-500 text-sm mb-4">
+          Não é possível visualizar este tipo de arquivo no navegador.
+        </p>
+        <div className="flex gap-2">
+          {file.allowDownload && (
+            <Button onClick={handleDownload} disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Baixando...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Baixar arquivo
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
   };
   
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[90vw] max-h-[90vh] p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-[95vw] max-h-[95vh] p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0">
           <div className="flex justify-between items-center">
             <div className="flex-1 min-w-0">
@@ -283,6 +433,7 @@ export const FileViewer: React.FC<FileViewerProps> = ({
                     size="icon" 
                     onClick={handleOpenInNewTab} 
                     title="Abrir em nova aba"
+                    disabled={!previewData}
                   >
                     <ExternalLink className="h-4 w-4" />
                   </Button>
@@ -316,47 +467,10 @@ export const FileViewer: React.FC<FileViewerProps> = ({
         </DialogHeader>
         
         <div className="mt-4">
-          {loadError ? (
-            <div className="flex flex-col items-center justify-center h-[70vh] bg-gray-50 dark:bg-gray-900">
-              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg max-w-md text-center">
-                <AlertTriangle className="h-8 w-8 mx-auto mb-2" />
-                <h3 className="font-medium mb-2">Erro ao carregar</h3>
-                <p className="text-sm">{loadError}</p>
-              </div>
-              <div className="flex gap-2 mt-4">
-                {file.allowDownload && (
-                  <Button 
-                    variant="outline" 
-                    onClick={handleDownload}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Baixando...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="mr-2 h-4 w-4" />
-                        Tentar baixar o arquivo
-                      </>
-                    )}
-                  </Button>
-                )}
-                <Button 
-                  variant="outline" 
-                  onClick={() => setLoadError(null)}
-                >
-                  Tentar novamente
-                </Button>
-              </div>
-            </div>
-          ) : (
-            renderPreview()
-          )}
+          {renderPreview()}
         </div>
         
-        {/* Informações adicionais do arquivo */}
+        {/* Informações do arquivo */}
         {file.type !== 'link' && (
           <div className="px-6 pb-4 border-t bg-gray-50 dark:bg-gray-800">
             <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400 py-2">

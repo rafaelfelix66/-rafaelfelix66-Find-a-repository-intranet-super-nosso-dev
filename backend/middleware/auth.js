@@ -1,18 +1,20 @@
-// middleware/auth.js
+// middleware/auth.js - Versão melhorada com suporte a token via query
 const jwt = require('jsonwebtoken');
 
 // Middleware melhorado para verificação de token
 const auth = (req, res, next) => {
-  // Debug para verificar cabeçalhos
+  // Debug para verificar cabeçalhos e query params
   //console.log('Auth middleware: Verificando token de autenticação');
   //console.log('Headers:', {
   //  authorization: req.headers.authorization,
   //  'x-auth-token': req.headers['x-auth-token']
- // });
+  //});
+  //console.log('Query params:', req.query);
   
-  // Obter token do cabeçalho
-  const token = req.headers['x-auth-token'] || 
-                (req.headers.authorization ? req.headers.authorization.replace('Bearer ', '') : null);
+  // CORREÇÃO: Obter token do cabeçalho OU query parameter (para preview de arquivos)
+  let token = req.headers['x-auth-token'] || 
+              (req.headers.authorization ? req.headers.authorization.replace('Bearer ', '') : null) ||
+              req.query.token; // NOVO: Suporte a token via query parameter
   
   // Verificar se o token existe
   if (!token) {
@@ -26,10 +28,10 @@ const auth = (req, res, next) => {
     
     // Debug detalhado
     //console.log('Auth middleware: Token validado com sucesso:', {
-   //   id: decoded.id,
+    //  id: decoded.id,
     //  email: decoded.email,
-   //   nome: decoded.nome
-   // });
+    //  nome: decoded.nome
+    //});
     
     // Atribuir dados do usuário ao objeto req
     req.usuario = {

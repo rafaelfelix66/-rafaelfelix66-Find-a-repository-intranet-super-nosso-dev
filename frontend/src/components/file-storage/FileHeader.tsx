@@ -6,9 +6,12 @@ import { Button } from "@/components/ui/button";
 import { useFiles } from "@/contexts/FileContext";
 import { NewFolderDialog } from "./NewFolderDialog";
 import { UploadDialog } from "./UploadDialog";
+import { usePermission } from "@/hooks/usePermission";
+
 
 export const FileHeader = () => {
   const { searchQuery, setSearchQuery, refreshFiles, isLoading } = useFiles();
+  const { hasPermission } = usePermission();
   const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   
@@ -45,27 +48,31 @@ export const FileHeader = () => {
           <RotateCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
         </Button>
         
-        <Button 
-          className="bg-[#e60909] hover:bg-[#e60909]/90 text-white flex-shrink-0"
-          onClick={() => setIsUploadDialogOpen(true)}
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          Enviar
-        </Button>
+        {hasPermission('files:upload') && (
+		<Button 
+		  className="bg-[#e60909] hover:bg-[#e60909]/90 text-white flex-shrink-0"
+		  onClick={() => setIsUploadDialogOpen(true)}
+		>
+		  <Upload className="h-4 w-4 mr-2" />
+		  Enviar Arquivo
+		</Button>
+	  )}
         
         <UploadDialog 
           isOpen={isUploadDialogOpen} 
           onOpenChange={setIsUploadDialogOpen} 
         />
         
-        <Button 
-          variant="outline"
-          onClick={() => setIsNewFolderDialogOpen(true)}
-          className="flex-shrink-0"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Pasta
-        </Button>
+         {hasPermission('files:create_folder') && (
+		<Button 
+		  variant="outline"
+		  onClick={() => setIsNewFolderDialogOpen(true)}
+		  className="flex-shrink-0"
+		>
+		  <Plus className="h-4 w-4 mr-2" />
+		  Nova Pasta
+		</Button>
+	  )}
         
         <NewFolderDialog 
           isOpen={isNewFolderDialogOpen} 
