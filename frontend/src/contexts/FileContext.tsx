@@ -125,10 +125,19 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { isAuthenticated, user } = useAuth();
   
   useEffect(() => {
-    if (user?.departamento) {
-      setUserDepartment(user.departamento);
+  if (user?.departamento) {
+    setUserDepartment(user.departamento);
+    console.log('DEBUG - User department definido:', user.departamento);
+  } else {
+    console.log('DEBUG - User object completo:', user);
+    // Verificar campos alternativos
+    const dept = user?.departamento || user?.department || user?.dept;
+    if (dept) {
+      setUserDepartment(dept);
+      console.log('DEBUG - User department encontrado em campo alternativo:', dept);
     }
-  }, [user]);
+  }
+}, [user]);
   
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -140,45 +149,60 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   // CORREÇÃO: Melhorar verificação de acesso
   const canUserAccessItem = (item: FileItem): boolean => {
-    // Debug
-    console.log('Verificando acesso ao item:', {
-      itemName: item.name,
-      itemType: item.type,
-      itemOwner: item.owner?.id,
-      currentUser: user?.id,
-      userRoles: user?.roles,
-      isPublic: item.isPublic,
-      departamentoVisibilidade: item.departamentoVisibilidade,
-      userDepartment
-    });
-    
-    // Se o usuário é admin, pode acessar tudo
-    if (user?.roles?.includes('admin')) {
-      console.log('Usuário é admin - acesso liberado');
-      return true;
-    }
-    
-    // Se é proprietário
-    if (item.owner?.id === user?.id) {
-      console.log('Usuário é proprietário - acesso liberado');
-      return true;
-    }
-    
-    // Se é público
-    if (item.isPublic || (item.departamentoVisibilidade && item.departamentoVisibilidade.includes('TODOS'))) {
-      console.log('Item é público - acesso liberado');
-      return true;
-    }
-    
-    // Se tem visibilidade para o departamento do usuário
-    if (userDepartment && item.departamentoVisibilidade && item.departamentoVisibilidade.includes(userDepartment)) {
-      console.log('Item visível para departamento do usuário - acesso liberado');
-      return true;
-    }
-    
-    console.log('Acesso negado');
-    return false;
-  };
+  // Obter departamento diretamente do user se userDepartment estiver null
+  const currentUserDepartment = userDepartment || user?.departamento || user?.department;
+  
+  console.log('Verificando acesso ao item:', {
+    itemName: item.name,
+    itemType: item.type,
+    itemOwner: item.owner?.id,
+    currentUser: user?.id,
+    userRoles: user?.roles,
+    isPublic: item.isPublic,
+    departamentoVisibilidade: item.departamentoVisibilidade,
+    userDepartment: currentUserDepartment,
+    userObject: user // DEBUG temporário
+  });
+  
+  // Se o usuário é admin, pode acessar tudo
+  if (user?.roles?.includes('admin')) {
+    console.log('Usuário é admin - acesso liberado');
+    return true;
+  }
+  
+  // Se é proprietário
+  if (item.owner?.id === user?.id) {
+    console.log('Usuário é proprietário - acesso liberado');
+    return true;
+  }
+  
+  // CORREÇÃO: Verificar se departamentoVisibilidade contém TODOS
+  if (item.departamentoVisibilidade && item.departamentoVisibilidade.includes('TODOS')) {
+    console.log('Item visível para TODOS - acesso liberado');
+    return true;
+  }
+  
+  // CORREÇÃO: Verificar se contém o departamento do usuário
+  if (currentUserDepartment && item.departamentoVisibilidade && item.departamentoVisibilidade.includes(currentUserDepartment)) {
+    console.log('Item visível para departamento do usuário - acesso liberado');
+    return true;
+  }
+  
+  // Se é público
+  if (item.isPublic) {
+    console.log('Item é público - acesso liberado');
+    return true;
+  }
+  
+  // Se não tem departamentoVisibilidade, permitir acesso
+  if (!item.departamentoVisibilidade || item.departamentoVisibilidade.length === 0) {
+    console.log('Item sem restrições de departamento - acesso liberado');
+    return true;
+  }
+  
+  console.log('Acesso negado');
+  return false;
+};
   
   const updateAvailableDepartments = (fileList: FileItem[]) => {
     const departmentCount: Record<string, number> = {
@@ -240,63 +264,85 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       
       console.log(`Recebidos ${folders.length} pastas e ${filesData.length} arquivos`);
       
-      const mappedFiles: FileItem[] = [
-        // Mapear pastas
-        ...folders.map((folder: any) => ({
-          id: folder._id,
-          name: folder.name,
-          description: folder.description,
-          type: 'folder' as const,
-          modified: new Date(folder.createdAt || folder.updatedAt || Date.now()).toLocaleDateString('pt-BR'),
-          coverImage: folder.coverImage,
-          parentId: folder.parentId,
-          departamentoVisibilidade: folder.departamentoVisibilidade || ['TODOS'],
-          isRestrito: folder.departamentoVisibilidade && folder.departamentoVisibilidade.length > 0 && !folder.departamentoVisibilidade.includes('TODOS'),
-          isPublic: folder.isPublic !== false, // Default true se não especificado
-          owner: {
-            id: folder.owner?._id || folder.owner?.id || folder.owner,
-            name: folder.owner?.nome || folder.owner?.name,
-            nome: folder.owner?.nome,
-            departamento: folder.owner?.departamento
-          }
-        })),
-        
-        // Mapear arquivos e links
-        ...filesData.map((file: any) => ({
-          id: file._id,
-          name: file.name,
-          description: file.description,
-          type: file.type || 'file',
-          size: file.size ? formatFileSize(file.size) : undefined,
-          modified: new Date(file.createdAt || file.updatedAt || Date.now()).toLocaleDateString('pt-BR'),
-          extension: file.extension,
-          mimeType: file.mimeType,
-          linkUrl: file.linkUrl,
-          allowDownload: file.allowDownload !== false, // Default true se não especificado
-          departamentoVisibilidade: file.departamentoVisibilidade || ['TODOS'],
-          isRestrito: file.departamentoVisibilidade && file.departamentoVisibilidade.length > 0 && !file.departamentoVisibilidade.includes('TODOS'),
-          isPublic: file.isPublic !== false, // Default true se não especificado
-          folderId: file.folderId,
-          originalName: file.originalName,
-          owner: {
-            id: file.owner?._id || file.owner?.id || file.owner,
-            name: file.owner?.nome || file.owner?.name,
-            nome: file.owner?.nome,
-            departamento: file.owner?.departamento
-          }
-        }))
-      ];
-      
-      // CORREÇÃO: Para admins, mostrar todos os itens; para outros, filtrar por acesso
-      let accessibleItems = mappedFiles;
-      if (!user?.roles?.includes('admin')) {
-        accessibleItems = mappedFiles.filter(canUserAccessItem);
-      }
-      
-      console.log(`${accessibleItems.length} itens acessíveis para o usuário`);
-      
-      setFiles(accessibleItems);
-      updateAvailableDepartments(accessibleItems);
+      console.log('DEBUG FRONTEND - Resposta da API:', response);
+console.log('DEBUG FRONTEND - Folders recebidas:', folders.length);
+console.log('DEBUG FRONTEND - Files recebidos:', filesData.length);
+
+const mappedFiles: FileItem[] = [
+  // Mapear pastas
+  ...folders.map((folder: any) => ({
+    id: folder._id,
+    name: folder.name,
+    description: folder.description,
+    type: 'folder' as const,
+    modified: new Date(folder.createdAt || folder.updatedAt || Date.now()).toLocaleDateString('pt-BR'),
+    coverImage: folder.coverImage, // URL direta
+    parentId: folder.parentId,
+    departamentoVisibilidade: folder.departamentoVisibilidade || ['TODOS'],
+    isRestrito: folder.departamentoVisibilidade && folder.departamentoVisibilidade.length > 0 && !folder.departamentoVisibilidade.includes('TODOS'),
+    isPublic: folder.isPublic !== false,
+    owner: {
+      id: folder.owner?._id || folder.owner?.id || folder.owner,
+      name: folder.owner?.nome || folder.owner?.name,
+      nome: folder.owner?.nome,
+      departamento: folder.owner?.departamento
+    }
+  })),
+  
+  // Mapear arquivos e links
+  ...filesData.map((file: any) => ({
+    id: file._id,
+    name: file.name,
+    description: file.description,
+    type: file.type || 'file',
+    size: file.size ? formatFileSize(file.size) : undefined,
+    modified: new Date(file.createdAt || file.updatedAt || Date.now()).toLocaleDateString('pt-BR'),
+    extension: file.extension,
+    mimeType: file.mimeType,
+    linkUrl: file.linkUrl,
+    allowDownload: file.allowDownload !== false,
+    departamentoVisibilidade: file.departamentoVisibilidade || ['TODOS'],
+    isRestrito: file.departamentoVisibilidade && file.departamentoVisibilidade.length > 0 && !file.departamentoVisibilidade.includes('TODOS'),
+    isPublic: file.isPublic !== false,
+    folderId: file.folderId,
+    originalName: file.originalName,
+    owner: {
+      id: file.owner?._id || file.owner?.id || file.owner,
+      name: file.owner?.nome || file.owner?.name,
+      nome: file.owner?.nome,
+      departamento: file.owner?.departamento
+    }
+  }))
+];
+
+console.log('DEBUG FRONTEND - Itens mapeados:', mappedFiles.length);
+console.log('DEBUG FRONTEND - User department:', userDepartment);
+console.log('DEBUG FRONTEND - User roles:', user?.roles);
+
+// CORREÇÃO: O backend já filtrou, então usar todos os itens mapeados
+console.log(`${mappedFiles.length} itens recebidos do backend (já filtrados)`);
+
+setFiles(mappedFiles);
+updateAvailableDepartments(mappedFiles);
+	  // Na função loadFiles, após receber a resposta da API:
+console.log('DEBUG FRONTEND - Resposta da API:', response);
+console.log('DEBUG FRONTEND - Folders recebidas:', folders.length);
+console.log('DEBUG FRONTEND - Files recebidos:', filesData.length);
+
+folders.forEach((folder: any, index: number) => {
+  console.log(`DEBUG FRONTEND - Pasta ${index}:`, {
+    id: folder._id,
+    name: folder.name,
+    departamentoVisibilidade: folder.departamentoVisibilidade,
+    isPublic: folder.isPublic,
+    coverImage: folder.coverImage
+  });
+});
+
+console.log('DEBUG FRONTEND - Itens mapeados:', mappedFiles.length);
+console.log('DEBUG FRONTEND - User department:', userDepartment);
+console.log('DEBUG FRONTEND - User roles:', user?.roles);
+	  
     } catch (err: any) {
       console.error('Erro ao carregar arquivos:', err);
       const errorMessage = err.response?.data?.msg || err.message || 'Erro ao carregar arquivos';
@@ -694,53 +740,55 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   // CORREÇÃO: Melhorar preview de arquivos
   const openFilePreview = async (file: FileItem) => {
-    // CORREÇÃO: Para admins, permitir preview de qualquer arquivo
-    if (!user?.roles?.includes('admin') && !canUserAccessItem(file)) {
+  // CORREÇÃO: Para admins, permitir preview de qualquer arquivo
+  if (!user?.roles?.includes('admin') && !canUserAccessItem(file)) {
+    toast({
+      title: "Acesso negado",
+      description: "Você não tem permissão para visualizar este arquivo.",
+      variant: "destructive"
+    });
+    return;
+  }
+  
+  if (file.type === 'link' && file.linkUrl) {
+    window.open(file.linkUrl, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  
+  if (file.type === 'file') {
+    try {
+      const canPreview = file.mimeType && (
+        file.mimeType.startsWith('image/') ||
+        file.mimeType === 'application/pdf' ||
+        file.mimeType.startsWith('text/') ||
+        file.mimeType.startsWith('video/') ||
+        file.mimeType.startsWith('audio/')
+      );
+      
+      // CORREÇÃO: Incluir token na URL de preview
+      const baseUrl = api.getBaseUrl();
+      const token = localStorage.getItem('token');
+      const previewUrl = `${baseUrl}/files/preview/${file.id}`;
+      
+      const preview: FilePreview = {
+        fileId: file.id,
+        fileName: file.name,
+        fileType: file.mimeType || '',
+        previewUrl,
+        canPreview: canPreview || false
+      };
+      
+      setPreviewFile(preview);
+    } catch (error) {
+      console.error('Erro ao abrir preview:', error);
       toast({
-        title: "Acesso negado",
-        description: "Você não tem permissão para visualizar este arquivo.",
+        title: "Erro",
+        description: "Não foi possível abrir a visualização do arquivo",
         variant: "destructive"
       });
-      return;
     }
-    
-    if (file.type === 'link' && file.linkUrl) {
-      window.open(file.linkUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    
-    if (file.type === 'file') {
-      try {
-        const canPreview = file.mimeType && (
-          file.mimeType.startsWith('image/') ||
-          file.mimeType === 'application/pdf' ||
-          file.mimeType.startsWith('text/') ||
-          file.mimeType.startsWith('video/') ||
-          file.mimeType.startsWith('audio/')
-        );
-        
-        const baseUrl = api.getBaseUrl();
-        const previewUrl = `${baseUrl}/files/preview/${file.id}`;
-        
-        const preview: FilePreview = {
-          fileId: file.id,
-          fileName: file.name,
-          fileType: file.mimeType || '',
-          previewUrl,
-          canPreview: canPreview || false
-        };
-        
-        setPreviewFile(preview);
-      } catch (error) {
-        console.error('Erro ao abrir preview:', error);
-        toast({
-          title: "Erro",
-          description: "Não foi possível abrir a visualização do arquivo",
-          variant: "destructive"
-        });
-      }
-    }
-  };
+  }
+};
   
   const closeFilePreview = () => {
     if (previewFile?.previewUrl && previewFile.previewUrl.startsWith('blob:')) {

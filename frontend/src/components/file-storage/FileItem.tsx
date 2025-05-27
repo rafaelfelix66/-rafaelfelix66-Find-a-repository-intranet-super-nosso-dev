@@ -137,16 +137,25 @@ export const FileItemComponent: React.FC<FileItemProps> = ({
   
   // Função para lidar com o clique no item
   const handleItemClick = () => {
-    if (item.type === 'folder') {
-      onItemClick(item);
-    } else if (item.type === 'link') {
-      handleLinkClick();
-    } else if (canPreview() && onItemPreview) {
+  if (item.type === 'folder') {
+    onItemClick(item);
+  } else if (item.type === 'link') {
+    handleLinkClick();
+  } else if (item.type === 'file') {
+    // CORREÇÃO: Sempre permitir preview se possível, senão fazer download
+    if (canPreview() && onItemPreview) {
       onItemPreview(item);
+    } else if (canPreview()) {
+      // Abrir em nova aba se não houver onItemPreview
+      handleOpenInNewTab();
     } else if (onItemDownload && item.allowDownload) {
       onItemDownload(item);
+    } else {
+      // Fallback: tentar abrir em nova aba
+      handleOpenInNewTab();
     }
-  };
+  }
+};
   
   // Renderizar iniciais para o proprietário
   const getOwnerInitials = (): string => {

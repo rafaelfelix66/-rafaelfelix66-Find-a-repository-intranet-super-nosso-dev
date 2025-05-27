@@ -29,40 +29,47 @@ const getFiles = async (req, res) => {
     });
     
     // Definir consultas base
-    let fileQuery = {};
-    let folderQuery = {};
+let fileQuery = {};
+let folderQuery = {};
+
+// Filtrar por pasta atual
+if (folderId) {
+  fileQuery.folderId = folderId;
+  folderQuery.parentId = folderId;
+} else {
+  fileQuery.folderId = null;
+  folderQuery.parentId = null;
+}
+
+console.log('DEBUG - User department:', userDepartment);
+console.log('DEBUG - Is admin:', isAdmin);
+
+// CORREÇÃO: Para admins, não aplicar filtros de acesso
+if (!isAdmin) {
+  // CORREÇÃO: Query correta para MongoDB com arrays
+  const accessConditions = [
+    { owner: req.usuario.id }, // Proprietário
+    { 'sharedWith.user': req.usuario.id }, // Compartilhado diretamente
+    { isPublic: true }, // Público
+    { departamentoVisibilidade: { $in: ['TODOS'] } }, // Array contém TODOS
+    { departamentoVisibilidade: { $in: [userDepartment] } }, // Array contém departamento do usuário
+    { departamentoVisibilidade: { $exists: false } }, // Campo não existe
+    { departamentoVisibilidade: { $eq: [] } } // Array vazio
+  ];
+  
+  fileQuery.$or = accessConditions;
+  folderQuery.$or = accessConditions;
+}
+
+console.log('DEBUG - File query:', JSON.stringify(fileQuery, null, 2));
+console.log('DEBUG - Folder query:', JSON.stringify(folderQuery, null, 2));
     
-    // Filtrar por pasta atual
-    if (folderId) {
-      fileQuery.folderId = folderId;
-      folderQuery.parentId = folderId;
-    } else {
-      fileQuery.folderId = null;
-      folderQuery.parentId = null;
-    }
-    
-    // CORREÇÃO: Para admins, não aplicar filtros de acesso
-    if (!isAdmin) {
-      // Aplicar filtros de acesso e departamento apenas para não-admins
-      const accessFilter = {
-        $or: [
-          { owner: req.usuario.id }, // Proprietário
-          { 'sharedWith.user': req.usuario.id }, // Compartilhado diretamente
-          { isPublic: true }, // Público
-          { departamentoVisibilidade: 'TODOS' }, // Visível para todos
-          { departamentoVisibilidade: userDepartment } // Visível para o departamento
-        ]
-      };
-      
-      fileQuery = { ...fileQuery, ...accessFilter };
-      folderQuery = { ...folderQuery, ...accessFilter };
-    }
-    
-    console.log('Consultas:', {
-      fileQuery: JSON.stringify(fileQuery),
-      folderQuery: JSON.stringify(folderQuery)
-    });
-    
+	// Na função getFiles, após construir as queries:
+console.log('DEBUG - User department:', userDepartment);
+console.log('DEBUG - Is admin:', isAdmin);
+console.log('DEBUG - File query:', JSON.stringify(fileQuery, null, 2));
+console.log('DEBUG - Folder query:', JSON.stringify(folderQuery, null, 2));
+	
     // Buscar arquivos e pastas
     const files = await File.find(fileQuery)
       .populate('owner', ['nome', 'departamento'])
@@ -364,6 +371,15 @@ const getFilePreview = async (req, res) => {
       return res.status(404).json({ msg: 'Arquivo não encontrado' });
     }
     
+    console.log('Arquivo encontrado:', {
+      id: file._id,
+      name: file.name,
+      owner: file.owner,
+      type: file.type,
+      departamentoVisibilidade: file.departamentoVisibilidade,
+      isPublic: file.isPublic
+    });
+    
     // Se for um link, retornar informações do link
     if (file.type === 'link') {
       return res.json({
@@ -374,23 +390,72 @@ const getFilePreview = async (req, res) => {
       });
     }
     
-    // Verificar acesso - CORREÇÃO: Permitir acesso para admins
+    // Buscar dados do usuário
     const user = await User.findById(req.usuario.id);
     const userDepartment = user?.departamento || 'PUBLICO';
     const isAdmin = user?.roles?.includes('admin') || false;
     
-    const hasAccess = 
-      isAdmin || // Admin pode visualizar qualquer arquivo
-      file.owner.toString() === req.usuario.id || 
-      file.isPublic || 
-      file.sharedWith.some(share => share.user.toString() === req.usuario.id) ||
-      file.departamentoVisibilidade.includes('TODOS') ||
-      file.departamentoVisibilidade.includes(userDepartment);
-      
-    if (!hasAccess) {
-      console.log('Acesso negado ao preview');
-      return res.status(401).json({ msg: 'Acesso negado' });
+    console.log('Dados do usuário para preview:', {
+      userId: user._id,
+      userDepartment,
+      isAdmin,
+      userRoles: user.roles
+    });
+    
+    // CORREÇÃO: Lógica simplificada de acesso
+    let hasAccess = false;
+    
+    // Admin pode ver tudo
+    if (isAdmin) {
+      hasAccess = true;
+      console.log('Acesso liberado: usuário é admin');
     }
+    // Proprietário pode ver
+    else if (file.owner.toString() === req.usuario.id) {
+      hasAccess = true;
+      console.log('Acesso liberado: usuário é proprietário');
+    }
+    // Se é público
+    else if (file.isPublic) {
+      hasAccess = true;
+      console.log('Acesso liberado: arquivo é público');
+    }
+    // Se está compartilhado diretamente
+    else if (file.sharedWith && file.sharedWith.some(share => share.user.toString() === req.usuario.id)) {
+      hasAccess = true;
+      console.log('Acesso liberado: arquivo compartilhado');
+    }
+    // Se departamentoVisibilidade contém TODOS
+    else if (file.departamentoVisibilidade && file.departamentoVisibilidade.includes('TODOS')) {
+      hasAccess = true;
+      console.log('Acesso liberado: visível para TODOS');
+    }
+    // Se departamentoVisibilidade contém o departamento do usuário
+    else if (file.departamentoVisibilidade && userDepartment && file.departamentoVisibilidade.includes(userDepartment)) {
+      hasAccess = true;
+      console.log('Acesso liberado: visível para departamento do usuário');
+    }
+    // Se não tem departamentoVisibilidade (sem restrições)
+    else if (!file.departamentoVisibilidade || file.departamentoVisibilidade.length === 0) {
+      hasAccess = true;
+      console.log('Acesso liberado: sem restrições de departamento');
+    }
+    
+    if (!hasAccess) {
+      console.log('ACESSO NEGADO ao preview');
+      console.log('Detalhes:', {
+        fileOwner: file.owner.toString(),
+        requestUserId: req.usuario.id,
+        isOwner: file.owner.toString() === req.usuario.id,
+        isPublic: file.isPublic,
+        fileDepartments: file.departamentoVisibilidade,
+        userDepartment,
+        isAdmin
+      });
+      return res.status(403).json({ msg: 'Acesso negado' });
+    }
+    
+    console.log('ACESSO PERMITIDO ao preview');
     
     // Verificar se o arquivo físico existe
     if (!fs.existsSync(file.path)) {
@@ -398,18 +463,21 @@ const getFilePreview = async (req, res) => {
       return res.status(404).json({ msg: 'Arquivo físico não encontrado' });
     }
     
-    console.log('Preview autorizado');
+    console.log('Preview autorizado, servindo arquivo');
     
     // Lógica de preview baseada no tipo MIME
     const mimeType = file.mimeType.toLowerCase();
     
     if (mimeType.startsWith('image/')) {
       res.setHeader('Content-Type', file.mimeType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
       return fs.createReadStream(file.path).pipe(res);
     }
     
     if (mimeType === 'application/pdf') {
       res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
       return fs.createReadStream(file.path).pipe(res);
     }
     
@@ -436,24 +504,32 @@ const getFilePreview = async (req, res) => {
       } else {
         res.writeHead(200, {
           'Content-Length': fileSize,
-          'Content-Type': file.mimeType
+          'Content-Type': file.mimeType,
+          'Accept-Ranges': 'bytes'
         });
         
         return fs.createReadStream(file.path).pipe(res);
       }
     }
     
+    if (mimeType.startsWith('audio/')) {
+      res.setHeader('Content-Type', file.mimeType);
+      res.setHeader('Accept-Ranges', 'bytes');
+      return fs.createReadStream(file.path).pipe(res);
+    }
+    
     if (mimeType.startsWith('text/') || 
         mimeType === 'application/json' ||
         mimeType === 'application/xml') {
-      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       
       const fileContent = fs.readFileSync(file.path, { encoding: 'utf8', flag: 'r' });
-      const preview = fileContent.substring(0, 10240);
+      const preview = fileContent.substring(0, 10240); // Primeiros 10KB
       
       return res.send(preview);
     }
     
+    // Para outros tipos, retornar informações do arquivo
     return res.json({
       fileName: file.originalName,
       fileType: file.mimeType,

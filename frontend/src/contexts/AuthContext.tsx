@@ -127,6 +127,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             };
             
             setUser(userData);
+			
+			console.log('DEBUG AUTH - Dados completos do usuário:', userData);
+			console.log('DEBUG AUTH - Departamento:', userData?.departamento);
+			console.log('DEBUG AUTH - Todas as propriedades:', Object.keys(userData || {}));
             
             if (userData.id) {
               localStorage.setItem('userId', userData.id);

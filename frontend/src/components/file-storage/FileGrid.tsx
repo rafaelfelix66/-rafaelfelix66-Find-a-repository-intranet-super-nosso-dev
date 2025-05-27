@@ -9,7 +9,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileViewer } from "./FileViewer";
 import { RenameDialog } from "./RenameDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -31,16 +30,16 @@ export const FileGrid = () => {
     downloadFile, 
     deleteItem, 
     isLoading, 
-    error 
+    error,
+    openFilePreview, // ADICIONADO
+    searchQuery // ADICIONADO para corrigir o erro na linha 145
   } = useFiles();
   
-  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
-  const [fileViewerOpen, setFileViewerOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [itemToRename, setItemToRename] = useState<FileItem | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<FileItem | null>(null);
-    // Adicione ícones aos itens antes de renderizá-los
+  
   const itemsWithIcons = useMemo(() => {
     return filteredFiles.map(item => {
       if (!item.icon) {
@@ -55,23 +54,26 @@ export const FileGrid = () => {
   }, [filteredFiles]);
   
   const handleItemClick = (file: FileItem) => {
+    console.log('Clicando no item:', file.name, file.type);
+    
     if (file.type === 'folder') {
       navigateToFolder(file);
+    } else if (file.type === 'link' && file.linkUrl) {
+      window.open(file.linkUrl, '_blank', 'noopener,noreferrer');
     } else {
-      setSelectedFile(file);
-      setFileViewerOpen(true);
+      // Para arquivos, usar a função do contexto
+      openFilePreview(file);
     }
   };
   
   const handleDownload = (file: FileItem, e: React.MouseEvent) => {
-  e.stopPropagation();
-  // Construir o nome completo do arquivo
-  const fileName = file.name;
-  const extension = file.extension;
-  const fullFileName = extension ? `${fileName}.${extension}` : fileName;
-  
-  downloadFile(file.id, fullFileName);
-};
+    e.stopPropagation();
+    const fileName = file.name;
+    const extension = file.extension;
+    const fullFileName = extension ? `${fileName}.${extension}` : fileName;
+    
+    downloadFile(file.id, fullFileName);
+  };
   
   const handleDelete = (id: string) => {
     deleteItem(id);
@@ -90,7 +92,19 @@ export const FileGrid = () => {
     setRenameDialogOpen(true);
   };
   
-  // Renderiza esqueletos de carregamento
+  const getOwnerInitials = (owner: any): string => {
+  if (!owner?.name && !owner?.nome) return 'UN';
+  
+  const name = owner.name || owner.nome;
+  const initials = name.split(' ')
+    .map((part: string) => part.charAt(0))
+    .join('')
+    .toUpperCase()
+    .substring(0, 2);
+    
+  return initials || 'UN';
+};
+  
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -105,7 +119,6 @@ export const FileGrid = () => {
     );
   }
   
-  // Renderiza mensagem de erro
   if (error) {
     return (
       <div className="text-center py-12">
@@ -119,87 +132,117 @@ export const FileGrid = () => {
   
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {itemsWithIcons.length > 0 ? (
-          itemsWithIcons.map((file) => (
-            <div 
-              key={file.id} 
-              className="border relative rounded-lg p-4 hover:border-supernosso-red/70 hover:shadow-sm transition-all cursor-pointer hover-lift"
-              onClick={() => handleItemClick(file)}
-            >
-              <div className="flex flex-col items-center">
-                {file.icon}
-                <div className="mt-2 text-center">
-                  <p className="font-medium line-clamp-1">{file.name}</p>
-                  <p className="text-xs text-gray-500 flex items-center justify-center mt-1">
-                    <Clock className="h-3 w-3 mr-1" />
-                    {file.modified}
-                    {file.size && <span className="ml-2">({file.size})</span>}
-                  </p>
+      <div className="space-y-1">
+      {itemsWithIcons.length > 0 ? (
+        itemsWithIcons.map((file) => (
+          <div 
+            key={file.id} 
+            className="flex items-center p-3 hover:bg-gray-50 rounded-md cursor-pointer border border-transparent hover:border-gray-200 transition-all"
+            onClick={() => handleItemClick(file)}
+          >
+            {/* Ícone ou imagem da pasta */}
+            <div className="flex-shrink-0 mr-4">
+              {file.type === 'folder' && file.coverImage ? (
+                <div className="h-12 w-12 rounded overflow-hidden">
+                  <img 
+                    src={file.coverImage} 
+                    alt={`Capa de ${file.name}`}
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      // Fallback para ícone se a imagem falhar
+                      const img = e.target as HTMLImageElement;
+                      const parent = img.parentElement;
+                      if (parent) {
+                        parent.innerHTML = '<div class="h-12 w-12 flex items-center justify-center text-blue-500"><svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg></div>';
+                      }
+                    }}
+                  />
                 </div>
-              </div>
-              
-              <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {file.type === 'file' && (
-                      <DropdownMenuItem onClick={(e) => handleDownload(file, e)}>
-                        <Download className="h-4 w-4 mr-2" />
-                        Baixar
-                      </DropdownMenuItem>
+              ) : (
+                <div className="h-12 w-12 flex items-center justify-center">
+                  {file.icon}
+                </div>
+              )}
+            </div>
+            
+            {/* Informações do arquivo/pasta */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900 truncate">{file.name}</p>
+                  {file.description && (
+                    <p className="text-sm text-gray-600 truncate">{file.description}</p>
+                  )}
+                  <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                    {file.type === 'file' && file.size && (
+                      <span>{file.size}</span>
                     )}
-                    <DropdownMenuItem onClick={(e) => handleRename(file, e)}>
-                      <Pencil className="h-4 w-4 mr-2" />
-                      Renomear
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      className="text-red-500" 
-                      onClick={(e) => openDeleteDialog(file, e)}
-                    >
-                      <Trash className="h-4 w-4 mr-2" />
-                      Excluir
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    <span>•</span>
+                    <span>{file.modified}</span>
+                  </div>
+                </div>
+                
+                {/* Badge do proprietário */}
+                {file.owner && (
+				  <div className="ml-4 flex items-center">
+					<div 
+					  className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-600 cursor-help"
+					  title={file.owner.name || file.owner.nome || 'Proprietário'}
+					>
+					  {getOwnerInitials(file.owner)}
+					</div>
+				  </div>
+				)}
               </div>
             </div>
-          ))
-        ) : (
-          <div className="col-span-full text-center py-12">
-            <div className="h-12 w-12 text-gray-300 mx-auto mb-3">
-              {/* Placeholder para o ícone */}
-              {itemsWithIcons.length === 0 && <span className="text-3xl">📁</span>}
+            
+            {/* Menu de ações */}
+            <div className="ml-4" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {file.type === 'file' && (
+                    <DropdownMenuItem onClick={(e) => handleDownload(file, e)}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Baixar
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={(e) => handleRename(file, e)}>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Renomear
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-red-500" 
+                    onClick={(e) => openDeleteDialog(file, e)}
+                  >
+                    <Trash className="h-4 w-4 mr-2" />
+                    Excluir
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <h3 className="text-lg font-medium">Nenhum arquivo encontrado</h3>
-            <p className="text-sm text-gray-500">
-              {useFiles().searchQuery 
-                ? `Não encontramos resultados para "${useFiles().searchQuery}"`
-                : "Esta pasta está vazia. Comece enviando arquivos ou criando pastas."}
-            </p>
           </div>
-        )}
-      </div>
+        ))
+      ) : (
+        <div className="text-center py-12">
+          <div className="h-12 w-12 text-gray-300 mx-auto mb-3">
+            <span className="text-3xl">📁</span>
+          </div>
+          <h3 className="text-lg font-medium">Nenhum arquivo encontrado</h3>
+          <p className="text-sm text-gray-500">
+            {searchQuery 
+              ? `Não encontramos resultados para "${searchQuery}"`
+              : "Esta pasta está vazia. Comece enviando arquivos ou criando pastas."}
+          </p>
+        </div>
+      )}
+    </div>
       
-      {selectedFile && (
-	  <FileViewer 
-		 file={selectedFile} 
-		 isOpen={fileViewerOpen} 
-		 onOpenChange={setFileViewerOpen}
-		 onDownload={() => {
-		  // Construir o nome completo do arquivo
-		  const fileName = selectedFile.name;
-		  const extension = selectedFile.extension;
-		  const fullFileName = extension ? `${fileName}.${extension}` : fileName;
-		  
-		  downloadFile(selectedFile.id, fullFileName);
-		}}
-	  />
-)}
+      {/* REMOVIDO o FileViewer daqui - será tratado pelo FileViewerWrapper */}
       
       {itemToRename && (
         <RenameDialog 
