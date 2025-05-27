@@ -61,7 +61,8 @@ export const usePermission = (): UsePermissionResult => {
 							  'timeline:like_comment',
 							  'timeline:react',
 							  'useful_links:view',
-							  'jobs:view'];
+							  'jobs:view',
+							  'courses:view'];
     if (basicPermissions.includes(permission)) {
       // console.log(`Permissão básica '${permission}' concedida a todos`);
       return true;

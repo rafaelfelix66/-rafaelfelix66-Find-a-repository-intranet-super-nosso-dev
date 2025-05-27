@@ -243,7 +243,41 @@ const AVAILABLE_PERMISSIONS = {
   'jobs:create': 'Criar vagas',
   'jobs:edit': 'Editar vagas',
   'jobs:delete': 'Excluir vagas',
-  'jobs:manage': 'Gerenciar todas as vagas (incluindo reordenação e visualização de inativas)'
+  'jobs:manage': 'Gerenciar todas as vagas (incluindo reordenação e visualização de inativas)',
+  
+   // Visualização de Cursos
+  'courses:view': 'Visualizar cursos disponíveis',
+  'courses:view_all': 'Visualizar todos os cursos (incluindo de outros departamentos)',
+  
+  // Criação e Edição de Cursos
+  'courses:create': 'Criar novos cursos',
+  'courses:edit_own': 'Editar próprios cursos',
+  'courses:edit_any': 'Editar qualquer curso',
+  'courses:delete_own': 'Excluir próprios cursos',
+  'courses:delete_any': 'Excluir qualquer curso',
+  
+  // Gerenciamento de Aulas
+  'courses:manage_lessons': 'Adicionar, editar e excluir aulas',
+  'courses:manage_materials': 'Gerenciar materiais das aulas',
+  
+  // Matrículas e Progresso
+  'courses:enroll': 'Matricular-se em cursos',
+  'courses:view_progress': 'Visualizar próprio progresso',
+  'courses:view_all_progress': 'Visualizar progresso de todos os usuários',
+  'courses:manage_enrollments': 'Gerenciar matrículas de usuários',
+  
+  // Certificados
+  'courses:issue_certificates': 'Emitir certificados de conclusão',
+  'courses:view_certificates': 'Visualizar certificados emitidos',
+  
+  // Relatórios e Analytics
+  'courses:view_analytics': 'Visualizar estatísticas e relatórios de cursos',
+  'courses:export_data': 'Exportar dados de cursos e progresso',
+  
+  // Administração
+  'courses:admin': 'Administração completa do sistema de cursos',
+  'courses:manage_categories': 'Gerenciar categorias de cursos',
+  'courses:moderate_content': 'Moderar conteúdo de cursos'
 };
 
 // Função para verificar se uma permissão existe

@@ -30,6 +30,7 @@ import SuperCoinsAdmin from "./pages/SuperCoinsAdmin";
 import Institutional from "./pages/Institutional";
 import UsefulLinksPage from "./pages/UsefulLinksPage";
 import JobPositions from "./pages/JobPositions";
+import Learning from "./pages/Learning";
 
 // Update Tailwind CSS variables to include the new red color
 import { useEffect } from "react";
@@ -227,6 +228,14 @@ const App = () => {
 					</PrivateRoute>
 				  } 
 				/>
+			 <Route 
+				 path="/aprendizagem" 
+				 element={
+				<PrivateRoute requiredPermission="courses:view">
+				  <Learning />
+				</PrivateRoute>
+				  }
+			    />	
 				
               
               {/* Rota para página não encontrada */}

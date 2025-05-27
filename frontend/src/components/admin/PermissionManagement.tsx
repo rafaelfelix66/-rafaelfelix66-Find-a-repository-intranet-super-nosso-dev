@@ -209,6 +209,30 @@ export function PermissionManagement() {
 		{ key: 'jobs:manage', description: 'Gerenciar todas as vagas' },
 	  ],
 	},
+		{
+	  name: 'Cursos',
+	  key: 'courses',
+	  permissions: [
+		{ key: 'courses:view', description: 'Visualizar cursos disponíveis' },
+		{ key: 'courses:view_all', description: 'Visualizar todos os cursos (incluindo de outros departamentos)' },
+		{ key: 'courses:enroll', description: 'Matricular-se em cursos' },
+		{ key: 'courses:create', description: 'Criar novos cursos' },
+		{ key: 'courses:edit_any', description: 'Editar qualquer curso' },
+		{ key: 'courses:delete_any', description: 'Excluir qualquer curso' },
+		{ key: 'courses:manage_lessons', description: 'Adicionar, editar e excluir aulas' },
+		{ key: 'courses:manage_materials', description: 'Gerenciar materiais das aulas' },
+		{ key: 'courses:view_progress', description: 'Visualizar próprio progresso' },
+		{ key: 'courses:view_all_progress', description: 'Visualizar progresso de todos os usuários' },
+		{ key: 'courses:manage_enrollments', description: 'Gerenciar matrículas de usuários' },
+		{ key: 'courses:view_certificates', description: 'Visualizar certificados emitidos' },
+		{ key: 'courses:issue_certificates', description: 'Emitir certificados de conclusão' },
+		{ key: 'courses:view_analytics', description: 'Visualizar estatísticas e relatórios de cursos' },
+		{ key: 'courses:export_data', description: 'Exportar dados de cursos e progresso' },
+		{ key: 'courses:admin', description: 'Administração completa do sistema de cursos' },
+		{ key: 'courses:manage_categories', description: 'Gerenciar categorias de cursos' },
+		{ key: 'courses:moderate_content', description: 'Moderar conteúdo de cursos' },			
+	  ],
+	},
 ];
 
   // Recuperar todos os permissões como lista plana

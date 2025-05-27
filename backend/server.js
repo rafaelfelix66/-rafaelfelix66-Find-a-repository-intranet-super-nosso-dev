@@ -18,6 +18,8 @@ const { scheduleSuperCoinsRecharge } = require('./jobs/superCoinsRechargeJob');
 const { User, File, Message, Chat, Folder } = require('./models');
 const InstitutionalArea = require('./models/InstitutionalArea');
 const JobPosition = require('./models/JobPosition');
+const Course = require('./models/Course');
+const CourseProgress = require('./models/CourseProgress');
 
 // Configuração do app
 const app = express();
@@ -235,6 +237,7 @@ app.use('/uploads/folders', express.static(path.join(__dirname, 'uploads/folders
 app.use('/uploads/emojis', express.static(path.join(__dirname, 'uploads/emojis')));
 app.use('/uploads/institutional', express.static(path.join(__dirname, 'uploads/institutional')));
 app.use('/uploads/job-positions', express.static(path.join(__dirname, 'uploads/job-positions')));
+app.use('/uploads/courses', express.static(path.join(__dirname, 'uploads/courses')));
 
 // Rota de diagnóstico para verificar arquivos
 app.get('/api/check-file', (req, res) => {
@@ -408,6 +411,7 @@ app.use('/api/engagement', engagementRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/useful-links', require('./routes/usefulLinks'));
 app.use('/api/job-positions', require('./routes/job-positions'));
+app.use('/api/courses', require('./routes/courses'));
 
 
 

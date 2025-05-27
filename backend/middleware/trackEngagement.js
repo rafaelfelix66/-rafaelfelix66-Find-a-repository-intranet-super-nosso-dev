@@ -200,10 +200,73 @@ const trackBannerClick = async (req, res, next) => {
   next();
 };
 
+// Middleware para rastrear visualizações de aulas
+const trackLessonView = async (req, res, next) => {
+  const originalSend = res.send;
+  
+  res.send = function(data) {
+    if (this.statusCode >= 200 && this.statusCode < 300) {
+      const userId = req.usuario?.id;
+      const courseId = req.params.courseId;
+      const lessonId = req.params.lessonId;
+      
+      if (userId && courseId && lessonId) {
+        trackEngagement(
+          userId,
+          'lesson_view',
+          lessonId,
+          'Lesson',
+          null,
+          { courseId }
+        ).catch(err => {
+          console.error('Erro ao registrar visualização de aula:', err);
+        });
+      }
+    }
+    
+    return originalSend.apply(this, arguments);
+  };
+  
+  next();
+};
+
+// Middleware para rastrear conclusão de aulas
+const trackLessonCompletion = async (req, res, next) => {
+  const originalSend = res.send;
+  
+  res.send = function(data) {
+    if (this.statusCode >= 200 && this.statusCode < 300) {
+      const userId = req.usuario?.id;
+      const courseId = req.params.courseId;
+      const lessonId = req.params.lessonId;
+      const { completed } = req.body;
+      
+      if (userId && courseId && lessonId && completed) {
+        trackEngagement(
+          userId,
+          'lesson_complete',
+          lessonId,
+          'Lesson',
+          null,
+          { courseId }
+        ).catch(err => {
+          console.error('Erro ao registrar conclusão de aula:', err);
+        });
+      }
+    }
+    
+    return originalSend.apply(this, arguments);
+  };
+  
+  next();
+};
+
 module.exports = {
   trackView,
   trackInteraction,
   trackLogin,
   trackBannerView,
-  trackBannerClick
+  trackBannerClick,
+  trackLessonView,
+  trackLessonCompletion
 };

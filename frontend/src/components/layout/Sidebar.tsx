@@ -18,7 +18,8 @@ import {
   User,
   Building2,
   Link2,
-  Briefcase  
+  Briefcase,
+  GraduationCap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -190,6 +191,13 @@ export function Sidebar() {
             active={getActivePath("/base-conhecimento")} 
             isOpen={isOpen}
           />
+		  <SidebarItem 
+			icon={GraduationCap} 
+			to="/aprendizagem" 
+			label="Treinamentos" 
+			active={getActivePath("/aprendizagem")} 
+			isOpen={isOpen}
+		  />
 		  {hasPermission('roles:manage') && (
           <SidebarItem 
             icon={MessageSquare} 
