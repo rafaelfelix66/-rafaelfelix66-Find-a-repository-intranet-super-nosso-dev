@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   BookOpen, 
   Play, 
@@ -10,10 +10,7 @@ import {
   Clock, 
   Users, 
   Star,
-  ChevronRight,
-  ChevronDown,
   Search,
-  Filter,
   Grid,
   List,
   Pause,
@@ -22,23 +19,16 @@ import {
   Maximize,
   ArrowLeft,
   Plus,
-  Edit3,
-  Trash2,
   Upload,
   X,
-  Save,
   PlayCircle,
-  Award,
-  Target
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Separator } from '@/components/ui/separator';
 import { Layout } from '@/components/layout/Layout';
 import { 
   Dialog,
@@ -49,11 +39,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-// Simulando o componente DepartamentoSelector
-const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel = true, compact = false }) => {
+// Importar os componentes de diálogo separados
+import CreateCourseDialog from './CreateCourseDialog';
+import CreateLessonDialog from './CreateLessonDialog';
+
+// Simulando o componente DepartamentoSelector para filtros
+const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel = true }) => {
   const [selectedDepartments, setSelectedDepartments] = useState(initialSelected);
   
   const departamentos = [
@@ -80,6 +73,12 @@ const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel
     onChange(newSelected);
   };
 
+  const handleToggleAll = () => {
+    const newSelected = ['TODOS'];
+    setSelectedDepartments(newSelected);
+    onChange(newSelected);
+  };
+
   return (
     <div className="space-y-2">
       {showLabel && <Label>Departamentos</Label>}
@@ -88,7 +87,7 @@ const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel
           <input
             type="checkbox"
             checked={selectedDepartments.includes('TODOS')}
-            onChange={() => onChange(['TODOS'])}
+            onChange={handleToggleAll}
           />
           <span className="text-sm">Todos</span>
         </label>
@@ -107,7 +106,9 @@ const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel
   );
 };
 
-// Dados de exemplo
+// Dados de exemplo com departamento do usuário simulado
+const userDepartment = 'OPERACIONAL'; // Simula departamento do usuário logado
+
 const mockCourses = [
   {
     id: 1,
@@ -129,9 +130,10 @@ const mockCourses = [
         type: "video",
         duration: "15 min",
         completed: true,
+        videoUrl: "https://youtube.com/watch?v=example1",
         materials: [
-          { type: "pdf", name: "Manual de Vendas.pdf", size: "2.5 MB" },
-          { type: "link", name: "Artigo Complementar", url: "#" }
+          { id: 1, type: "pdf", name: "Manual de Vendas.pdf", size: "2.5 MB", url: "/uploads/manual.pdf" },
+          { id: 2, type: "link", name: "Artigo Complementar", url: "https://example.com/artigo" }
         ]
       },
       {
@@ -140,9 +142,10 @@ const mockCourses = [
         type: "video",
         duration: "22 min",
         completed: true,
+        videoUrl: "/uploads/videos/abordagem.mp4",
         materials: [
-          { type: "video", name: "Demonstração Prática.mp4", size: "15 MB" },
-          { type: "document", name: "Checklist de Abordagem.docx", size: "1.2 MB" }
+          { id: 3, type: "video", name: "Demonstração Prática.mp4", size: "15 MB", url: "/uploads/demo.mp4" },
+          { id: 4, type: "document", name: "Checklist de Abordagem.docx", size: "1.2 MB", url: "/uploads/checklist.docx" }
         ]
       },
       {
@@ -151,9 +154,10 @@ const mockCourses = [
         type: "video",
         duration: "18 min",
         completed: false,
+        videoUrl: "https://youtube.com/watch?v=example3",
         materials: [
-          { type: "pdf", name: "Estratégias de Fechamento.pdf", size: "3.1 MB" },
-          { type: "image", name: "Infográfico Vendas.png", size: "800 KB" }
+          { id: 5, type: "pdf", name: "Estratégias de Fechamento.pdf", size: "3.1 MB", url: "/uploads/estrategias.pdf" },
+          { id: 6, type: "image", name: "Infográfico Vendas.png", size: "800 KB", url: "/uploads/infografico.png" }
         ]
       }
     ]
@@ -178,8 +182,9 @@ const mockCourses = [
         type: "video",
         duration: "20 min",
         completed: true,
+        videoUrl: "https://youtube.com/watch?v=atendimento1",
         materials: [
-          { type: "pdf", name: "Manual de Atendimento.pdf", size: "4.2 MB" }
+          { id: 7, type: "pdf", name: "Manual de Atendimento.pdf", size: "4.2 MB", url: "/uploads/manual-atendimento.pdf" }
         ]
       },
       {
@@ -188,38 +193,27 @@ const mockCourses = [
         type: "video",
         duration: "25 min",
         completed: false,
+        videoUrl: "/uploads/videos/comunicacao.mp4",
         materials: [
-          { type: "video", name: "Exemplos de Comunicação.mp4", size: "20 MB" }
+          { id: 8, type: "video", name: "Exemplos de Comunicação.mp4", size: "20 MB", url: "/uploads/exemplos.mp4" }
         ]
       }
     ]
   },
   {
     id: 3,
-    title: "Segurança do Trabalho",
-    description: "Normas e práticas de segurança no ambiente de trabalho",
+    title: "Segurança Específica",
+    description: "Normas específicas para departamento de liderança",
     instructor: "Ana Costa",
-    duration: "12 horas",
-    students: 89,
+    duration: "4 horas",
+    students: 25,
     rating: 4.7,
     progress: 0,
     thumbnail: "https://images.unsplash.com/photo-1530497610245-94d3c16cda28?w=400",
     category: "Segurança",
-    level: "Obrigatório",
-    departamentoVisibilidade: ['TODOS'],
-    lessons: [
-      {
-        id: 1,
-        title: "Introdução à Segurança",
-        type: "video",
-        duration: "30 min",
-        completed: false,
-        materials: [
-          { type: "pdf", name: "Manual de Segurança.pdf", size: "5.8 MB" },
-          { type: "link", name: "Normas Regulamentadoras", url: "#" }
-        ]
-      }
-    ]
+    level: "Específico",
+    departamentoVisibilidade: ['LIDERANÇA'], // Este curso não aparecerá para usuário OPERACIONAL
+    lessons: []
   }
 ];
 
@@ -228,8 +222,6 @@ const EADPage = () => {
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [departmentFilter, setDepartmentFilter] = useState(['TODOS']);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(300);
@@ -237,39 +229,125 @@ const EADPage = () => {
   // Estados para criação de curso
   const [showCreateCourse, setShowCreateCourse] = useState(false);
   const [showCreateLesson, setShowCreateLesson] = useState(false);
+  const [showAddMaterial, setShowAddMaterial] = useState(false);
+  
+  // Estados do formulário usando useCallback para evitar re-renderizações
   const [courseForm, setCourseForm] = useState({
     title: '',
     description: '',
     category: '',
     level: 'Iniciante',
     estimatedDuration: '',
-    objectives: [],
-    requirements: [],
     departamentoVisibilidade: ['TODOS'],
     allowDownload: true,
     certificateEnabled: false,
     passingScore: 70,
-    tags: []
+    thumbnail: null
   });
   
   const [lessonForm, setLessonForm] = useState({
     title: '',
     description: '',
     type: 'video',
-    content: '',
     videoUrl: '',
+    videoFile: null,
     duration: '',
+    thumbnail: null,
     materials: []
   });
 
+  const [materialForm, setMaterialForm] = useState({
+    name: '',
+    type: 'pdf',
+    file: null,
+    url: ''
+  });
+
+  // Filtrar cursos baseado no departamento do usuário e busca
   const filteredCourses = mockCourses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          course.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || course.category.toLowerCase() === categoryFilter.toLowerCase();
-    const matchesDepartment = departmentFilter.includes('TODOS') || 
-                             departmentFilter.some(dept => course.departamentoVisibilidade?.includes(dept));
-    return matchesSearch && matchesCategory && matchesDepartment;
+    const matchesDepartment = course.departamentoVisibilidade.includes('TODOS') || 
+                             course.departamentoVisibilidade.includes(userDepartment);
+    return matchesSearch && matchesDepartment;
   });
+
+  // Handlers usando useCallback para otimizar performance
+  const handleSearchChange = useCallback((e) => {
+    setSearchTerm(e.target.value);
+  }, []);
+
+  const handleCreateCourse = useCallback(() => {
+    console.log('Criando curso:', courseForm);
+    setShowCreateCourse(false);
+    setCourseForm({
+      title: '',
+      description: '',
+      category: '',
+      level: 'Iniciante',
+      estimatedDuration: '',
+      departamentoVisibilidade: ['TODOS'],
+      allowDownload: true,
+      certificateEnabled: false,
+      passingScore: 70,
+      thumbnail: null
+    });
+  }, [courseForm]);
+
+  const handleCreateLesson = useCallback(() => {
+    console.log('Criando aula:', lessonForm);
+    setShowCreateLesson(false);
+    setLessonForm({
+      title: '',
+      description: '',
+      type: 'video',
+      videoUrl: '',
+      videoFile: null,
+      duration: '',
+      thumbnail: null,
+      materials: []
+    });
+  }, [lessonForm]);
+
+  const handleAddMaterial = useCallback(() => {
+    if (materialForm.name && (materialForm.file || materialForm.url)) {
+      const newMaterial = {
+        id: Date.now(),
+        name: materialForm.name,
+        type: materialForm.type,
+        file: materialForm.file,
+        url: materialForm.url,
+        size: materialForm.file ? `${(materialForm.file.size / 1024 / 1024).toFixed(1)} MB` : null
+      };
+      
+      if (selectedLesson) {
+        // Adicionar material à aula atual
+        const updatedLesson = {
+          ...selectedLesson,
+          materials: [...(selectedLesson.materials || []), newMaterial]
+        };
+        setSelectedLesson(updatedLesson);
+      }
+      
+      setMaterialForm({
+        name: '',
+        type: 'pdf',
+        file: null,
+        url: ''
+      });
+      setShowAddMaterial(false);
+    }
+  }, [materialForm, selectedLesson]);
+
+  const handleRemoveMaterial = useCallback((materialId) => {
+    if (selectedLesson) {
+      const updatedLesson = {
+        ...selectedLesson,
+        materials: selectedLesson.materials.filter(m => m.id !== materialId)
+      };
+      setSelectedLesson(updatedLesson);
+    }
+  }, [selectedLesson]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -288,51 +366,6 @@ const EADPage = () => {
     }
   };
 
-  // Handlers
-  const handleCreateCourse = () => {
-    console.log('Criando curso:', courseForm);
-    setShowCreateCourse(false);
-    setCourseForm({
-      title: '',
-      description: '',
-      category: '',
-      level: 'Iniciante',
-      estimatedDuration: '',
-      objectives: [],
-      requirements: [],
-      departamentoVisibilidade: ['TODOS'],
-      allowDownload: true,
-      certificateEnabled: false,
-      passingScore: 70,
-      tags: []
-    });
-  };
-
-  const handleCreateLesson = () => {
-    console.log('Criando aula:', lessonForm);
-    setShowCreateLesson(false);
-    setLessonForm({
-      title: '',
-      description: '',
-      type: 'video',
-      content: '',
-      videoUrl: '',
-      duration: '',
-      materials: []
-    });
-  };
-
-  const handleDepartmentChange = (departments) => {
-    setDepartmentFilter(departments);
-  };
-
-  const handleCourseDepartmentChange = (departments) => {
-    setCourseForm(prev => ({
-      ...prev,
-      departamentoVisibilidade: departments
-    }));
-  };
-
   // Vista do Player de Vídeo/Conteúdo
   const ContentPlayer = () => (
     <div className="bg-black rounded-lg overflow-hidden">
@@ -345,6 +378,11 @@ const EADPage = () => {
           <p className="text-gray-300 mt-2">
             {selectedLesson?.duration || 'Duração não disponível'}
           </p>
+          {selectedLesson?.videoUrl && (
+            <p className="text-gray-400 text-sm mt-2">
+              {selectedLesson.videoUrl.startsWith('http') ? 'Vídeo externo' : 'Vídeo local'}
+            </p>
+          )}
         </div>
       </div>
       
@@ -421,17 +459,12 @@ const EADPage = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="materials">
-                  <TabsList>
-                    <TabsTrigger value="materials">Materiais</TabsTrigger>
-                    <TabsTrigger value="notes">Anotações</TabsTrigger>
-                    <TabsTrigger value="discussion">Discussão</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="materials" className="mt-4">
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-3">Materiais da Aula</h4>
                     <div className="space-y-3">
-                      {selectedLesson.materials?.map((material, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                      {selectedLesson.materials?.map((material) => (
+                        <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
                           <div className="flex items-center gap-3">
                             {getFileIcon(material.type)}
                             <div>
@@ -441,41 +474,33 @@ const EADPage = () => {
                               )}
                             </div>
                           </div>
-                          <Button variant="ghost" size="sm">
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="sm">
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleRemoveMaterial(material.id)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                       
-                      <Button variant="outline" className="w-full">
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => setShowAddMaterial(true)}
+                      >
                         <Plus className="h-4 w-4 mr-2" />
                         Adicionar Material
                       </Button>
                     </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="notes" className="mt-4">
-                    <div className="space-y-4">
-                      <div className="border rounded-lg p-4">
-                        <p className="text-sm text-gray-500 mb-2">Suas anotações para esta aula:</p>
-                        <textarea 
-                          className="w-full h-32 p-3 border rounded-md resize-none"
-                          placeholder="Adicione suas anotações aqui..."
-                        />
-                      </div>
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="discussion" className="mt-4">
-                    <div className="space-y-4">
-                      <div className="text-center py-8 text-gray-500">
-                        <Users className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                        <p>Sem discussões ainda</p>
-                        <p className="text-sm">Seja o primeiro a iniciar uma discussão!</p>
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -487,38 +512,17 @@ const EADPage = () => {
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">{selectedCourse.title}</CardTitle>
-              <div className="flex items-center gap-4 text-sm text-gray-500">
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  {selectedCourse.duration}
-                </div>
-                <div className="flex items-center gap-1">
-                  <Users className="h-4 w-4" />
-                  {selectedCourse.students} alunos
-                </div>
-                <div className="flex items-center gap-1">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  {selectedCourse.rating}
-                </div>
-              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Progresso do Curso</span>
-                    <span>{selectedCourse.progress}%</span>
+                <div className="flex items-center gap-4 text-sm text-gray-500">
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-4 w-4" />
+                    {selectedCourse.duration}
                   </div>
-                  <Progress value={selectedCourse.progress} className="h-2" />
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback>{selectedCourse.instructor[0]}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">{selectedCourse.instructor}</p>
-                    <p className="text-xs text-gray-500">Instrutor</p>
+                  <div className="flex items-center gap-1">
+                    <Users className="h-4 w-4" />
+                    {selectedCourse.students} alunos
                   </div>
                 </div>
               </div>
@@ -605,7 +609,7 @@ const EADPage = () => {
         </div>
       </div>
 
-      {/* Filtros e Busca */}
+      {/* Busca e Filtros */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
@@ -616,23 +620,12 @@ const EADPage = () => {
                   placeholder="Buscar cursos..." 
                   className="pl-10"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={handleSearchChange}
                 />
               </div>
             </div>
             
             <div className="flex gap-2">
-              <select 
-                className="px-3 py-2 border rounded-md"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-              >
-                <option value="all">Todas as Categorias</option>
-                <option value="vendas">Vendas</option>
-                <option value="atendimento">Atendimento</option>
-                <option value="segurança">Segurança</option>
-              </select>
-              
               <div className="flex border rounded-md">
                 <Button
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
@@ -652,16 +645,6 @@ const EADPage = () => {
                 </Button>
               </div>
             </div>
-          </div>
-          
-          {/* Filtro de Departamento */}
-          <div className="mt-4 pt-4 border-t">
-            <DepartamentoSelector 
-              onChange={handleDepartmentChange}
-              initialSelected={departmentFilter}
-              showLabel={true}
-              compact={true}
-            />
           </div>
         </CardContent>
       </Card>
@@ -720,21 +703,10 @@ const EADPage = () => {
                         <Users className="h-4 w-4" />
                         {course.students}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Star className="h-4 w-4 text-yellow-500" />
-                        {course.rating}
-                      </div>
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            {course.instructor.split(' ').map(n => n[0]).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm text-gray-600">{course.instructor}</span>
-                      </div>
+                      <span className="text-sm text-gray-600">{course.instructor}</span>
                       
                       {course.progress > 0 && (
                         <Badge variant="outline" className="text-xs">
@@ -767,16 +739,12 @@ const EADPage = () => {
                     
                     <div className="flex items-center gap-4 text-sm text-gray-500">
                       <span className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        {course.duration}
+                      </span>
+                      <span className="flex items-center gap-1">
                         <Users className="h-4 w-4" />
                         {course.students}
-                      </span>
-					  <span className="flex items-center gap-1">
-						  <Clock className="h-4 w-4" />
-						  {course.duration}
-						</span>
-                      <span className="flex items-center gap-1">
-                        <Star className="h-4 w-4 text-yellow-500" />
-                        {course.rating}
                       </span>
                       <span>{course.instructor}</span>
                     </div>
@@ -812,292 +780,150 @@ const EADPage = () => {
     </div>
   );
 
-  // Diálogo de Criação de Curso
-  const CreateCourseDialog = React.memo(() => (
-    <Dialog open={showCreateCourse} onOpenChange={setShowCreateCourse}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+  // Diálogo de Adicionar Material
+  const AddMaterialDialog = () => (
+    <Dialog open={showAddMaterial} onOpenChange={setShowAddMaterial}>
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
-          <DialogTitle>Criar Novo Curso</DialogTitle>
+          <DialogTitle>Adicionar Material</DialogTitle>
           <DialogDescription>
-            Preencha as informações básicas do curso. Você poderá adicionar aulas depois.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="space-y-4 py-4">
-          {/* Informações Básicas */}
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="course-title">Título do Curso *</Label>
-              <Input
-                id="course-title"
-                value={courseForm.title}
-                onChange={(e) => setCourseForm(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="Ex: Fundamentos de Vendas"
-                className="mt-1"
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="course-description">Descrição *</Label>
-              <Textarea
-                id="course-description"
-                value={courseForm.description}
-                onChange={(e) => setCourseForm(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Descreva o que os alunos aprenderão neste curso..."
-                className="mt-1"
-                rows={3}
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="course-category">Categoria *</Label>
-                <Input
-                  id="course-category"
-                  value={courseForm.category}
-                  onChange={(e) => setCourseForm(prev => ({ ...prev, category: e.target.value }))}
-                  placeholder="Ex: Vendas, Atendimento, Segurança"
-                  className="mt-1"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="course-level">Nível</Label>
-                <Select value={courseForm.level} onValueChange={(value) => setCourseForm(prev => ({ ...prev, level: value }))}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Iniciante">Iniciante</SelectItem>
-                    <SelectItem value="Intermediário">Intermediário</SelectItem>
-                    <SelectItem value="Avançado">Avançado</SelectItem>
-                    <SelectItem value="Obrigatório">Obrigatório</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="course-duration">Duração Estimada</Label>
-              <Input
-                id="course-duration"
-                value={courseForm.estimatedDuration}
-                onChange={(e) => setCourseForm(prev => ({ ...prev, estimatedDuration: e.target.value }))}
-                placeholder="Ex: 8 horas, 2 dias"
-                className="mt-1"
-              />
-            </div>
-          </div>
-          
-          {/* Visibilidade por Departamento */}
-          <div className="space-y-3">
-            <Label>Visibilidade por Departamento</Label>
-            <Card className="border-gray-200">
-              <CardContent className="pt-4">
-                <DepartamentoSelector 
-                  onChange={handleCourseDepartmentChange}
-                  initialSelected={courseForm.departamentoVisibilidade}
-                  showLabel={false}
-                  compact={false}
-                />
-              </CardContent>
-            </Card>
-          </div>
-          
-          {/* Configurações Avançadas */}
-          <div className="space-y-4">
-            <h4 className="font-medium">Configurações do Curso</h4>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="allow-download"
-                  checked={courseForm.allowDownload}
-                  onChange={(e) => setCourseForm(prev => ({ ...prev, allowDownload: e.target.checked }))}
-                />
-                <Label htmlFor="allow-download" className="text-sm">
-                  Permitir download de materiais
-                </Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="certificate-enabled"
-                  checked={courseForm.certificateEnabled}
-                  onChange={(e) => setCourseForm(prev => ({ ...prev, certificateEnabled: e.target.checked }))}
-                />
-                <Label htmlFor="certificate-enabled" className="text-sm">
-                  Emitir certificado de conclusão
-                </Label>
-              </div>
-            </div>
-            
-            {courseForm.certificateEnabled && (
-              <div>
-                <Label htmlFor="passing-score">Nota Mínima para Aprovação (%)</Label>
-                <Input
-                  id="passing-score"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={courseForm.passingScore}
-                  onChange={(e) => setCourseForm(prev => ({ ...prev, passingScore: parseInt(e.target.value) }))}
-                  className="mt-1"
-                />
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setShowCreateCourse(false)}>
-            Cancelar
-          </Button>
-          <Button 
-            onClick={handleCreateCourse}
-            disabled={!courseForm.title || !courseForm.description || !courseForm.category}
-            className="bg-red-600 hover:bg-red-700"
-          >
-            <Save className="h-4 w-4 mr-2" />
-            Criar Curso
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  ));
-
-  // Diálogo de Criação de Aula
-  const CreateLessonDialog = React.memo(() => (
-    <Dialog open={showCreateLesson} onOpenChange={setShowCreateLesson}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Adicionar Nova Aula</DialogTitle>
-          <DialogDescription>
-            Adicione uma nova aula ao curso "{selectedCourse?.title}"
+            Adicione um material à aula "{selectedLesson?.title}"
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4 py-4">
           <div>
-            <Label htmlFor="lesson-title">Título da Aula *</Label>
+            <Label htmlFor="material-name">Nome do Material *</Label>
             <Input
-              id="lesson-title"
-              value={lessonForm.title}
-              onChange={(e) => setLessonForm(prev => ({ ...prev, title: e.target.value }))}
-              placeholder="Ex: Introdução às Vendas"
+              id="material-name"
+              value={materialForm.name}
+              onChange={(e) => setMaterialForm(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Ex: Manual de Vendas"
               className="mt-1"
             />
           </div>
           
           <div>
-            <Label htmlFor="lesson-description">Descrição</Label>
-            <Textarea
-              id="lesson-description"
-              value={lessonForm.description}
-              onChange={(e) => setLessonForm(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="Descreva brevemente o conteúdo desta aula..."
-              className="mt-1"
-              rows={2}
-            />
+            <Label htmlFor="material-type">Tipo de Material</Label>
+            <Select 
+              value={materialForm.type} 
+              onValueChange={(value) => setMaterialForm(prev => ({ ...prev, type: value }))}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pdf">PDF</SelectItem>
+                <SelectItem value="document">Documento</SelectItem>
+                <SelectItem value="image">Imagem</SelectItem>
+                <SelectItem value="video">Vídeo</SelectItem>
+                <SelectItem value="link">Link Externo</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          {materialForm.type === 'link' ? (
             <div>
-              <Label htmlFor="lesson-type">Tipo de Aula</Label>
-              <Select value={lessonForm.type} onValueChange={(value) => setLessonForm(prev => ({ ...prev, type: value }))}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="video">Vídeo</SelectItem>
-                  <SelectItem value="text">Texto</SelectItem>
-                  <SelectItem value="quiz">Quiz</SelectItem>
-                  <SelectItem value="assignment">Tarefa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <Label htmlFor="lesson-duration">Duração</Label>
+              <Label htmlFor="material-url">URL do Link</Label>
               <Input
-                id="lesson-duration"
-                value={lessonForm.duration}
-                onChange={(e) => setLessonForm(prev => ({ ...prev, duration: e.target.value }))}
-                placeholder="Ex: 15 min"
+                id="material-url"
+                value={materialForm.url}
+                onChange={(e) => setMaterialForm(prev => ({ ...prev, url: e.target.value }))}
+                placeholder="https://exemplo.com"
                 className="mt-1"
               />
             </div>
-          </div>
-          
-          {lessonForm.type === 'video' && (
+          ) : (
             <div>
-              <Label htmlFor="video-url">URL do Vídeo</Label>
-              <Input
-                id="video-url"
-                value={lessonForm.videoUrl}
-                onChange={(e) => setLessonForm(prev => ({ ...prev, videoUrl: e.target.value }))}
-                placeholder="https://youtube.com/watch?v=..."
-                className="mt-1"
-              />
+              <Label htmlFor="material-file">Arquivo</Label>
+              <div className="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                {materialForm.file ? (
+                  <div className="space-y-2">
+                    {getFileIcon(materialForm.type)}
+                    <p className="text-sm font-medium">{materialForm.file.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {(materialForm.file.size / 1024 / 1024).toFixed(1)} MB
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMaterialForm(prev => ({ ...prev, file: null }))}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Remover
+                    </Button>
+                  </div>
+                ) : (
+                  <div>
+                    <Upload className="h-6 w-6 mx-auto text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-600">
+                      Clique para selecionar arquivo
+                    </p>
+                    <input
+                      type="file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setMaterialForm(prev => ({ ...prev, file }));
+                        }
+                      }}
+                      className="hidden"
+                      id="material-file"
+                    />
+                    <label
+                      htmlFor="material-file"
+                      className="mt-2 inline-block px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded cursor-pointer text-sm"
+                    >
+                      Selecionar Arquivo
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
           )}
-          
-          {lessonForm.type === 'text' && (
-            <div>
-              <Label htmlFor="lesson-content">Conteúdo</Label>
-              <Textarea
-                id="lesson-content"
-                value={lessonForm.content}
-                onChange={(e) => setLessonForm(prev => ({ ...prev, content: e.target.value }))}
-                placeholder="Digite o conteúdo da aula..."
-                className="mt-1"
-                rows={4}
-              />
-            </div>
-          )}
-          
-          {/* Upload de Materiais */}
-          <div>
-            <Label>Materiais da Aula</Label>
-            <div className="mt-2 border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-              <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-              <p className="text-sm text-gray-600">
-                Arraste arquivos aqui ou clique para selecionar
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                PDF, DOC, PPT, MP4, MP3 (máx. 100MB cada)
-              </p>
-            </div>
-          </div>
         </div>
         
         <DialogFooter>
-          <Button variant="outline" onClick={() => setShowCreateLesson(false)}>
+          <Button variant="outline" onClick={() => setShowAddMaterial(false)}>
             Cancelar
           </Button>
           <Button 
-            onClick={handleCreateLesson}
-            disabled={!lessonForm.title}
+            onClick={handleAddMaterial}
+            disabled={!materialForm.name || (!materialForm.file && !materialForm.url)}
             className="bg-red-600 hover:bg-red-700"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Adicionar Aula
+            Adicionar Material
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  ));
+  );
 
   return (
     <Layout>
       <div className="p-6 max-w-7xl mx-auto">
         {selectedCourse ? <CourseDetailView /> : <CoursesGridView />}
         
-        {/* Diálogos */}
-        <CreateCourseDialog />
-        <CreateLessonDialog />
+        {/* Diálogos usando componentes separados */}
+        <CreateCourseDialog
+          open={showCreateCourse}
+          onOpenChange={setShowCreateCourse}
+          courseForm={courseForm}
+          setCourseForm={setCourseForm}
+          onCreateCourse={handleCreateCourse}
+        />
+        
+        <CreateLessonDialog
+          open={showCreateLesson}
+          onOpenChange={setShowCreateLesson}
+          selectedCourse={selectedCourse}
+          lessonForm={lessonForm}
+          setLessonForm={setLessonForm}
+          onCreateLesson={handleCreateLesson}
+        />
+        
+        <AddMaterialDialog />
       </div>
     </Layout>
   );
