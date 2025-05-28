@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { api } from '@/services/api';
+import { downloadService } from '@/services/downloadService';
 import { useToast } from '@/hooks/use-toast';
 import { usePermission } from '@/hooks/usePermission'; // ADICIONADO
 import { 
@@ -144,6 +145,70 @@ const EADPage = () => {
   useEffect(() => {
     fetchCourses();
   }, []);
+  
+  // Handler para matrícula no curso
+const handleEnrollCourse = useCallback(async (course) => {
+  try {
+    console.log('Matriculando no curso:', course.title);
+    
+    const response = await api.post(`/courses/${course._id}/enroll`);
+    
+    toast({
+      title: "Matrícula realizada!",
+      description: `Você foi matriculado no curso "${course.title}"`
+    });
+    
+    // Recarregar o curso para mostrar o progresso
+    const updatedCourse = await fetchCourse(course._id);
+    if (updatedCourse) {
+      setSelectedCourse(updatedCourse);
+    }
+    
+  } catch (error) {
+    console.error('Erro na matrícula:', error);
+    
+    if (error.message && error.message.includes('já matriculado')) {
+      toast({
+        title: "Já matriculado",
+        description: "Você já está matriculado neste curso",
+        variant: "default"
+      });
+      // Mesmo assim, abrir o curso
+      const courseData = await fetchCourse(course._id);
+      if (courseData) {
+        setSelectedCourse(courseData);
+      }
+    } else {
+      toast({
+        title: "Erro na matrícula",
+        description: "Não foi possível realizar a matrícula. Tente novamente.",
+        variant: "destructive"
+      });
+    }
+  }
+}, [toast]);
+
+// Handler para abrir curso (com matrícula automática se necessário)
+const handleOpenCourse = useCallback(async (course) => {
+  // Se o usuário não tem progresso no curso, fazer matrícula automática
+  if (!course.userProgress) {
+    await handleEnrollCourse(course);
+  } else {
+    const courseData = await fetchCourse(course._id);
+    if (courseData) {
+      setSelectedCourse(courseData);
+    }
+  }
+}, [handleEnrollCourse]);
+
+// Função para obter progresso de uma aula específica
+const getLessonProgress = useCallback((lessonId) => {
+  if (!selectedCourse?.userProgress?.lessonsProgress) return null;
+  
+  return selectedCourse.userProgress.lessonsProgress.find(
+    lp => lp.lessonId === lessonId
+  );
+}, [selectedCourse]);
   
   // Handlers de progresso do vídeo
   const handleVideoProgress = useCallback(async (progress) => {
@@ -433,6 +498,111 @@ const EADPage = () => {
       setIsLoading(false);
     }
   };
+  
+  // Adicionar esta função no componente EADPage, antes do return
+	const handleDownloadMaterial = useCallback(async (material) => {
+	  if (!selectedCourse || !selectedLesson) {
+		toast({
+		  title: "Erro",
+		  description: "Curso ou aula não selecionados",
+		  variant: "destructive"
+		});
+		return;
+	  }
+
+	  try {
+		// Se é um link externo, abrir em nova aba
+		if (material.url) {
+		  window.open(material.url, '_blank');
+		  return;
+		}
+
+		// Se é um arquivo local, fazer download via API
+		if (material.filePath || material._id) {
+		  const materialId = material._id || material.id;
+		  
+		  console.log('Iniciando download do material:', {
+			materialId,
+			materialName: material.name,
+			courseId: selectedCourse._id,
+			lessonId: selectedLesson._id
+		  });
+
+		  // Fazer requisição para download
+		  const token = localStorage.getItem('token');
+		  if (!token) {
+			toast({
+			  title: "Erro",
+			  description: "Usuário não autenticado",
+			  variant: "destructive"
+			});
+			return;
+		  }
+
+		  const downloadUrl = `${api.getBaseUrl()}/courses/${selectedCourse._id}/materials/${materialId}/download`;
+		  
+		  // Criar um link temporário para download
+		  const link = document.createElement('a');
+		  link.href = downloadUrl;
+		  link.target = '_blank';
+		  
+		  // Adicionar headers de autenticação
+		  const response = await fetch(downloadUrl, {
+			method: 'GET',
+			headers: {
+			  'Authorization': `Bearer ${token}`,
+			  'x-auth-token': token
+			}
+		  });
+
+		  if (!response.ok) {
+			throw new Error(`Erro no download: ${response.status}`);
+		  }
+
+		  // Obter o blob da resposta
+		  const blob = await response.blob();
+		  
+		  // Criar URL do blob
+		  const blobUrl = window.URL.createObjectURL(blob);
+		  
+		  // Obter nome do arquivo do header ou usar nome padrão
+		  let filename = material.name || 'material';
+		  const contentDisposition = response.headers.get('Content-Disposition');
+		  if (contentDisposition) {
+			const fileNameMatch = contentDisposition.match(/filename="?(.+)"?/);
+			if (fileNameMatch && fileNameMatch[1]) {
+			  filename = fileNameMatch[1];
+			}
+		  }
+		  
+		  // Criar link de download
+		  link.href = blobUrl;
+		  link.download = filename;
+		  
+		  // Adicionar ao DOM, clicar e remover
+		  document.body.appendChild(link);
+		  link.click();
+		  
+		  // Cleanup
+		  setTimeout(() => {
+			document.body.removeChild(link);
+			window.URL.revokeObjectURL(blobUrl);
+		  }, 100);
+
+		  toast({
+			title: "Sucesso",
+			description: `Download de "${material.name}" iniciado`
+		  });
+		}
+	  } catch (error) {
+		console.error('Erro no download do material:', error);
+		toast({
+		  title: "Erro",
+		  description: "Não foi possível fazer o download do material",
+		  variant: "destructive"
+		});
+	  }
+	}, [selectedCourse, selectedLesson, toast]);
 
   const handleDeleteLesson = async () => {
     if (!selectedCourse || !lessonForm._id) return;
@@ -726,33 +896,42 @@ const EADPage = () => {
                     <h4 className="font-medium mb-3">Materiais da Aula</h4>
                     <div className="space-y-3">
                       {selectedLesson.materials?.map((material) => (
-                        <div key={material.id || material._id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
-                          <div className="flex items-center gap-3">
-                            {getFileIcon(material.type)}
-                            <div>
-                              <p className="font-medium">{material.name}</p>
-                              {material.size && (
-                                <p className="text-sm text-gray-500">{material.size}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            {canManageMaterials && (
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => handleRemoveMaterial(material.id || material._id)}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+						  <div key={material.id || material._id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+							<div className="flex items-center gap-3">
+							  {getFileIcon(material.type)}
+							  <div>
+								<p className="font-medium">{material.name}</p>
+								{material.size && (
+								  <p className="text-sm text-gray-500">{material.size}</p>
+								)}
+								{material.description && (
+								  <p className="text-xs text-gray-400">{material.description}</p>
+								)}
+							  </div>
+							</div>
+							<div className="flex gap-2">
+							  <Button 
+								variant="ghost" 
+								size="sm"
+								onClick={() => handleDownloadMaterial(material)}
+								title={material.url ? "Abrir link" : "Fazer download"}
+							  >
+								<Download className="h-4 w-4" />
+							  </Button>
+							  {canManageMaterials && (
+								<Button 
+								  variant="ghost" 
+								  size="sm"
+								  onClick={() => handleRemoveMaterial(material.id || material._id)}
+								  className="text-red-500 hover:text-red-700"
+								  title="Remover material"
+								>
+								  <Trash2 className="h-4 w-4" />
+								</Button>
+							  )}
+							</div>
+						  </div>
+						))}
                       
                       {canManageMaterials && (
                         <Button 
@@ -969,9 +1148,9 @@ const EADPage = () => {
             )}
 
             <div 
-              className="cursor-pointer"
-              onClick={() => setSelectedCourse(course)}
-            >
+			  className="cursor-pointer"
+			  onClick={() => handleOpenCourse(course)}
+			>
               {viewMode === 'grid' ? (
                 <>
                   <div className="relative overflow-hidden rounded-t-lg">
@@ -1023,14 +1202,28 @@ const EADPage = () => {
                         </div>
                       </div>
                       
-                      {course.userProgress?.progress > 0 && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Progresso</span>
-                          <Badge variant="outline" className="text-xs">
-                            {course.userProgress.progress}% concluído
-                          </Badge>
-                        </div>
-                      )}
+                      {course.userProgress?.progress > 0 ? (
+						  <div className="flex items-center justify-between">
+							<span className="text-sm text-gray-600">Progresso</span>
+							<Badge variant="outline" className="text-xs">
+							  {Math.round(course.userProgress.progress)}% concluído
+							</Badge>
+						  </div>
+						) : (
+						  <div className="pt-2">
+							<Button 
+							  size="sm" 
+							  className="w-full bg-red-600 hover:bg-red-700 text-white"
+							  onClick={(e) => {
+								e.stopPropagation();
+								handleEnrollCourse(course);
+							  }}
+							>
+							  <Plus className="h-4 w-4 mr-2" />
+							  Matricular-se
+							</Button>
+						  </div>
+						)}
                     </div>
                   </CardContent>
                 </>

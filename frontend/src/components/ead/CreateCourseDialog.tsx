@@ -16,9 +16,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 
-// Componente DepartamentoSelector para criação de cursos
 const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel = true }) => {
   const [selectedDepartments, setSelectedDepartments] = React.useState(initialSelected);
+  const [showAllSelected, setShowAllSelected] = React.useState(
+    initialSelected.includes('TODOS') || initialSelected.length === 0
+  );
   
   const departamentos = [
     'A CLASSIFICAR',
@@ -30,18 +32,26 @@ const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel
 
   React.useEffect(() => {
     setSelectedDepartments(initialSelected);
+    setShowAllSelected(initialSelected.includes('TODOS') || initialSelected.length === 0);
   }, [JSON.stringify(initialSelected)]);
 
   const handleToggleDepartment = (dept) => {
     let newSelected;
+    
     if (selectedDepartments.includes(dept)) {
+      // Removendo departamento
       newSelected = selectedDepartments.filter(d => d !== dept);
     } else {
-      newSelected = [...selectedDepartments, dept];
+      // Adicionando departamento - remove TODOS se existir
+      newSelected = [...selectedDepartments.filter(d => d !== 'TODOS'), dept];
     }
     
+    // Se não sobrou nenhum departamento específico, voltar para TODOS
     if (newSelected.length === 0) {
       newSelected = ['TODOS'];
+      setShowAllSelected(true);
+    } else {
+      setShowAllSelected(false);
     }
     
     setSelectedDepartments(newSelected);
@@ -49,38 +59,77 @@ const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel
   };
 
   const handleToggleAll = () => {
-    const newSelected = ['TODOS'];
-    setSelectedDepartments(newSelected);
-    onChange(newSelected);
+    if (showAllSelected) {
+      // Estava marcado, agora desmarcar
+      setSelectedDepartments([]);
+      setShowAllSelected(false);
+      onChange([]);
+    } else {
+      // Estava desmarcado, agora marcar
+      setSelectedDepartments(['TODOS']);
+      setShowAllSelected(true);
+      onChange(['TODOS']);
+    }
   };
 
   return (
     <div className="space-y-2">
       {showLabel && <Label>Departamentos</Label>}
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex items-center space-x-2">
+      
+      <div className="space-y-3">
+        {/* Checkbox "Todos" */}
+        <label className="flex items-center space-x-2 cursor-pointer">
           <input
             type="checkbox"
-            checked={selectedDepartments.includes('TODOS')}
+            checked={showAllSelected}
             onChange={handleToggleAll}
+            className="rounded border-gray-300"
           />
-          <span className="text-sm">Todos</span>
+          <span className="text-sm font-medium">Todos os departamentos</span>
         </label>
-        {departamentos.map((dept) => (
-          <label key={dept} className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={selectedDepartments.includes(dept)}
-              onChange={() => handleToggleDepartment(dept)}
-            />
-            <span className="text-sm">{dept}</span>
-          </label>
-        ))}
+        
+        {/* Departamentos específicos - só mostra se "Todos" não estiver marcado */}
+        {!showAllSelected && (
+          <div className="ml-6 space-y-2 p-3 border rounded-md bg-gray-50">
+            <span className="text-xs text-gray-600 block mb-2">
+              Selecione os departamentos específicos:
+            </span>
+            <div className="grid grid-cols-1 gap-2">
+              {departamentos.map((dept) => (
+                <label key={dept} className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedDepartments.includes(dept)}
+                    onChange={() => handleToggleDepartment(dept)}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="text-sm">{dept}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Feedback visual */}
+        <div className="text-xs mt-2">
+          {showAllSelected ? (
+            <span className="text-green-600 bg-green-50 px-2 py-1 rounded">
+              ✓ Visível para todos os departamentos
+            </span>
+          ) : selectedDepartments.length > 0 ? (
+            <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded">
+              ✓ Visível para: {selectedDepartments.join(', ')}
+            </span>
+          ) : (
+            <span className="text-orange-600 bg-orange-50 px-2 py-1 rounded">
+              ⚠ Selecione pelo menos um departamento
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
 };
-
 interface CreateCourseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

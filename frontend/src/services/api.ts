@@ -347,5 +347,64 @@ export const api = {
 	  reorder: async (links: { id: string; order: number }[]) => {
 		return api.put('/useful-links/reorder/links', { links });
 	  }
-	}
+	},
+	// Adicionar esta função no objeto api:
+		downloadMaterial: async (courseId: string, materialId: string, materialName?: string) => {
+		  try {
+			const token = localStorage.getItem('token');
+			if (!token) {
+			  throw new Error('Usuário não autenticado');
+			}
+			
+			const response = await fetch(`${API_BASE_URL}/courses/${courseId}/materials/${materialId}/download`, {
+			  method: 'GET',
+			  headers: {
+				'Authorization': `Bearer ${token}`,
+				'x-auth-token': token
+			  }
+			});
+			
+			if (!response.ok) {
+			  const errorText = await response.text();
+			  console.error(`Erro ${response.status}:`, errorText);
+			  throw new Error(`Erro no download: ${response.status}`);
+			}
+			
+			// Obter o blob da resposta
+			const blob = await response.blob();
+			
+			// Determinar nome do arquivo
+			let downloadFileName = materialName || 'material';
+			
+			// Tentar obter nome do cabeçalho Content-Disposition
+			const contentDisposition = response.headers.get('Content-Disposition');
+			if (contentDisposition) {
+			  const fileNameMatch = contentDisposition.match(/filename="?(.+)"?/);
+			  if (fileNameMatch && fileNameMatch[1]) {
+				downloadFileName = fileNameMatch[1];
+			  }
+			}
+			
+			// Criar URL para o blob e fazer download
+			const url = window.URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = downloadFileName;
+			
+			// Adicionar ao DOM, clicar e remover
+			document.body.appendChild(link);
+			link.click();
+			
+			// Cleanup
+			setTimeout(() => {
+			  document.body.removeChild(link);
+			  window.URL.revokeObjectURL(url);
+			}, 100);
+			
+			return { success: true, filename: downloadFileName };
+		  } catch (error) {
+			console.error('Erro no download do material:', error);
+			throw error;
+		  }
+		}
 };

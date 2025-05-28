@@ -578,6 +578,47 @@ router.get('/:courseId/lessons/:lessonId/materials', auth, async (req, res) => {
   }
 });
 
+// Configuração de storage específica para materiais
+const materialStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, materialsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+    const ext = path.extname(file.originalname);
+    cb(null, `material-${uniqueSuffix}${ext}`);
+  }
+});
+
+// Filtro de arquivos específico para materiais
+const materialFileFilter = (req, file, cb) => {
+  console.log('Validando arquivo de material:', {
+    fieldname: file.fieldname,
+    originalname: file.originalname,
+    mimetype: file.mimetype
+  });
+  
+  // Aceitar vários tipos de arquivo para materiais
+  const allowedExtensions = /jpeg|jpg|png|gif|webp|pdf|doc|docx|xls|xlsx|ppt|pptx|mp4|mp3|avi|mov|txt|zip|rar/i;
+  const extname = allowedExtensions.test(path.extname(file.originalname));
+  
+  if (extname) {
+    return cb(null, true);
+  }
+  
+  console.error('Tipo de arquivo não permitido:', file.originalname);
+  cb(new Error('Tipo de arquivo não suportado para materiais'), false);
+};
+
+// Configuração do multer para materiais
+const uploadMaterials = multer({
+  storage: materialStorage,
+  fileFilter: materialFileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB
+  }
+}).single('material');
+
 // @route   POST /api/courses/:courseId/lessons/:lessonId/materials
 // @desc    Adicionar material a uma aula
 // @access  Private (Admin)
@@ -585,20 +626,33 @@ router.post('/:courseId/lessons/:lessonId/materials',
   auth,
   checkCoursePermission('courses:manage_materials'),
   (req, res, next) => {
-    // Configuração específica para materiais
-    const uploadMaterial = multer({
-      storage,
-      fileFilter,
-      limits: {
-        fileSize: 50 * 1024 * 1024 // 50MB para materiais
-      }
-    }).single('material'); // CORRIGIDO: usar .single('material') em vez de .fields
+    console.log('=== UPLOAD MATERIAL DEBUG ===');
+    console.log('Headers:', req.headers['content-type']);
+    console.log('Body antes do upload:', req.body);
     
-    uploadMaterial(req, res, (err) => {
+    uploadMaterials(req, res, (err) => {
       if (err) {
-        console.error('Erro no upload do material:', err);
-        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
+        console.error('Erro no multer:', {
+          message: err.message,
+          code: err.code,
+          field: err.field
+        });
+        return res.status(400).json({ 
+          msg: 'Erro no upload: ' + err.message,
+          error: err.code
+        });
       }
+      
+      console.log('Multer processado com sucesso:', {
+        file: req.file ? {
+          fieldname: req.file.fieldname,
+          originalname: req.file.originalname,
+          filename: req.file.filename,
+          size: req.file.size
+        } : null,
+        body: req.body
+      });
+      
       next();
     });
   },
@@ -607,11 +661,11 @@ router.post('/:courseId/lessons/:lessonId/materials',
       const { courseId, lessonId } = req.params;
       const { name, type, url, description } = req.body;
       
-      console.log('=== ADD MATERIAL DEBUG ===');
+      console.log('=== ADD MATERIAL CONTROLLER ===');
       console.log('Course ID:', courseId);
       console.log('Lesson ID:', lessonId);
       console.log('Body:', req.body);
-      console.log('File:', req.file); // CORRIGIDO: req.file em vez de req.files
+      console.log('File:', req.file);
       
       const Course = require('../models/Course');
       const course = await Course.findById(courseId);
@@ -626,13 +680,13 @@ router.post('/:courseId/lessons/:lessonId/materials',
       }
       
       let newMaterial = {
-        name: name || 'Material sem nome',
+        name: name || (req.file ? req.file.originalname : 'Material sem nome'),
         type: type || 'document',
         description: description || '',
         order: lesson.materials.length
       };
       
-      // CORRIGIDO: Verificar req.file em vez de req.files.materials
+      // Verificar se é arquivo ou URL
       if (req.file) {
         newMaterial.filePath = `/uploads/courses/materials/${req.file.filename}`;
         newMaterial.size = formatFileSize(req.file.size);
@@ -646,14 +700,20 @@ router.post('/:courseId/lessons/:lessonId/materials',
           type: newMaterial.type
         });
       }
-      // Se foi fornecida uma URL
       else if (url) {
         newMaterial.url = url;
         newMaterial.type = 'link';
         console.log('URL processada:', url);
       }
       else {
-        return res.status(400).json({ msg: 'É necessário enviar um arquivo ou fornecer uma URL' });
+        return res.status(400).json({ 
+          msg: 'É necessário enviar um arquivo ou fornecer uma URL',
+          received: {
+            hasFile: !!req.file,
+            hasUrl: !!url,
+            body: req.body
+          }
+        });
       }
       
       // Adicionar o material à aula
@@ -662,7 +722,7 @@ router.post('/:courseId/lessons/:lessonId/materials',
       
       console.log('Material adicionado com sucesso:', newMaterial);
       
-      // Retornar o material criado com o ID gerado pelo MongoDB
+      // Retornar o material criado
       const savedMaterial = lesson.materials[lesson.materials.length - 1];
       
       res.status(201).json({
@@ -671,7 +731,10 @@ router.post('/:courseId/lessons/:lessonId/materials',
       });
     } catch (err) {
       console.error('Erro ao adicionar material:', err);
-      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+      res.status(500).json({ 
+        msg: 'Erro no servidor', 
+        error: err.message 
+      });
     }
   }
 );
@@ -723,12 +786,17 @@ router.delete('/:courseId/lessons/:lessonId/materials/:materialId',
   }
 );
 
+
 // @route   GET /api/courses/:courseId/materials/:materialId/download
-// @desc    Download de material da aula
+// @desc    Download de material da aula - VERSÃO CORRIGIDA
 // @access  Private
 router.get('/:courseId/materials/:materialId/download', auth, async (req, res) => {
   try {
     const { courseId, materialId } = req.params;
+    
+    console.log('=== DOWNLOAD MATERIAL DEBUG ===');
+    console.log('Course ID:', courseId);
+    console.log('Material ID:', materialId);
     
     const Course = require('../models/Course');
     const course = await Course.findById(courseId);
@@ -737,12 +805,16 @@ router.get('/:courseId/materials/:materialId/download', auth, async (req, res) =
       return res.status(404).json({ msg: 'Curso não encontrado' });
     }
     
-    // Encontrar o material
+    // Encontrar o material em qualquer aula do curso
     let material = null;
     let lesson = null;
     
     for (const l of course.lessons) {
-      const foundMaterial = l.materials.find(m => m._id.toString() === materialId);
+      const foundMaterial = l.materials.find(m => {
+        const materialIdStr = m._id ? m._id.toString() : null;
+        return materialIdStr === materialId;
+      });
+      
       if (foundMaterial) {
         material = foundMaterial;
         lesson = l;
@@ -754,7 +826,7 @@ router.get('/:courseId/materials/:materialId/download', auth, async (req, res) =
       return res.status(404).json({ msg: 'Material não encontrado' });
     }
     
-    // Verificar se o usuário tem acesso ao curso
+    // Verificar acesso ao curso
     const { User } = require('../models');
     const user = await User.findById(req.usuario.id);
     const userDepartment = user?.departamento || 'PUBLICO';
@@ -762,7 +834,9 @@ router.get('/:courseId/materials/:materialId/download', auth, async (req, res) =
     
     const hasAccess = isAdmin || 
                      course.departamentoVisibilidade.includes('TODOS') ||
-                     course.departamentoVisibilidade.includes(userDepartment);
+                     course.departamentoVisibilidade.includes(userDepartment) ||
+                     !course.departamentoVisibilidade ||
+                     course.departamentoVisibilidade.length === 0;
     
     if (!hasAccess) {
       return res.status(403).json({ msg: 'Acesso negado ao curso' });
@@ -783,13 +857,123 @@ router.get('/:courseId/materials/:materialId/download', auth, async (req, res) =
       const filePath = path.join(__dirname, '..', material.filePath);
       
       if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ msg: 'Arquivo não encontrado' });
+        return res.status(404).json({ msg: 'Arquivo não encontrado no servidor' });
       }
       
-      res.setHeader('Content-Disposition', `attachment; filename="${material.name}"`);
-      res.sendFile(filePath);
+      // FUNÇÃO CORRIGIDA para garantir extensão
+      const getFileNameWithExtension = (materialName, filePath) => {
+        console.log('=== PROCESSANDO NOME DO ARQUIVO ===');
+        console.log('Material name:', materialName);
+        console.log('File path:', filePath);
+        
+        // Se não tem nome do material, usar o nome do arquivo físico
+        if (!materialName) {
+          const result = path.basename(filePath);
+          console.log('Usando nome do arquivo físico:', result);
+          return result;
+        }
+        
+        // Obter extensões
+        const fileExtension = path.extname(filePath).toLowerCase();
+        const materialExtension = path.extname(materialName).toLowerCase();
+        
+        console.log('File extension:', fileExtension);
+        console.log('Material extension:', materialExtension);
+        
+        // Se o nome do material já tem a mesma extensão, usar como está
+        if (materialExtension && materialExtension === fileExtension) {
+          console.log('Material já tem extensão correta:', materialName);
+          return materialName;
+        }
+        
+        // Se o nome do material não tem extensão, adicionar a do arquivo
+        if (!materialExtension && fileExtension) {
+          const result = materialName + fileExtension;
+          console.log('Adicionando extensão ao material:', result);
+          return result;
+        }
+        
+        // Se o nome do material tem extensão diferente, corrigir
+        if (materialExtension && materialExtension !== fileExtension) {
+          const nameWithoutExt = path.parse(materialName).name;
+          const result = nameWithoutExt + fileExtension;
+          console.log('Corrigindo extensão do material:', result);
+          return result;
+        }
+        
+        // Fallback
+        const result = materialName || path.basename(filePath);
+        console.log('Usando fallback:', result);
+        return result;
+      };
+      
+      const stats = fs.statSync(filePath);
+      const filename = getFileNameWithExtension(material.name, filePath);
+      
+      console.log('=== ARQUIVO FINAL ===');
+      console.log('Filename que será baixado:', filename);
+      
+      // Definir headers apropriados
+       // Função para detectar MIME type correto
+            const getMimeType = (filePath) => {
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes = {
+          '.pdf': 'application/pdf',
+          '.doc': 'application/msword',
+          '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          '.xls': 'application/vnd.ms-excel',
+          '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          '.ppt': 'application/vnd.ms-powerpoint',
+          '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp',
+          '.mp4': 'video/mp4',
+          '.mp3': 'audio/mpeg',
+          '.txt': 'text/plain',
+          '.zip': 'application/zip',
+          '.rar': 'application/x-rar-compressed'
+        };
+        return mimeTypes[ext] || 'application/octet-stream';
+      };
+      
+      const mimeType = getMimeType(filePath);
+      console.log('MIME Type detectado:', mimeType);
+      
+      // Definir headers com múltiplos formatos para compatibilidade
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.setHeader('Content-Length', stats.size);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
+      console.log('=== HEADERS DEFINIDOS ===');
+      console.log('Content-Type:', mimeType);
+      console.log('Content-Disposition:', `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      console.log('Content-Length:', stats.size);
+      
+      // Criar stream de leitura para controle total
+      const stream = fs.createReadStream(filePath);
+      
+      stream.on('error', (err) => {
+        console.error('Erro no stream:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ msg: 'Erro ao enviar arquivo' });
+        }
+      });
+      
+      stream.on('end', () => {
+        console.log(`Download concluído via stream: ${filename} (${mimeType})`);
+      });
+      
+      // Pipe do stream para a resposta
+      stream.pipe(res);
+      
     } else {
-      return res.status(404).json({ msg: 'Arquivo não disponível' });
+      return res.status(404).json({ msg: 'Material não possui arquivo ou URL' });
     }
     
   } catch (err) {
@@ -798,6 +982,99 @@ router.get('/:courseId/materials/:materialId/download', auth, async (req, res) =
   }
 });
 
+
+// Rota alternativa para compatibilidade
+router.get('/:courseId/lessons/:lessonId/materials/:materialId/download', auth, async (req, res) => {
+  try {
+    const { courseId, lessonId, materialId } = req.params;
+    
+    const Course = require('../models/Course');
+    const course = await Course.findById(courseId);
+    
+    if (!course) {
+      return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    const lesson = course.lessons.id(lessonId);
+    if (!lesson) {
+      return res.status(404).json({ msg: 'Aula não encontrada' });
+    }
+    
+    const material = lesson.materials.id(materialId);
+    if (!material) {
+      return res.status(404).json({ msg: 'Material não encontrado' });
+    }
+    
+    // Verificar acesso
+    const { User } = require('../models');
+    const user = await User.findById(req.usuario.id);
+    const userDepartment = user?.departamento || 'PUBLICO';
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    const hasAccess = isAdmin || 
+                     course.departamentoVisibilidade.includes('TODOS') ||
+                     course.departamentoVisibilidade.includes(userDepartment);
+    
+    if (!hasAccess) {
+      return res.status(403).json({ msg: 'Acesso negado ao curso' });
+    }
+    
+    if (!course.allowDownload && !isAdmin) {
+      return res.status(403).json({ msg: 'Download não permitido para este curso' });
+    }
+    
+    // Servir arquivo
+    if (material.url) {
+      return res.redirect(material.url);
+    }
+    
+    if (material.filePath) {
+      const filePath = path.join(__dirname, '..', material.filePath);
+      
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ msg: 'Arquivo não encontrado' });
+      }
+      
+      // MESMA FUNÇÃO para garantir extensão
+      const getFileNameWithExtension = (materialName, filePath) => {
+        if (!materialName) {
+          return path.basename(filePath);
+        }
+        
+        const fileExtension = path.extname(filePath).toLowerCase();
+        const materialExtension = path.extname(materialName).toLowerCase();
+        
+        if (materialExtension && materialExtension === fileExtension) {
+          return materialName;
+        }
+        
+        if (!materialExtension && fileExtension) {
+          return materialName + fileExtension;
+        }
+        
+        if (materialExtension && materialExtension !== fileExtension) {
+          const nameWithoutExt = path.parse(materialName).name;
+          return nameWithoutExt + fileExtension;
+        }
+        
+        return materialName || path.basename(filePath);
+      };
+      
+      const filename = getFileNameWithExtension(material.name, filePath);
+      const mimeType = getMimeType(filePath);
+      
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.sendFile(filePath);
+    } else {
+      return res.status(404).json({ msg: 'Material não possui arquivo' });
+    }
+    
+  } catch (err) {
+    console.error('Erro no download:', err);
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+});
 // Funções auxiliares
 const getFileType = (mimetype) => {
   if (mimetype.startsWith('video/')) return 'video';
