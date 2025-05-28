@@ -1,4 +1,4 @@
-// backend/routes/courses.js - CORRIGIDO
+// backend/routes/courses.js - ARQUIVO COMPLETO
 const express = require('express');
 const router = express.Router();
 const coursesController = require('../controllers/coursesController');
@@ -8,7 +8,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// NOVO: Importar o middleware de rastreamento de engajamento
+// Importar o middleware de rastreamento de engajamento
 const { trackLessonView, trackLessonCompletion } = require('../middleware/trackEngagement');
 
 // Garantir que os diretórios de uploads existam
@@ -191,11 +191,7 @@ router.get('/my-progress', auth, async (req, res) => {
     const userProgress = await CourseProgress.find({ userId: req.usuario.id })
       .populate({
         path: 'courseId',
-        select: 'title thumbnail category estimatedDuration',
-        populate: {
-          path: 'instructor',
-          select: 'nome'
-        }
+        select: 'title thumbnail category estimatedDuration'
       })
       .sort({ lastAccessedAt: -1 });
     
@@ -206,9 +202,107 @@ router.get('/my-progress', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/courses/admin/all
+// @desc    Obter todos os cursos para administradores (incluindo não publicados)
+// @access  Private (Admin)
+router.get('/admin/all', 
+  auth,
+  checkCoursePermission('courses:admin'),
+  async (req, res) => {
+    try {
+      const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+      
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      
+      const sortOptions = {};
+      sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+      
+      const Course = require('../models/Course');
+      const courses = await Course.find({})
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean();
+      
+      const total = await Course.countDocuments({});
+      
+      res.json({
+        courses,
+        pagination: {
+          current: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      });
+    } catch (err) {
+      console.error('Erro ao buscar todos os cursos:', err);
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+    }
+  }
+);
+
+// @route   GET /api/courses/stats
+// @desc    Obter estatísticas dos cursos
+// @access  Private (Admin)
+router.get('/stats', 
+  auth,
+  checkCoursePermission('courses:view_analytics'),
+  async (req, res) => {
+    try {
+      const Course = require('../models/Course');
+      const CourseProgress = require('../models/CourseProgress');
+      
+      // Estatísticas básicas
+      const totalCourses = await Course.countDocuments({});
+      const publishedCourses = await Course.countDocuments({ isPublished: true });
+      const totalEnrollments = await CourseProgress.countDocuments({});
+      
+      // Cursos mais populares
+      const popularCourses = await Course.find({ isPublished: true })
+        .sort({ enrollmentCount: -1 })
+        .limit(5)
+        .select('title enrollmentCount');
+      
+      // Estatísticas por categoria
+      const categoryStats = await Course.aggregate([
+        { $match: { isPublished: true } },
+        { $group: { _id: '$category', count: { $sum: 1 }, enrollments: { $sum: '$enrollmentCount' } } },
+        { $sort: { count: -1 } }
+      ]);
+      
+      // Taxa de conclusão geral
+      const completionStats = await CourseProgress.aggregate([
+        { $group: { 
+          _id: null, 
+          totalProgress: { $avg: '$progress' },
+          completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+          inProgress: { $sum: { $cond: [{ $eq: ['$status', 'in_progress'] }, 1, 0] } },
+          notStarted: { $sum: { $cond: [{ $eq: ['$status', 'not_started'] }, 1, 0] } }
+        }}
+      ]);
+      
+      res.json({
+        overview: {
+          totalCourses,
+          publishedCourses,
+          totalEnrollments,
+          averageProgress: completionStats[0]?.totalProgress || 0
+        },
+        popularCourses,
+        categoryStats,
+        completionStats: completionStats[0] || { completed: 0, inProgress: 0, notStarted: 0 }
+      });
+    } catch (err) {
+      console.error('Erro ao buscar estatísticas:', err);
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+    }
+  }
+);
+
 // @route   POST /api/courses
 // @desc    Criar novo curso
-// @access  Private (Instructor/Admin)
+// @access  Private (Admin)
 router.post('/', 
   auth, 
   checkCoursePermission('courses:create'),
@@ -236,9 +330,10 @@ router.get('/:id',
 
 // @route   PUT /api/courses/:id
 // @desc    Atualizar curso
-// @access  Private (Instructor/Admin)
+// @access  Private (Admin)
 router.put('/:id', 
   auth,
+  checkCoursePermission('courses:edit_any'),
   (req, res, next) => {
     uploadCourse(req, res, (err) => {
       if (err) {
@@ -248,294 +343,96 @@ router.put('/:id',
       next();
     });
   },
-  async (req, res) => {
-    try {
-      const Course = require('../models/Course');
-      const { User } = require('../models');
-      
-      const course = await Course.findById(req.params.id);
-      if (!course) {
-        return res.status(404).json({ msg: 'Curso não encontrado' });
-      }
-      
-      const user = await User.findById(req.usuario.id);
-      const isInstructor = course.instructor.toString() === req.usuario.id;
-      const isAdmin = user?.roles?.includes('admin') || false;
-      
-      if (!isInstructor && !isAdmin) {
-        return res.status(403).json({ msg: 'Apenas o instrutor ou administradores podem editar este curso' });
-      }
-      
-      // Atualizar campos
-      const updateFields = { ...req.body };
-      
-      // Processar departamentos
-      if (req.body.departamentoVisibilidade) {
-        try {
-          updateFields.departamentoVisibilidade = typeof req.body.departamentoVisibilidade === 'string' 
-            ? JSON.parse(req.body.departamentoVisibilidade)
-            : req.body.departamentoVisibilidade;
-        } catch (e) {
-          console.error('Erro ao processar departamentoVisibilidade:', e);
-        }
-      }
-      
-      // Atualizar thumbnail se enviada
-      if (req.file) {
-        updateFields.thumbnail = `/uploads/courses/${req.file.filename}`;
-      }
-      
-      // Converter strings booleanas
-      ['isPublished', 'allowDownload', 'certificateEnabled'].forEach(field => {
-        if (updateFields[field] !== undefined) {
-          updateFields[field] = updateFields[field] === 'true' || updateFields[field] === true;
-        }
-      });
-      
-      // Converter números
-      if (updateFields.passingScore) {
-        updateFields.passingScore = parseInt(updateFields.passingScore) || 70;
-      }
-      
-      const updatedCourse = await Course.findByIdAndUpdate(
-        req.params.id,
-        { $set: updateFields },
-        { new: true }
-      ).populate('instructor', 'nome email');
-      
-      res.json(updatedCourse);
-    } catch (err) {
-      console.error('Erro ao atualizar curso:', err);
-      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
-    }
-  }
+  coursesController.updateCourse
 );
 
 // @route   DELETE /api/courses/:id
 // @desc    Excluir curso
-// @access  Private (Instructor/Admin)
+// @access  Private (Admin)
 router.delete('/:id', 
   auth,
-  async (req, res) => {
-    try {
-      const Course = require('../models/Course');
-      const CourseProgress = require('../models/CourseProgress');
-      const { User } = require('../models');
-      
-      const course = await Course.findById(req.params.id);
-      if (!course) {
-        return res.status(404).json({ msg: 'Curso não encontrado' });
-      }
-      
-      const user = await User.findById(req.usuario.id);
-      const isInstructor = course.instructor.toString() === req.usuario.id;
-      const isAdmin = user?.roles?.includes('admin') || false;
-      
-      if (!isInstructor && !isAdmin) {
-        return res.status(403).json({ msg: 'Apenas o instrutor ou administradores podem excluir este curso' });
-      }
-      
-      // Remover progresso dos usuários
-      await CourseProgress.deleteMany({ courseId: req.params.id });
-      
-      // Remover arquivos associados
-      if (course.thumbnail) {
-        const thumbnailPath = path.join(__dirname, '..', course.thumbnail);
-        if (fs.existsSync(thumbnailPath)) {
-          fs.unlinkSync(thumbnailPath);
-        }
-      }
-      
-      // Remover materiais das aulas
-      course.lessons.forEach(lesson => {
-        lesson.materials.forEach(material => {
-          if (material.filePath) {
-            const materialPath = path.join(__dirname, '..', material.filePath);
-            if (fs.existsSync(materialPath)) {
-              fs.unlinkSync(materialPath);
-            }
-          }
-        });
-      });
-      
-      await Course.findByIdAndDelete(req.params.id);
-      
-      res.json({ msg: 'Curso excluído com sucesso' });
-    } catch (err) {
-      console.error('Erro ao excluir curso:', err);
-      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
-    }
-  }
+  checkCoursePermission('courses:delete_any'),
+  coursesController.deleteCourse
 );
 
-// @route   POST /api/courses/:id/lessons
-// @desc    Adicionar aula ao curso
-// @access  Private (Instructor/Admin)
-router.post('/:id/lessons', 
+// @route   POST /api/courses/:id/publish
+// @desc    Publicar/despublicar curso
+// @access  Private (Admin)
+router.post('/:id/publish', 
   auth,
-  (req, res, next) => {
-    uploadLesson(req, res, (err) => {
-      if (err) {
-        console.error('Erro no upload da aula:', err);
-        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
-      }
-      next();
-    });
-  },
-  coursesController.addLesson
-);
-
-// @route   PUT /api/courses/:courseId/lessons/:lessonId
-// @desc    Atualizar aula do curso
-// @access  Private (Instructor/Admin)
-router.put('/:courseId/lessons/:lessonId', 
-  auth,
-  (req, res, next) => {
-    uploadLesson(req, res, (err) => {
-      if (err) {
-        console.error('Erro no upload da aula:', err);
-        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
-      }
-      next();
-    });
-  },
+  checkCoursePermission('courses:edit_any'),
   async (req, res) => {
     try {
+      const { isPublished } = req.body;
+      
       const Course = require('../models/Course');
-      const { User } = require('../models');
-      
-      const course = await Course.findById(req.params.courseId);
-      if (!course) {
-        return res.status(404).json({ msg: 'Curso não encontrado' });
-      }
-      
-      const user = await User.findById(req.usuario.id);
-      const isInstructor = course.instructor.toString() === req.usuario.id;
-      const isAdmin = user?.roles?.includes('admin') || false;
-      
-      if (!isInstructor && !isAdmin) {
-        return res.status(403).json({ msg: 'Apenas o instrutor ou administradores podem editar aulas' });
-      }
-      
-      const lesson = course.lessons.id(req.params.lessonId);
-      if (!lesson) {
-        return res.status(404).json({ msg: 'Aula não encontrada' });
-      }
-      
-      // Atualizar campos da aula
-      Object.assign(lesson, {
-        title: req.body.title || lesson.title,
-        description: req.body.description || lesson.description,
-        type: req.body.type || lesson.type,
-        content: req.body.content || lesson.content,
-        videoUrl: req.body.videoUrl || lesson.videoUrl,
-        duration: req.body.duration || lesson.duration,
-        order: parseInt(req.body.order) || lesson.order,
-        isPublished: req.body.isPublished === 'true' || req.body.isPublished === true
-      });
-      
-      // Processar upload de vídeo se enviado
-      if (req.files && req.files.videoFile) {
-        lesson.videoPath = `/uploads/courses/videos/${req.files.videoFile[0].filename}`;
-        // Se subiu um vídeo local, limpar a URL externa
-        lesson.videoUrl = '';
-      }
-      
-      // Adicionar novos materiais se enviados
-      if (req.files && req.files.materials) {
-        req.files.materials.forEach(file => {
-          lesson.materials.push({
-            name: file.originalname,
-            type: getFileType(file.mimetype),
-            filePath: `/uploads/courses/materials/${file.filename}`,
-            size: formatFileSize(file.size),
-            order: lesson.materials.length
-          });
-        });
-      }
-      
-      await course.save();
-      
-      res.json(course);
-    } catch (err) {
-      console.error('Erro ao atualizar aula:', err);
-      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
-    }
-  }
-);
-
-// @route   DELETE /api/courses/:courseId/lessons/:lessonId
-// @desc    Excluir aula do curso
-// @access  Private (Instructor/Admin)
-router.delete('/:courseId/lessons/:lessonId', 
-  auth,
-  async (req, res) => {
-    try {
-      const Course = require('../models/Course');
-      const CourseProgress = require('../models/CourseProgress');
-      const { User } = require('../models');
-      
-      const course = await Course.findById(req.params.courseId);
-      if (!course) {
-        return res.status(404).json({ msg: 'Curso não encontrado' });
-      }
-      
-      const user = await User.findById(req.usuario.id);
-      const isInstructor = course.instructor.toString() === req.usuario.id;
-      const isAdmin = user?.roles?.includes('admin') || false;
-      
-      if (!isInstructor && !isAdmin) {
-        return res.status(403).json({ msg: 'Apenas o instrutor ou administradores podem excluir aulas' });
-      }
-      
-      const lesson = course.lessons.id(req.params.lessonId);
-      if (!lesson) {
-        return res.status(404).json({ msg: 'Aula não encontrada' });
-      }
-      
-      // Remover arquivos de materiais
-      lesson.materials.forEach(material => {
-        if (material.filePath) {
-          const materialPath = path.join(__dirname, '..', material.filePath);
-          if (fs.existsSync(materialPath)) {
-            fs.unlinkSync(materialPath);
-          }
-        }
-      });
-      
-      // Remover vídeo se existir
-      if (lesson.videoPath) {
-        const videoPath = path.join(__dirname, '..', lesson.videoPath);
-        if (fs.existsSync(videoPath)) {
-          fs.unlinkSync(videoPath);
-        }
-      }
-      
-      // Remover aula
-      course.lessons.pull(req.params.lessonId);
-      await course.save();
-      
-      // Atualizar progresso dos usuários
-      await CourseProgress.updateMany(
-        { courseId: req.params.courseId },
-        { $pull: { lessonsProgress: { lessonId: req.params.lessonId } } }
+      const course = await Course.findByIdAndUpdate(
+        req.params.id,
+        { isPublished: isPublished },
+        { new: true }
       );
       
-      res.json({ msg: 'Aula excluída com sucesso' });
+      if (!course) {
+        return res.status(404).json({ msg: 'Curso não encontrado' });
+      }
+      
+      res.json({ 
+        msg: `Curso ${isPublished ? 'publicado' : 'despublicado'} com sucesso`,
+        course 
+      });
     } catch (err) {
-      console.error('Erro ao excluir aula:', err);
+      console.error('Erro ao publicar/despublicar curso:', err);
       res.status(500).json({ msg: 'Erro no servidor', error: err.message });
     }
   }
 );
 
-// @route   PUT /api/courses/:courseId/lessons/:lessonId/progress
-// @desc    Atualizar progresso da aula
-// @access  Private
-router.put('/:courseId/lessons/:lessonId/progress', 
-  auth, 
-  trackLessonCompletion,
-  coursesController.updateLessonProgress
+// @route   POST /api/courses/:id/duplicate
+// @desc    Duplicar curso
+// @access  Private (Admin)
+router.post('/:id/duplicate', 
+  auth,
+  checkCoursePermission('courses:create'),
+  async (req, res) => {
+    try {
+      const Course = require('../models/Course');
+      const originalCourse = await Course.findById(req.params.id).lean();
+      
+      if (!originalCourse) {
+        return res.status(404).json({ msg: 'Curso não encontrado' });
+      }
+      
+      // Criar cópia do curso
+      const duplicatedCourse = {
+        ...originalCourse,
+        _id: undefined, // Remove o ID para criar um novo
+        title: `${originalCourse.title} (Cópia)`,
+        isPublished: false, // Sempre criar como rascunho
+        enrollmentCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lessons: originalCourse.lessons.map(lesson => ({
+          ...lesson,
+          _id: undefined, // Remove IDs das aulas também
+          materials: lesson.materials.map(material => ({
+            ...material,
+            _id: undefined // Remove IDs dos materiais
+          }))
+        }))
+      };
+      
+      const newCourse = new Course(duplicatedCourse);
+      await newCourse.save();
+      
+      res.status(201).json({
+        msg: 'Curso duplicado com sucesso',
+        course: newCourse
+      });
+    } catch (err) {
+      console.error('Erro ao duplicar curso:', err);
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+    }
+  }
 );
 
 // @route   POST /api/courses/:id/enroll
@@ -583,6 +480,288 @@ router.post('/:id/enroll', auth, async (req, res) => {
     res.json({ msg: 'Matrícula realizada com sucesso', progress: newProgress });
   } catch (err) {
     console.error('Erro ao matricular no curso:', err);
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+});
+
+// @route   POST /api/courses/:id/lessons
+// @desc    Adicionar aula ao curso
+// @access  Private (Admin)
+router.post('/:id/lessons', 
+  auth,
+  checkCoursePermission('courses:manage_lessons'),
+  (req, res, next) => {
+    uploadLesson(req, res, (err) => {
+      if (err) {
+        console.error('Erro no upload da aula:', err);
+        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
+      }
+      next();
+    });
+  },
+  coursesController.addLesson
+);
+
+// @route   PUT /api/courses/:courseId/lessons/:lessonId
+// @desc    Atualizar aula do curso
+// @access  Private (Admin)
+router.put('/:courseId/lessons/:lessonId', 
+  auth,
+  checkCoursePermission('courses:manage_lessons'),
+  (req, res, next) => {
+    uploadLesson(req, res, (err) => {
+      if (err) {
+        console.error('Erro no upload da aula:', err);
+        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
+      }
+      next();
+    });
+  },
+  coursesController.updateLesson
+);
+
+// @route   DELETE /api/courses/:courseId/lessons/:lessonId
+// @desc    Excluir aula do curso
+// @access  Private (Admin)
+router.delete('/:courseId/lessons/:lessonId', 
+  auth,
+  checkCoursePermission('courses:manage_lessons'),
+  coursesController.deleteLesson
+);
+
+// @route   PUT /api/courses/:courseId/lessons/:lessonId/progress
+// @desc    Atualizar progresso da aula
+// @access  Private
+router.put('/:courseId/lessons/:lessonId/progress', 
+  auth, 
+  trackLessonCompletion,
+  coursesController.updateLessonProgress
+);
+
+// @route   GET /api/courses/:courseId/lessons/:lessonId/materials
+// @desc    Obter materiais de uma aula específica
+// @access  Private
+router.get('/:courseId/lessons/:lessonId/materials', auth, async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.params;
+    
+    const Course = require('../models/Course');
+    const course = await Course.findById(courseId);
+    
+    if (!course) {
+      return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    const lesson = course.lessons.id(lessonId);
+    if (!lesson) {
+      return res.status(404).json({ msg: 'Aula não encontrada' });
+    }
+    
+    // Verificar acesso ao curso
+    const { User } = require('../models');
+    const user = await User.findById(req.usuario.id);
+    const userDepartment = user?.departamento || 'PUBLICO';
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    const hasAccess = isAdmin || 
+                     course.departamentoVisibilidade.includes('TODOS') ||
+                     course.departamentoVisibilidade.includes(userDepartment);
+    
+    if (!hasAccess) {
+      return res.status(403).json({ msg: 'Acesso negado ao curso' });
+    }
+    
+    res.json(lesson.materials || []);
+  } catch (err) {
+    console.error('Erro ao buscar materiais da aula:', err);
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+});
+
+// @route   POST /api/courses/:courseId/lessons/:lessonId/materials
+// @desc    Adicionar material a uma aula
+// @access  Private (Admin)
+router.post('/:courseId/lessons/:lessonId/materials', 
+  auth,
+  checkCoursePermission('courses:manage_materials'),
+  (req, res, next) => {
+    uploadLesson(req, res, (err) => {
+      if (err) {
+        console.error('Erro no upload do material:', err);
+        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const { courseId, lessonId } = req.params;
+      const { name, type, url, description } = req.body;
+      
+      const Course = require('../models/Course');
+      const course = await Course.findById(courseId);
+      
+      if (!course) {
+        return res.status(404).json({ msg: 'Curso não encontrado' });
+      }
+      
+      const lesson = course.lessons.id(lessonId);
+      if (!lesson) {
+        return res.status(404).json({ msg: 'Aula não encontrada' });
+      }
+      
+      let newMaterial = {
+        name: name || 'Material sem nome',
+        type: type || 'document',
+        description: description || '',
+        order: lesson.materials.length
+      };
+      
+      // Se foi enviado um arquivo
+      if (req.files && req.files.materials && req.files.materials[0]) {
+        const file = req.files.materials[0];
+        newMaterial.filePath = `/uploads/courses/materials/${file.filename}`;
+        newMaterial.size = formatFileSize(file.size);
+        newMaterial.type = getFileType(file.mimetype);
+      }
+      // Se foi fornecida uma URL
+      else if (url) {
+        newMaterial.url = url;
+        newMaterial.type = 'link';
+      }
+      else {
+        return res.status(400).json({ msg: 'É necessário enviar um arquivo ou fornecer uma URL' });
+      }
+      
+      lesson.materials.push(newMaterial);
+      await course.save();
+      
+      res.status(201).json(newMaterial);
+    } catch (err) {
+      console.error('Erro ao adicionar material:', err);
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+    }
+  }
+);
+
+// @route   DELETE /api/courses/:courseId/lessons/:lessonId/materials/:materialId
+// @desc    Remover material de uma aula
+// @access  Private (Admin)
+router.delete('/:courseId/lessons/:lessonId/materials/:materialId', 
+  auth,
+  checkCoursePermission('courses:manage_materials'),
+  async (req, res) => {
+    try {
+      const { courseId, lessonId, materialId } = req.params;
+      
+      const Course = require('../models/Course');
+      const course = await Course.findById(courseId);
+      
+      if (!course) {
+        return res.status(404).json({ msg: 'Curso não encontrado' });
+      }
+      
+      const lesson = course.lessons.id(lessonId);
+      if (!lesson) {
+        return res.status(404).json({ msg: 'Aula não encontrada' });
+      }
+      
+      const material = lesson.materials.id(materialId);
+      if (!material) {
+        return res.status(404).json({ msg: 'Material não encontrado' });
+      }
+      
+      // Remover arquivo físico se existir
+      if (material.filePath) {
+        const filePath = path.join(__dirname, '..', material.filePath);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+      
+      // Remover material da aula
+      lesson.materials.pull(materialId);
+      await course.save();
+      
+      res.json({ msg: 'Material removido com sucesso' });
+    } catch (err) {
+      console.error('Erro ao remover material:', err);
+      res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+    }
+  }
+);
+
+// @route   GET /api/courses/:courseId/materials/:materialId/download
+// @desc    Download de material da aula
+// @access  Private
+router.get('/:courseId/materials/:materialId/download', auth, async (req, res) => {
+  try {
+    const { courseId, materialId } = req.params;
+    
+    const Course = require('../models/Course');
+    const course = await Course.findById(courseId);
+    
+    if (!course) {
+      return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    // Encontrar o material
+    let material = null;
+    let lesson = null;
+    
+    for (const l of course.lessons) {
+      const foundMaterial = l.materials.find(m => m._id.toString() === materialId);
+      if (foundMaterial) {
+        material = foundMaterial;
+        lesson = l;
+        break;
+      }
+    }
+    
+    if (!material) {
+      return res.status(404).json({ msg: 'Material não encontrado' });
+    }
+    
+    // Verificar se o usuário tem acesso ao curso
+    const { User } = require('../models');
+    const user = await User.findById(req.usuario.id);
+    const userDepartment = user?.departamento || 'PUBLICO';
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    const hasAccess = isAdmin || 
+                     course.departamentoVisibilidade.includes('TODOS') ||
+                     course.departamentoVisibilidade.includes(userDepartment);
+    
+    if (!hasAccess) {
+      return res.status(403).json({ msg: 'Acesso negado ao curso' });
+    }
+    
+    // Verificar se o download é permitido
+    if (!course.allowDownload && !isAdmin) {
+      return res.status(403).json({ msg: 'Download não permitido para este curso' });
+    }
+    
+    // Se é um link externo, redirecionar
+    if (material.url) {
+      return res.redirect(material.url);
+    }
+    
+    // Se é um arquivo local, servir o arquivo
+    if (material.filePath) {
+      const filePath = path.join(__dirname, '..', material.filePath);
+      
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ msg: 'Arquivo não encontrado' });
+      }
+      
+      res.setHeader('Content-Disposition', `attachment; filename="${material.name}"`);
+      res.sendFile(filePath);
+    } else {
+      return res.status(404).json({ msg: 'Arquivo não disponível' });
+    }
+    
+  } catch (err) {
+    console.error('Erro ao fazer download do material:', err);
     res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 });

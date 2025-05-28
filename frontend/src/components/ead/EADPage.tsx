@@ -3,7 +3,6 @@ import { api } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import { 
   BookOpen, 
-  Play, 
   FileText, 
   Link2, 
   Image, 
@@ -11,19 +10,13 @@ import {
   CheckCircle, 
   Clock, 
   Users, 
-  Star,
   Search,
   Grid,
   List,
-  Pause,
-  SkipForward,
-  Volume2,
-  Maximize,
   ArrowLeft,
   Plus,
   Upload,
   X,
-  PlayCircle,
   Trash2,
   Edit,
   Eye,
@@ -37,7 +30,8 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Layout } from '@/components/layout/Layout';
 
-// Importar os componentes de diálogo separados
+// Importar os componentes separados
+import VideoPlayer from './VideoPlayer';
 import CreateCourseDialog from './CreateCourseDialog';
 import CreateLessonDialog from './CreateLessonDialog';
 import AddMaterialDialog from './AddMaterialDialog';
@@ -49,12 +43,9 @@ const EADPage = () => {
   const [selectedLesson, setSelectedLesson] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(300);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Estados para criação/edição de curso
+  // Estados para criação/edição
   const [showCreateCourse, setShowCreateCourse] = useState(false);
   const [showCreateLesson, setShowCreateLesson] = useState(false);
   const [showAddMaterial, setShowAddMaterial] = useState(false);
@@ -146,6 +137,40 @@ const EADPage = () => {
     fetchCourses();
   }, []);
   
+  // Handlers de progresso do vídeo
+  const handleVideoProgress = useCallback(async (progress) => {
+    if (selectedCourse && selectedLesson) {
+      try {
+        await api.put(`/courses/${selectedCourse._id}/lessons/${selectedLesson._id}/progress`, {
+          timeSpent: 30, // 30 segundos de progresso
+          lastPosition: progress
+        });
+      } catch (error) {
+        console.error('Erro ao atualizar progresso:', error);
+      }
+    }
+  }, [selectedCourse, selectedLesson]);
+
+  const handleVideoComplete = useCallback(async () => {
+    if (selectedCourse && selectedLesson) {
+      try {
+        await api.put(`/courses/${selectedCourse._id}/lessons/${selectedLesson._id}/progress`, {
+          completed: true
+        });
+        
+        toast({
+          title: "Parabéns!",
+          description: "Aula concluída com sucesso!"
+        });
+        
+        // Atualizar o curso para refletir o progresso
+        await fetchCourse(selectedCourse._id);
+      } catch (error) {
+        console.error('Erro ao marcar aula como concluída:', error);
+      }
+    }
+  }, [selectedCourse, selectedLesson, toast]);
+  
   // Resetar formulários
   const resetCourseForm = () => {
     setCourseForm({
@@ -181,7 +206,7 @@ const EADPage = () => {
     });
   };
 
-  // Criar curso
+  // CRUD de curso (mantendo as funções existentes, mas removendo instrutor)
   const handleCreateCourse = async () => {
     try {
       setIsLoading(true);
@@ -226,7 +251,7 @@ const EADPage = () => {
     }
   };
 
-  // Atualizar curso
+  // Funções similares para update, delete de curso e aulas...
   const handleUpdateCourse = async () => {
     try {
       setIsLoading(true);
@@ -248,16 +273,14 @@ const EADPage = () => {
       }
       
       const response = await api.uploadPut(`/courses/${courseForm._id}`, formData);
-      console.log('Curso atualizado:', response);
       
       toast({
         title: "Sucesso",
         description: "Curso atualizado com sucesso!"
       });
       
-      // Atualizar o curso selecionado se for o mesmo
       if (selectedCourse && selectedCourse._id === courseForm._id) {
-        const updatedCourse = await fetchCourse(courseForm._id);
+        await fetchCourse(courseForm._id);
       }
       
       fetchCourses();
@@ -269,7 +292,7 @@ const EADPage = () => {
       console.error('Erro ao atualizar curso:', error);
       toast({
         title: "Erro",
-        description: "Erro ao atualizar curso. Verifique os dados e tente novamente.",
+        description: "Erro ao atualizar curso.",
         variant: "destructive"
       });
     } finally {
@@ -277,7 +300,6 @@ const EADPage = () => {
     }
   };
 
-  // Excluir curso
   const handleDeleteCourse = async () => {
     try {
       setIsLoading(true);
@@ -289,7 +311,6 @@ const EADPage = () => {
         description: "Curso excluído com sucesso!"
       });
       
-      // Se o curso excluído estava sendo visualizado, voltar para a lista
       if (selectedCourse && selectedCourse._id === courseForm._id) {
         setSelectedCourse(null);
       }
@@ -303,7 +324,7 @@ const EADPage = () => {
       console.error('Erro ao excluir curso:', error);
       toast({
         title: "Erro",
-        description: "Erro ao excluir curso. Verifique se não há alunos matriculados.",
+        description: "Erro ao excluir curso.",
         variant: "destructive"
       });
     } finally {
@@ -311,7 +332,7 @@ const EADPage = () => {
     }
   };
 
-  // Criar aula
+  // CRUD de aula com materiais salvos corretamente
   const handleCreateLesson = async () => {
     if (!selectedCourse) return;
     
@@ -332,17 +353,23 @@ const EADPage = () => {
         formData.append('videoFile', lessonForm.videoFile);
       }
       
+      // Adicionar materiais se existirem
+      if (lessonForm.materials && lessonForm.materials.length > 0) {
+        lessonForm.materials.forEach((material, index) => {
+          if (material.file) {
+            formData.append('materials', material.file);
+          }
+        });
+      }
+      
       const response = await api.upload(`/courses/${selectedCourse._id}/lessons`, formData);
-      console.log('Aula criada:', response);
       
       toast({
         title: "Sucesso",
         description: "Aula criada com sucesso!"
       });
       
-      // Atualizar o curso para mostrar a nova aula
-      const updatedCourse = await fetchCourse(selectedCourse._id);
-      
+      await fetchCourse(selectedCourse._id);
       resetLessonForm();
       setShowCreateLesson(false);
       
@@ -350,7 +377,7 @@ const EADPage = () => {
       console.error('Erro ao criar aula:', error);
       toast({
         title: "Erro",
-        description: "Erro ao criar aula. Verifique os dados e tente novamente.",
+        description: "Erro ao criar aula.",
         variant: "destructive"
       });
     } finally {
@@ -358,7 +385,6 @@ const EADPage = () => {
     }
   };
 
-  // Atualizar aula
   const handleUpdateLesson = async () => {
     if (!selectedCourse || !lessonForm._id) return;
     
@@ -380,17 +406,14 @@ const EADPage = () => {
       }
       
       const response = await api.uploadPut(`/courses/${selectedCourse._id}/lessons/${lessonForm._id}`, formData);
-      console.log('Aula atualizada:', response);
       
       toast({
         title: "Sucesso",
         description: "Aula atualizada com sucesso!"
       });
       
-      // Atualizar o curso
       const updatedCourse = await fetchCourse(selectedCourse._id);
       
-      // Atualizar a aula selecionada
       if (selectedLesson && selectedLesson._id === lessonForm._id) {
         const updatedLesson = updatedCourse.lessons.find(l => l._id === lessonForm._id);
         if (updatedLesson) {
@@ -406,7 +429,7 @@ const EADPage = () => {
       console.error('Erro ao atualizar aula:', error);
       toast({
         title: "Erro",
-        description: "Erro ao atualizar aula. Verifique os dados e tente novamente.",
+        description: "Erro ao atualizar aula.",
         variant: "destructive"
       });
     } finally {
@@ -414,7 +437,6 @@ const EADPage = () => {
     }
   };
 
-  // Excluir aula
   const handleDeleteLesson = async () => {
     if (!selectedCourse || !lessonForm._id) return;
     
@@ -428,14 +450,11 @@ const EADPage = () => {
         description: "Aula excluída com sucesso!"
       });
       
-      // Se a aula excluída estava sendo visualizada, limpar seleção
       if (selectedLesson && selectedLesson._id === lessonForm._id) {
         setSelectedLesson(null);
       }
       
-      // Atualizar o curso
-      const updatedCourse = await fetchCourse(selectedCourse._id);
-      
+      await fetchCourse(selectedCourse._id);
       resetLessonForm();
       setShowCreateLesson(false);
       setIsEditingLesson(false);
@@ -452,7 +471,7 @@ const EADPage = () => {
     }
   };
 
-  // Adicionar material (mock - implementar upload real depois)
+  // Adicionar material
   const handleAddMaterial = useCallback(() => {
     if (materialForm.name && (materialForm.file || materialForm.url)) {
       const newMaterial = {
@@ -464,13 +483,11 @@ const EADPage = () => {
         size: materialForm.file ? `${(materialForm.file.size / 1024 / 1024).toFixed(1)} MB` : null
       };
       
-      if (selectedLesson) {
-        const updatedLesson = {
-          ...selectedLesson,
-          materials: [...(selectedLesson.materials || []), newMaterial]
-        };
-        setSelectedLesson(updatedLesson);
-      }
+      // Adicionar ao formulário da aula atual
+      setLessonForm(prev => ({
+        ...prev,
+        materials: [...(prev.materials || []), newMaterial]
+      }));
       
       setMaterialForm({
         name: '',
@@ -485,22 +502,19 @@ const EADPage = () => {
         description: "Material adicionado com sucesso!"
       });
     }
-  }, [materialForm, selectedLesson, toast]);
+  }, [materialForm, toast]);
 
   const handleRemoveMaterial = useCallback((materialId) => {
-    if (selectedLesson) {
-      const updatedLesson = {
-        ...selectedLesson,
-        materials: selectedLesson.materials.filter(m => m.id !== materialId)
-      };
-      setSelectedLesson(updatedLesson);
-      
-      toast({
-        title: "Sucesso",
-        description: "Material removido com sucesso!"
-      });
-    }
-  }, [selectedLesson, toast]);
+    setLessonForm(prev => ({
+      ...prev,
+      materials: prev.materials.filter(m => m.id !== materialId)
+    }));
+    
+    toast({
+      title: "Sucesso",
+      description: "Material removido com sucesso!"
+    });
+  }, [toast]);
 
   // Handlers para edição
   const handleEditCourse = (course) => {
@@ -552,16 +566,10 @@ const EADPage = () => {
     setSearchTerm(e.target.value);
   }, []);
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const getFileIcon = (type) => {
     switch (type) {
       case 'pdf': return <FileText className="h-4 w-4 text-red-500" />;
-      case 'video': return <Play className="h-4 w-4 text-blue-500" />;
+      case 'video': return <FileText className="h-4 w-4 text-blue-500" />;
       case 'document': return <FileText className="h-4 w-4 text-blue-600" />;
       case 'image': return <Image className="h-4 w-4 text-green-500" />;
       case 'link': return <Link2 className="h-4 w-4 text-purple-500" />;
@@ -569,66 +577,7 @@ const EADPage = () => {
     }
   };
 
-  // Vista do Player de Vídeo/Conteúdo
-  const ContentPlayer = () => (
-    <div className="bg-black rounded-lg overflow-hidden">
-      <div className="aspect-video bg-gradient-to-r from-gray-800 to-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <PlayCircle className="h-16 w-16 text-white mx-auto mb-4" />
-          <h3 className="text-white text-xl font-medium">
-            {selectedLesson?.title || 'Selecione uma aula'}
-          </h3>
-          <p className="text-gray-300 mt-2">
-            {selectedLesson?.duration || 'Duração não disponível'}
-          </p>
-          {selectedLesson?.videoUrl && (
-            <p className="text-gray-400 text-sm mt-2">
-              {selectedLesson.videoUrl.startsWith('http') ? 'Vídeo externo' : 'Vídeo local'}
-            </p>
-          )}
-        </div>
-      </div>
-      
-      {/* Controles do Player */}
-      <div className="bg-gray-900 p-4">
-        <div className="flex items-center gap-4 mb-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white hover:bg-gray-800"
-            onClick={() => setIsPlaying(!isPlaying)}
-          >
-            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-          </Button>
-          
-          <Button variant="ghost" size="icon" className="text-white hover:bg-gray-800">
-            <SkipForward className="h-5 w-5" />
-          </Button>
-          
-          <div className="flex-1 flex items-center gap-2">
-            <span className="text-white text-sm">{formatTime(currentTime)}</span>
-            <div className="flex-1 bg-gray-700 rounded-full h-2">
-              <div 
-                className="bg-red-500 h-2 rounded-full transition-all"
-                style={{ width: `${(currentTime / duration) * 100}%` }}
-              />
-            </div>
-            <span className="text-white text-sm">{formatTime(duration)}</span>
-          </div>
-          
-          <Button variant="ghost" size="icon" className="text-white hover:bg-gray-800">
-            <Volume2 className="h-5 w-5" />
-          </Button>
-          
-          <Button variant="ghost" size="icon" className="text-white hover:bg-gray-800">
-            <Maximize className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Vista Detalhada do Curso
+  // Vista Detalhada do Curso com VideoPlayer
   const CourseDetailView = () => (
     <div className="space-y-6">
       <div className="flex items-center gap-4 mb-6">
@@ -653,7 +602,11 @@ const EADPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Player de Conteúdo */}
         <div className="lg:col-span-2">
-          <ContentPlayer />
+          <VideoPlayer 
+            lesson={selectedLesson}
+            onProgress={handleVideoProgress}
+            onComplete={handleVideoComplete}
+          />
           
           {/* Informações da Aula Atual */}
           {selectedLesson && (
@@ -704,7 +657,7 @@ const EADPage = () => {
                     <h4 className="font-medium mb-3">Materiais da Aula</h4>
                     <div className="space-y-3">
                       {selectedLesson.materials?.map((material) => (
-                        <div key={material.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                        <div key={material.id || material._id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
                           <div className="flex items-center gap-3">
                             {getFileIcon(material.type)}
                             <div>
@@ -721,7 +674,7 @@ const EADPage = () => {
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              onClick={() => handleRemoveMaterial(material.id)}
+                              onClick={() => handleRemoveMaterial(material.id || material._id)}
                               className="text-red-500 hover:text-red-700"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -774,9 +727,6 @@ const EADPage = () => {
                     {selectedCourse.enrollmentCount || 0} alunos
                   </div>
                 </div>
-                <div className="text-sm">
-                  <strong>Instrutor:</strong> {selectedCourse.instructor?.nome || 'Não informado'}
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -815,10 +765,10 @@ const EADPage = () => {
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
-                          {lesson.type === 'video' && <Play className="h-3 w-3" />}
+                          {lesson.type === 'video' && <Eye className="h-3 w-3" />}
                           {lesson.type === 'text' && <FileText className="h-3 w-3" />}
                           <span>{lesson.duration || 'Sem duração'}</span>
-                          {lesson.materials && (
+                          {lesson.materials && lesson.materials.length > 0 && (
                             <>
                               <span>•</span>
                               <span>{lesson.materials.length} materiais</span>
@@ -849,7 +799,7 @@ const EADPage = () => {
     </div>
   );
 
-  // Vista Principal com Lista de Cursos
+  // Vista Principal com Lista de Cursos (removendo instrutor)
   const CoursesGridView = () => (
     <div className="space-y-6">
       {/* Cabeçalho */}
@@ -994,16 +944,14 @@ const EADPage = () => {
                         </div>
                       </div>
                       
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">
-                          {course.instructor?.nome || 'Instrutor não informado'}
-                        </span>
-                        {course.userProgress?.progress > 0 && (
+                      {course.userProgress?.progress > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Progresso</span>
                           <Badge variant="outline" className="text-xs">
                             {course.userProgress.progress}% concluído
                           </Badge>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </>
@@ -1044,7 +992,6 @@ const EADPage = () => {
                           <Users className="h-4 w-4" />
                           {course.enrollmentCount || 0}
                         </span>
-                        <span>{course.instructor?.nome || 'Instrutor não informado'}</span>
                       </div>
                       
                       {course.userProgress?.progress > 0 && (

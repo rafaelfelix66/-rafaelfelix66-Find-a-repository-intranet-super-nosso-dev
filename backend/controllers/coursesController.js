@@ -52,8 +52,7 @@ const getCourses = async (req, res) => {
         { departamentoVisibilidade: { $in: ['TODOS'] } },
         { departamentoVisibilidade: { $in: [userDepartment] } },
         { departamentoVisibilidade: { $exists: false } },
-        { departamentoVisibilidade: { $eq: [] } },
-        { instructor: req.usuario.id } // Instrutor pode ver seus próprios cursos
+        { departamentoVisibilidade: { $eq: [] } }
       ];
     }
     
@@ -85,7 +84,6 @@ const getCourses = async (req, res) => {
     
     // Buscar cursos
     const courses = await Course.find(filters)
-      .populate('instructor', 'nome email departamento')
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit))
@@ -157,9 +155,7 @@ const getCourse = async (req, res) => {
     console.log('Course ID:', courseId);
     console.log('User ID:', req.usuario.id);
     
-    const course = await Course.findById(courseId)
-      .populate('instructor', 'nome email departamento avatar')
-      .lean();
+    const course = await Course.findById(courseId).lean();
     
     if (!course) {
       return res.status(404).json({ msg: 'Curso não encontrado' });
@@ -169,10 +165,8 @@ const getCourse = async (req, res) => {
     const user = await User.findById(req.usuario.id);
     const userDepartment = user?.departamento || 'PUBLICO';
     const isAdmin = user?.roles?.includes('admin') || false;
-    const isInstructor = course.instructor._id.toString() === req.usuario.id;
     
     const hasAccess = isAdmin || 
-                     isInstructor ||
                      course.departamentoVisibilidade.includes('TODOS') ||
                      course.departamentoVisibilidade.includes(userDepartment) ||
                      !course.departamentoVisibilidade ||
@@ -234,7 +228,7 @@ const getCourse = async (req, res) => {
 
 // @desc    Criar novo curso
 // @route   POST /api/courses
-// @access  Private (Instructor/Admin)
+// @access  Private (Admin)
 const createCourse = async (req, res) => {
   try {
     console.log('=== CREATE COURSE DEBUG ===');
@@ -277,14 +271,13 @@ const createCourse = async (req, res) => {
       thumbnailPath = `/uploads/courses/${req.file.filename}`;
     }
     
-    // Criar curso
+    // Criar curso (sem instrutor)
     const newCourse = new Course({
       title,
       description,
       thumbnail: thumbnailPath,
       category,
       level: level || 'Iniciante',
-      instructor: req.usuario.id,
       estimatedDuration,
       objectives: objectives ? (Array.isArray(objectives) ? objectives : [objectives]) : [],
       requirements: requirements ? (Array.isArray(requirements) ? requirements : [requirements]) : [],
@@ -298,12 +291,10 @@ const createCourse = async (req, res) => {
     });
     
     const course = await newCourse.save();
-    const populatedCourse = await Course.findById(course._id)
-      .populate('instructor', 'nome email departamento');
     
-    console.log('Course created:', populatedCourse._id);
+    console.log('Course created:', course._id);
     
-    res.status(201).json(populatedCourse);
+    res.status(201).json(course);
   } catch (err) {
     console.error('Erro ao criar curso:', err);
     res.status(500).json({ 
@@ -423,7 +414,7 @@ const updateLessonProgress = async (req, res) => {
 
 // @desc    Adicionar aula ao curso
 // @route   POST /api/courses/:id/lessons
-// @access  Private (Instructor/Admin)
+// @access  Private (Admin)
 const addLesson = async (req, res) => {
   try {
     const courseId = req.params.id;
@@ -448,13 +439,12 @@ const addLesson = async (req, res) => {
       return res.status(404).json({ msg: 'Curso não encontrado' });
     }
     
-    // Verificar permissão (instrutor ou admin)
+    // Verificar permissão (apenas admin)
     const user = await User.findById(req.usuario.id);
-    const isInstructor = course.instructor.toString() === req.usuario.id;
     const isAdmin = user?.roles?.includes('admin') || false;
     
-    if (!isInstructor && !isAdmin) {
-      return res.status(403).json({ msg: 'Apenas o instrutor ou administradores podem adicionar aulas' });
+    if (!isAdmin) {
+      return res.status(403).json({ msg: 'Apenas administradores podem adicionar aulas' });
     }
     
     // Processar upload de vídeo se enviado
@@ -494,8 +484,7 @@ const addLesson = async (req, res) => {
     course.lessons.push(newLesson);
     await course.save();
     
-    const updatedCourse = await Course.findById(courseId)
-      .populate('instructor', 'nome email');
+    const updatedCourse = await Course.findById(courseId);
     
     console.log('Lesson added to course');
     
@@ -506,6 +495,273 @@ const addLesson = async (req, res) => {
       msg: 'Erro no servidor', 
       error: err.message 
     });
+  }
+};
+
+// @desc    Atualizar aula
+// @route   PUT /api/courses/:courseId/lessons/:lessonId
+// @access  Private (Admin)
+const updateLesson = async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.params;
+    const {
+      title,
+      description,
+      type,
+      content,
+      videoUrl,
+      duration,
+      order,
+      isPublished
+    } = req.body;
+    
+    console.log('=== UPDATE LESSON DEBUG ===');
+    console.log('Course ID:', courseId);
+    console.log('Lesson ID:', lessonId);
+    console.log('Files received:', req.files);
+    
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    // Verificar permissão (apenas admin)
+    const user = await User.findById(req.usuario.id);
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    if (!isAdmin) {
+      return res.status(403).json({ msg: 'Apenas administradores podem editar aulas' });
+    }
+    
+    const lesson = course.lessons.id(lessonId);
+    if (!lesson) {
+      return res.status(404).json({ msg: 'Aula não encontrada' });
+    }
+    
+    // Atualizar campos da aula
+    Object.assign(lesson, {
+      title: title || lesson.title,
+      description: description || lesson.description,
+      type: type || lesson.type,
+      content: content || lesson.content,
+      videoUrl: videoUrl || lesson.videoUrl,
+      duration: duration || lesson.duration,
+      order: parseInt(order) || lesson.order,
+      isPublished: isPublished === 'true' || isPublished === true
+    });
+    
+    // Processar upload de vídeo se enviado
+    if (req.files && req.files.videoFile && req.files.videoFile[0]) {
+      lesson.videoPath = `/uploads/courses/videos/${req.files.videoFile[0].filename}`;
+      // Se subiu um vídeo local, limpar a URL externa
+      lesson.videoUrl = '';
+    }
+    
+    // Adicionar novos materiais se enviados
+    if (req.files && req.files.materials) {
+      req.files.materials.forEach(file => {
+        lesson.materials.push({
+          name: file.originalname,
+          type: getFileType(file.mimetype),
+          filePath: `/uploads/courses/materials/${file.filename}`,
+          size: formatFileSize(file.size),
+          order: lesson.materials.length
+        });
+      });
+    }
+    
+    await course.save();
+    
+    res.json(course);
+  } catch (err) {
+    console.error('Erro ao atualizar aula:', err);
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+};
+
+// @desc    Excluir aula
+// @route   DELETE /api/courses/:courseId/lessons/:lessonId
+// @access  Private (Admin)
+const deleteLesson = async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.params;
+    
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    // Verificar permissão (apenas admin)
+    const user = await User.findById(req.usuario.id);
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    if (!isAdmin) {
+      return res.status(403).json({ msg: 'Apenas administradores podem excluir aulas' });
+    }
+    
+    const lesson = course.lessons.id(lessonId);
+    if (!lesson) {
+      return res.status(404).json({ msg: 'Aula não encontrada' });
+    }
+    
+    // Remover arquivos de materiais
+    lesson.materials.forEach(material => {
+      if (material.filePath) {
+        const materialPath = path.join(__dirname, '..', material.filePath);
+        if (fs.existsSync(materialPath)) {
+          fs.unlinkSync(materialPath);
+        }
+      }
+    });
+    
+    // Remover vídeo se existir
+    if (lesson.videoPath) {
+      const videoPath = path.join(__dirname, '..', lesson.videoPath);
+      if (fs.existsSync(videoPath)) {
+        fs.unlinkSync(videoPath);
+      }
+    }
+    
+    // Remover aula
+    course.lessons.pull(lessonId);
+    await course.save();
+    
+    // Atualizar progresso dos usuários
+    const CourseProgress = require('../models/CourseProgress');
+    await CourseProgress.updateMany(
+      { courseId: courseId },
+      { $pull: { lessonsProgress: { lessonId: lessonId } } }
+    );
+    
+    res.json({ msg: 'Aula excluída com sucesso' });
+  } catch (err) {
+    console.error('Erro ao excluir aula:', err);
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+};
+
+// @desc    Excluir curso
+// @route   DELETE /api/courses/:id
+// @access  Private (Admin)
+const deleteCourse = async (req, res) => {
+  try {
+    const courseId = req.params.id;
+    
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    // Verificar permissão (apenas admin)
+    const user = await User.findById(req.usuario.id);
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    if (!isAdmin) {
+      return res.status(403).json({ msg: 'Apenas administradores podem excluir cursos' });
+    }
+    
+    // Remover progresso dos usuários
+    const CourseProgress = require('../models/CourseProgress');
+    await CourseProgress.deleteMany({ courseId: courseId });
+    
+    // Remover arquivos associados
+    if (course.thumbnail) {
+      const thumbnailPath = path.join(__dirname, '..', course.thumbnail);
+      if (fs.existsSync(thumbnailPath)) {
+        fs.unlinkSync(thumbnailPath);
+      }
+    }
+    
+    // Remover materiais das aulas
+    course.lessons.forEach(lesson => {
+      lesson.materials.forEach(material => {
+        if (material.filePath) {
+          const materialPath = path.join(__dirname, '..', material.filePath);
+          if (fs.existsSync(materialPath)) {
+            fs.unlinkSync(materialPath);
+          }
+        }
+      });
+      
+      // Remover vídeos das aulas
+      if (lesson.videoPath) {
+        const videoPath = path.join(__dirname, '..', lesson.videoPath);
+        if (fs.existsSync(videoPath)) {
+          fs.unlinkSync(videoPath);
+        }
+      }
+    });
+    
+    await Course.findByIdAndDelete(courseId);
+    
+    res.json({ msg: 'Curso excluído com sucesso' });
+  } catch (err) {
+    console.error('Erro ao excluir curso:', err);
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+};
+
+// @desc    Atualizar curso
+// @route   PUT /api/courses/:id
+// @access  Private (Admin)
+const updateCourse = async (req, res) => {
+  try {
+    const courseId = req.params.id;
+    
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    // Verificar permissão (apenas admin)
+    const user = await User.findById(req.usuario.id);
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    if (!isAdmin) {
+      return res.status(403).json({ msg: 'Apenas administradores podem editar cursos' });
+    }
+    
+    // Atualizar campos
+    const updateFields = { ...req.body };
+    
+    // Processar departamentos
+    if (req.body.departamentoVisibilidade) {
+      try {
+        updateFields.departamentoVisibilidade = typeof req.body.departamentoVisibilidade === 'string' 
+          ? JSON.parse(req.body.departamentoVisibilidade)
+          : req.body.departamentoVisibilidade;
+      } catch (e) {
+        console.error('Erro ao processar departamentoVisibilidade:', e);
+      }
+    }
+    
+    // Atualizar thumbnail se enviada
+    if (req.file) {
+      updateFields.thumbnail = `/uploads/courses/${req.file.filename}`;
+    }
+    
+    // Converter strings booleanas
+    ['isPublished', 'allowDownload', 'certificateEnabled'].forEach(field => {
+      if (updateFields[field] !== undefined) {
+        updateFields[field] = updateFields[field] === 'true' || updateFields[field] === true;
+      }
+    });
+    
+    // Converter números
+    if (updateFields.passingScore) {
+      updateFields.passingScore = parseInt(updateFields.passingScore) || 70;
+    }
+    
+    const updatedCourse = await Course.findByIdAndUpdate(
+      courseId,
+      { $set: updateFields },
+      { new: true }
+    );
+    
+    res.json(updatedCourse);
+  } catch (err) {
+    console.error('Erro ao atualizar curso:', err);
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
@@ -531,6 +787,10 @@ module.exports = {
   getCourses,
   getCourse,
   createCourse,
+  updateCourse,
+  deleteCourse,
   updateLessonProgress,
-  addLesson
+  addLesson,
+  updateLesson,
+  deleteLesson
 };

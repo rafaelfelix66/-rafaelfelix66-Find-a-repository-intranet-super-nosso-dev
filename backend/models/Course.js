@@ -1,4 +1,4 @@
-// backend/models/Course.js - ATUALIZADO
+// backend/models/Course.js - ATUALIZADO SEM INSTRUTOR
 const mongoose = require('mongoose');
 
 const MaterialSchema = new mongoose.Schema({
@@ -83,11 +83,7 @@ const CourseSchema = new mongoose.Schema({
     enum: ['Iniciante', 'Intermediário', 'Avançado', 'Obrigatório'],
     default: 'Iniciante'
   },
-  instructor: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
+  // REMOVIDO: campo instructor
   estimatedDuration: String, // Ex: "8 horas"
   objectives: [String], // Objetivos do curso
   requirements: [String], // Pré-requisitos
@@ -104,7 +100,7 @@ const CourseSchema = new mongoose.Schema({
     }
   },
   
-  // NOVO: Controle de publicação
+  // Controle de publicação
   isPublished: {
     type: Boolean,
     default: false
