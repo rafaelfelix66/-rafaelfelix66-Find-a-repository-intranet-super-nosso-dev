@@ -1,4 +1,4 @@
-//src/components/ead/AddMaterialDialog.tsx
+//src/components/ead/AddMaterialDialog.tsx - CORRIGIDO
 import React from 'react';
 import { Upload, X, Plus, FileText, Play, Image, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -73,6 +73,33 @@ const AddMaterialDialog: React.FC<AddMaterialDialogProps> = ({
     onOpenChange(false);
   };
 
+  // CORRIGIDO: Validação melhorada
+  const isFormValid = () => {
+    if (!materialForm.name.trim()) return false;
+    
+    if (materialForm.type === 'link') {
+      return materialForm.url.trim().length > 0;
+    } else {
+      return materialForm.file !== null;
+    }
+  };
+
+  // CORRIGIDO: Handler para submissão
+  const handleSubmit = () => {
+    if (!isFormValid()) {
+      return;
+    }
+    
+    console.log('Submitting material:', {
+      name: materialForm.name,
+      type: materialForm.type,
+      hasFile: !!materialForm.file,
+      hasUrl: !!materialForm.url
+    });
+    
+    onAddMaterial();
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[400px]">
@@ -99,7 +126,12 @@ const AddMaterialDialog: React.FC<AddMaterialDialogProps> = ({
             <Label htmlFor="material-type">Tipo de Material</Label>
             <Select 
               value={materialForm.type} 
-              onValueChange={(value) => setMaterialForm(prev => ({ ...prev, type: value, file: null, url: '' }))}
+              onValueChange={(value) => setMaterialForm(prev => ({ 
+                ...prev, 
+                type: value, 
+                file: null, 
+                url: '' 
+              }))}
             >
               <SelectTrigger className="mt-1">
                 <SelectValue />
@@ -167,6 +199,13 @@ const AddMaterialDialog: React.FC<AddMaterialDialogProps> = ({
                             alert('Arquivo muito grande. Máximo 50MB.');
                             return;
                           }
+                          
+                          console.log('Arquivo selecionado:', {
+                            name: file.name,
+                            size: file.size,
+                            type: file.type
+                          });
+                          
                           setMaterialForm(prev => ({ ...prev, file }));
                         }
                       }}
@@ -191,6 +230,15 @@ const AddMaterialDialog: React.FC<AddMaterialDialogProps> = ({
               </div>
             </div>
           )}
+
+          {/* Debug info - remover em produção */}
+          <div className="text-xs text-gray-400">
+            Debug: Nome: {materialForm.name || 'vazio'}, 
+            Tipo: {materialForm.type}, 
+            Arquivo: {materialForm.file ? 'sim' : 'não'}, 
+            URL: {materialForm.url || 'vazia'},
+            Válido: {isFormValid() ? 'sim' : 'não'}
+          </div>
         </div>
         
         <DialogFooter>
@@ -198,8 +246,8 @@ const AddMaterialDialog: React.FC<AddMaterialDialogProps> = ({
             Cancelar
           </Button>
           <Button 
-            onClick={onAddMaterial}
-            disabled={!materialForm.name || (!materialForm.file && !materialForm.url)}
+            onClick={handleSubmit}
+            disabled={!isFormValid()}
             className="bg-red-600 hover:bg-red-700"
           >
             <Plus className="h-4 w-4 mr-2" />

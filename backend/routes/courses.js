@@ -585,7 +585,16 @@ router.post('/:courseId/lessons/:lessonId/materials',
   auth,
   checkCoursePermission('courses:manage_materials'),
   (req, res, next) => {
-    uploadLesson(req, res, (err) => {
+    // Configuração específica para materiais
+    const uploadMaterial = multer({
+      storage,
+      fileFilter,
+      limits: {
+        fileSize: 50 * 1024 * 1024 // 50MB para materiais
+      }
+    }).single('material'); // CORRIGIDO: usar .single('material') em vez de .fields
+    
+    uploadMaterial(req, res, (err) => {
       if (err) {
         console.error('Erro no upload do material:', err);
         return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
@@ -597,6 +606,12 @@ router.post('/:courseId/lessons/:lessonId/materials',
     try {
       const { courseId, lessonId } = req.params;
       const { name, type, url, description } = req.body;
+      
+      console.log('=== ADD MATERIAL DEBUG ===');
+      console.log('Course ID:', courseId);
+      console.log('Lesson ID:', lessonId);
+      console.log('Body:', req.body);
+      console.log('File:', req.file); // CORRIGIDO: req.file em vez de req.files
       
       const Course = require('../models/Course');
       const course = await Course.findById(courseId);
@@ -617,26 +632,43 @@ router.post('/:courseId/lessons/:lessonId/materials',
         order: lesson.materials.length
       };
       
-      // Se foi enviado um arquivo
-      if (req.files && req.files.materials && req.files.materials[0]) {
-        const file = req.files.materials[0];
-        newMaterial.filePath = `/uploads/courses/materials/${file.filename}`;
-        newMaterial.size = formatFileSize(file.size);
-        newMaterial.type = getFileType(file.mimetype);
+      // CORRIGIDO: Verificar req.file em vez de req.files.materials
+      if (req.file) {
+        newMaterial.filePath = `/uploads/courses/materials/${req.file.filename}`;
+        newMaterial.size = formatFileSize(req.file.size);
+        newMaterial.type = getFileType(req.file.mimetype);
+        
+        console.log('Arquivo processado:', {
+          originalName: req.file.originalname,
+          filename: req.file.filename,
+          path: newMaterial.filePath,
+          size: newMaterial.size,
+          type: newMaterial.type
+        });
       }
       // Se foi fornecida uma URL
       else if (url) {
         newMaterial.url = url;
         newMaterial.type = 'link';
+        console.log('URL processada:', url);
       }
       else {
         return res.status(400).json({ msg: 'É necessário enviar um arquivo ou fornecer uma URL' });
       }
       
+      // Adicionar o material à aula
       lesson.materials.push(newMaterial);
       await course.save();
       
-      res.status(201).json(newMaterial);
+      console.log('Material adicionado com sucesso:', newMaterial);
+      
+      // Retornar o material criado com o ID gerado pelo MongoDB
+      const savedMaterial = lesson.materials[lesson.materials.length - 1];
+      
+      res.status(201).json({
+        msg: 'Material adicionado com sucesso',
+        material: savedMaterial
+      });
     } catch (err) {
       console.error('Erro ao adicionar material:', err);
       res.status(500).json({ msg: 'Erro no servidor', error: err.message });

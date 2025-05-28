@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { api } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
+import { usePermission } from '@/hooks/usePermission'; // ADICIONADO
 import { 
   BookOpen, 
   FileText, 
@@ -38,6 +39,13 @@ import AddMaterialDialog from './AddMaterialDialog';
 
 const EADPage = () => {
   const { toast } = useToast();
+  const { hasPermission } = usePermission(); // ADICIONADO
+  
+  // Verificar permissões
+  const canManageCourses = hasPermission('courses:create') || hasPermission('courses:admin');
+  const canManageLessons = hasPermission('courses:manage_lessons') || hasPermission('courses:admin');
+  const canManageMaterials = hasPermission('courses:manage_materials') || hasPermission('courses:admin');
+  
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedLesson, setSelectedLesson] = useState(null);
@@ -142,7 +150,7 @@ const EADPage = () => {
     if (selectedCourse && selectedLesson) {
       try {
         await api.put(`/courses/${selectedCourse._id}/lessons/${selectedLesson._id}/progress`, {
-          timeSpent: 30, // 30 segundos de progresso
+          timeSpent: 30,
           lastPosition: progress
         });
       } catch (error) {
@@ -163,7 +171,6 @@ const EADPage = () => {
           description: "Aula concluída com sucesso!"
         });
         
-        // Atualizar o curso para refletir o progresso
         await fetchCourse(selectedCourse._id);
       } catch (error) {
         console.error('Erro ao marcar aula como concluída:', error);
@@ -206,7 +213,7 @@ const EADPage = () => {
     });
   };
 
-  // CRUD de curso (mantendo as funções existentes, mas removendo instrutor)
+  // CRUD de curso
   const handleCreateCourse = async () => {
     try {
       setIsLoading(true);
@@ -251,7 +258,6 @@ const EADPage = () => {
     }
   };
 
-  // Funções similares para update, delete de curso e aulas...
   const handleUpdateCourse = async () => {
     try {
       setIsLoading(true);
@@ -332,7 +338,7 @@ const EADPage = () => {
     }
   };
 
-  // CRUD de aula com materiais salvos corretamente
+  // CRUD de aula
   const handleCreateLesson = async () => {
     if (!selectedCourse) return;
     
@@ -351,15 +357,6 @@ const EADPage = () => {
       
       if (lessonForm.videoFile) {
         formData.append('videoFile', lessonForm.videoFile);
-      }
-      
-      // Adicionar materiais se existirem
-      if (lessonForm.materials && lessonForm.materials.length > 0) {
-        lessonForm.materials.forEach((material, index) => {
-          if (material.file) {
-            formData.append('materials', material.file);
-          }
-        });
       }
       
       const response = await api.upload(`/courses/${selectedCourse._id}/lessons`, formData);
@@ -471,24 +468,70 @@ const EADPage = () => {
     }
   };
 
-  // Adicionar material
-  const handleAddMaterial = useCallback(() => {
-    if (materialForm.name && (materialForm.file || materialForm.url)) {
-      const newMaterial = {
-        id: Date.now(),
+  // CORRIGIDO: Adicionar material via API
+  const handleAddMaterial = useCallback(async () => {
+    if (!selectedCourse || !selectedLesson) {
+      toast({
+        title: "Erro",
+        description: "Curso ou aula não selecionados",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!materialForm.name || (!materialForm.file && !materialForm.url)) {
+      toast({
+        title: "Erro",
+        description: "Nome e arquivo/URL são obrigatórios",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      
+      const formData = new FormData();
+      formData.append('name', materialForm.name);
+      formData.append('type', materialForm.type);
+      
+      if (materialForm.file) {
+        formData.append('material', materialForm.file); // CORRIGIDO: usar 'material' como fieldname
+      } else if (materialForm.url) {
+        formData.append('url', materialForm.url);
+      }
+      
+      console.log('Enviando material:', {
         name: materialForm.name,
         type: materialForm.type,
-        file: materialForm.file,
-        url: materialForm.url,
-        size: materialForm.file ? `${(materialForm.file.size / 1024 / 1024).toFixed(1)} MB` : null
-      };
+        hasFile: !!materialForm.file,
+        url: materialForm.url
+      });
       
-      // Adicionar ao formulário da aula atual
-      setLessonForm(prev => ({
-        ...prev,
-        materials: [...(prev.materials || []), newMaterial]
-      }));
+      const response = await api.upload(
+        `/courses/${selectedCourse._id}/lessons/${selectedLesson._id}/materials`, 
+        formData
+      );
       
+      console.log('Resposta da API:', response);
+      
+      toast({
+        title: "Sucesso",
+        description: "Material adicionado com sucesso!"
+      });
+      
+      // Recarregar o curso para buscar os materiais atualizados
+      const updatedCourse = await fetchCourse(selectedCourse._id);
+      
+      // Atualizar a aula selecionada com os novos materiais
+      if (updatedCourse && selectedLesson) {
+        const updatedLesson = updatedCourse.lessons.find(l => l._id === selectedLesson._id);
+        if (updatedLesson) {
+          setSelectedLesson(updatedLesson);
+        }
+      }
+      
+      // Resetar formulário
       setMaterialForm({
         name: '',
         type: 'pdf',
@@ -497,24 +540,46 @@ const EADPage = () => {
       });
       setShowAddMaterial(false);
       
+    } catch (error) {
+      console.error('Erro ao adicionar material:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao adicionar material. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCourse, selectedLesson, materialForm, toast]);
+
+  const handleRemoveMaterial = useCallback(async (materialId) => {
+    if (!selectedCourse || !selectedLesson) return;
+    
+    try {
+      await api.delete(`/courses/${selectedCourse._id}/lessons/${selectedLesson._id}/materials/${materialId}`);
+      
+      // Recarregar curso
+      const updatedCourse = await fetchCourse(selectedCourse._id);
+      if (updatedCourse) {
+        const updatedLesson = updatedCourse.lessons.find(l => l._id === selectedLesson._id);
+        if (updatedLesson) {
+          setSelectedLesson(updatedLesson);
+        }
+      }
+      
       toast({
         title: "Sucesso",
-        description: "Material adicionado com sucesso!"
+        description: "Material removido com sucesso!"
+      });
+    } catch (error) {
+      console.error('Erro ao remover material:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao remover material.",
+        variant: "destructive"
       });
     }
-  }, [materialForm, toast]);
-
-  const handleRemoveMaterial = useCallback((materialId) => {
-    setLessonForm(prev => ({
-      ...prev,
-      materials: prev.materials.filter(m => m.id !== materialId)
-    }));
-    
-    toast({
-      title: "Sucesso",
-      description: "Material removido com sucesso!"
-    });
-  }, [toast]);
+  }, [selectedCourse, selectedLesson, toast]);
 
   // Handlers para edição
   const handleEditCourse = (course) => {
@@ -590,13 +655,15 @@ const EADPage = () => {
           Voltar aos Cursos
         </Button>
         
-        <Button
-          variant="outline"
-          onClick={() => handleEditCourse(selectedCourse)}
-        >
-          <Settings className="h-4 w-4 mr-2" />
-          Configurações do Curso
-        </Button>
+        {canManageCourses && (
+          <Button
+            variant="outline"
+            onClick={() => handleEditCourse(selectedCourse)}
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Configurações do Curso
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -627,14 +694,16 @@ const EADPage = () => {
                         Não Publicada
                       </Badge>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEditLesson(selectedLesson)}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Editar
-                    </Button>
+                    {canManageLessons && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditLesson(selectedLesson)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Editar
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardHeader>
@@ -671,26 +740,30 @@ const EADPage = () => {
                             <Button variant="ghost" size="sm">
                               <Download className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleRemoveMaterial(material.id || material._id)}
-                              className="text-red-500 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {canManageMaterials && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleRemoveMaterial(material.id || material._id)}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))}
                       
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => setShowAddMaterial(true)}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Adicionar Material
-                      </Button>
+                      {canManageMaterials && (
+                        <Button 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={() => setShowAddMaterial(true)}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Adicionar Material
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -780,17 +853,19 @@ const EADPage = () => {
                   </div>
                 ))}
                 
-                <Button 
-                  variant="outline" 
-                  className="w-full mt-4"
-                  onClick={() => {
-                    resetLessonForm();
-                    setShowCreateLesson(true);
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Aula
-                </Button>
+                {canManageLessons && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-4"
+                    onClick={() => {
+                      resetLessonForm();
+                      setShowCreateLesson(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar Aula
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -799,7 +874,7 @@ const EADPage = () => {
     </div>
   );
 
-  // Vista Principal com Lista de Cursos (removendo instrutor)
+  // Vista Principal com Lista de Cursos
   const CoursesGridView = () => (
     <div className="space-y-6">
       {/* Cabeçalho */}
@@ -809,19 +884,21 @@ const EADPage = () => {
           <p className="text-gray-600 mt-2">Desenvolva suas habilidades com nossos cursos especializados</p>
         </div>
         
-        <div className="flex gap-2">
-          <Button 
-            className="bg-red-600 hover:bg-red-700"
-            onClick={() => {
-              resetCourseForm();
-              setIsEditingCourse(false);
-              setShowCreateCourse(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Curso
-          </Button>
-        </div>
+        {canManageCourses && (
+          <div className="flex gap-2">
+            <Button 
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                resetCourseForm();
+                setIsEditingCourse(false);
+                setShowCreateCourse(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Curso
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Busca e Filtros */}
@@ -874,20 +951,22 @@ const EADPage = () => {
             key={course._id} 
             className="hover:shadow-lg transition-shadow group relative"
           >
-            {/* Botão de edição */}
-            <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleEditCourse(course);
-                }}
-                className="bg-white/90 backdrop-blur-sm"
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-            </div>
+            {/* Botão de edição - só aparece para quem pode gerenciar */}
+            {canManageCourses && (
+              <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditCourse(course);
+                  }}
+                  className="bg-white/90 backdrop-blur-sm"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
 
             <div 
               className="cursor-pointer"
@@ -1037,50 +1116,56 @@ const EADPage = () => {
           selectedCourse ? <CourseDetailView /> : <CoursesGridView />
         )}
         
-        {/* Diálogos */}
-        <CreateCourseDialog
-          open={showCreateCourse}
-          onOpenChange={(open) => {
-            setShowCreateCourse(open);
-            if (!open) {
-              setIsEditingCourse(false);
-              resetCourseForm();
-            }
-          }}
-          courseForm={courseForm}
-          setCourseForm={setCourseForm}
-          onCreateCourse={handleCreateCourse}
-          onUpdateCourse={handleUpdateCourse}
-          onDeleteCourse={handleDeleteCourse}
-          isEditing={isEditingCourse}
-        />
+        {/* Diálogos - Só renderiza se tem permissão */}
+        {canManageCourses && (
+          <CreateCourseDialog
+            open={showCreateCourse}
+            onOpenChange={(open) => {
+              setShowCreateCourse(open);
+              if (!open) {
+                setIsEditingCourse(false);
+                resetCourseForm();
+              }
+            }}
+            courseForm={courseForm}
+            setCourseForm={setCourseForm}
+            onCreateCourse={handleCreateCourse}
+            onUpdateCourse={handleUpdateCourse}
+            onDeleteCourse={handleDeleteCourse}
+            isEditing={isEditingCourse}
+          />
+        )}
         
-        <CreateLessonDialog
-          open={showCreateLesson}
-          onOpenChange={(open) => {
-            setShowCreateLesson(open);
-            if (!open) {
-              setIsEditingLesson(false);
-              resetLessonForm();
-            }
-          }}
-          selectedCourse={selectedCourse}
-          lessonForm={lessonForm}
-          setLessonForm={setLessonForm}
-          onCreateLesson={handleCreateLesson}
-          onUpdateLesson={handleUpdateLesson}
-          onDeleteLesson={handleDeleteLesson}
-          isEditing={isEditingLesson}
-        />
+        {canManageLessons && (
+          <CreateLessonDialog
+            open={showCreateLesson}
+            onOpenChange={(open) => {
+              setShowCreateLesson(open);
+              if (!open) {
+                setIsEditingLesson(false);
+                resetLessonForm();
+              }
+            }}
+            selectedCourse={selectedCourse}
+            lessonForm={lessonForm}
+            setLessonForm={setLessonForm}
+            onCreateLesson={handleCreateLesson}
+            onUpdateLesson={handleUpdateLesson}
+            onDeleteLesson={handleDeleteLesson}
+            isEditing={isEditingLesson}
+          />
+        )}
         
-        <AddMaterialDialog
-          open={showAddMaterial}
-          onOpenChange={setShowAddMaterial}
-          selectedLesson={selectedLesson}
-          materialForm={materialForm}
-          setMaterialForm={setMaterialForm}
-          onAddMaterial={handleAddMaterial}
-        />
+        {canManageMaterials && (
+          <AddMaterialDialog
+            open={showAddMaterial}
+            onOpenChange={setShowAddMaterial}
+            selectedLesson={selectedLesson}
+            materialForm={materialForm}
+            setMaterialForm={setMaterialForm}
+            onAddMaterial={handleAddMaterial}
+          />
+        )}
       </div>
     </Layout>
   );
