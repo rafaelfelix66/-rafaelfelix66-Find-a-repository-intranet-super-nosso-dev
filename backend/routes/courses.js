@@ -157,6 +157,14 @@ router.get('/',
   coursesController.getCourses
 );
 
+// @route   GET /api/courses/:courseId/enrollment
+// @desc    Verificar se usuário está matriculado no curso
+// @access  Private
+router.get('/:courseId/enrollment', 
+  auth, 
+  coursesController.checkEnrollment
+);
+
 // @route   GET /api/courses/categories
 // @desc    Obter categorias disponíveis
 // @access  Private
@@ -435,17 +443,66 @@ router.post('/:id/duplicate',
   }
 );
 
+// CORREÇÃO COMPLETA da rota de matrícula
 // @route   POST /api/courses/:id/enroll
 // @desc    Matricular-se no curso
 // @access  Private
 router.post('/:id/enroll', auth, async (req, res) => {
   try {
+    console.log('=== MATRÍCULA COMPLETA DEBUG ===');
+    console.log('Course ID:', req.params.id);
+    console.log('User ID:', req.usuario.id);
+    console.log('Request body:', req.body);
+    
     const Course = require('../models/Course');
     const CourseProgress = require('../models/CourseProgress');
+    const { User } = require('../models');
     
     const course = await Course.findById(req.params.id);
     if (!course) {
+      console.log('Curso não encontrado');
       return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    console.log('Curso encontrado:', course.title);
+    
+    // Verificar se o curso está publicado
+    if (!course.isPublished) {
+      console.log('Curso não está publicado');
+      return res.status(400).json({ msg: 'Este curso não está disponível para matrícula' });
+    }
+    
+    // Verificar acesso por departamento
+    const user = await User.findById(req.usuario.id);
+    if (!user) {
+      return res.status(404).json({ msg: 'Usuário não encontrado' });
+    }
+    
+    const userDepartment = user.departamento || 'PUBLICO';
+    const isAdmin = user.roles?.includes('admin') || false;
+    
+    console.log('Dados do usuário:', {
+      id: user._id,
+      nome: user.nome,
+      departamento: userDepartment,
+      isAdmin: isAdmin
+    });
+    
+    const hasAccess = isAdmin || 
+                     course.departamentoVisibilidade.includes('TODOS') ||
+                     course.departamentoVisibilidade.includes(userDepartment) ||
+                     !course.departamentoVisibilidade ||
+                     course.departamentoVisibilidade.length === 0;
+    
+    console.log('Verificação de acesso:', {
+      hasAccess,
+      courseVisibility: course.departamentoVisibilidade,
+      userDepartment
+    });
+    
+    if (!hasAccess) {
+      console.log('Usuário não tem acesso ao curso');
+      return res.status(403).json({ msg: 'Você não tem acesso a este curso' });
     }
     
     // Verificar se já está matriculado
@@ -455,32 +512,67 @@ router.post('/:id/enroll', auth, async (req, res) => {
     });
     
     if (existingProgress) {
-      return res.status(400).json({ msg: 'Usuário já matriculado neste curso' });
+      console.log('Usuário já matriculado, retornando progresso existente');
+      return res.json({ 
+        msg: 'Você já está matriculado neste curso',
+        progress: existingProgress,
+        alreadyEnrolled: true,
+        enrollmentCount: course.enrollmentCount
+      });
     }
     
-    // Criar progresso
+    // Criar progresso inicial para todas as aulas
+    const lessonsProgress = course.lessons.map(lesson => ({
+      lessonId: lesson._id,
+      completed: false,
+      timeSpent: 0,
+      attempts: 0
+    }));
+    
+    console.log('Criando progresso para', lessonsProgress.length, 'aulas');
+    
     const newProgress = new CourseProgress({
       userId: req.usuario.id,
       courseId: req.params.id,
-      lessonsProgress: course.lessons.map(lesson => ({
-        lessonId: lesson._id,
-        completed: false,
-        timeSpent: 0,
-        attempts: 0
-      }))
+      lessonsProgress: lessonsProgress,
+      enrolledAt: new Date(),
+      status: 'not_started',
+      progress: 0,
+      totalTimeSpent: 0
     });
     
-    await newProgress.save();
+    const savedProgress = await newProgress.save();
+    console.log('Progresso criado com ID:', savedProgress._id);
     
-    // Incrementar contador de matrículas
-    await Course.findByIdAndUpdate(req.params.id, {
-      $inc: { enrollmentCount: 1 }
+    // Incrementar contador de matrículas usando findByIdAndUpdate para garantir atomicidade
+    const updatedCourse = await Course.findByIdAndUpdate(
+      req.params.id, 
+      { $inc: { enrollmentCount: 1 } },
+      { new: true, select: 'enrollmentCount title' }
+    );
+    
+    console.log('Contador de matrículas atualizado:', {
+      courseTitle: updatedCourse.title,
+      newCount: updatedCourse.enrollmentCount
     });
     
-    res.json({ msg: 'Matrícula realizada com sucesso', progress: newProgress });
+    res.json({ 
+      msg: 'Matrícula realizada com sucesso', 
+      progress: savedProgress,
+      enrollmentCount: updatedCourse.enrollmentCount,
+      course: {
+        _id: course._id,
+        title: course.title
+      }
+    });
+    
   } catch (err) {
-    console.error('Erro ao matricular no curso:', err);
-    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+    console.error('Erro completo ao matricular no curso:', err);
+    res.status(500).json({ 
+      msg: 'Erro no servidor', 
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 

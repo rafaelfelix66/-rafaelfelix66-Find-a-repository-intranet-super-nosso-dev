@@ -183,28 +183,10 @@ const getCourse = async (req, res) => {
       courseId: courseId
     }).lean();
     
-    // Se não existe progresso, criar um novo registro
-    if (!userProgress && course.isPublished) {
-      const newProgress = new CourseProgress({
-        userId: req.usuario.id,
-        courseId: courseId,
-        lessonsProgress: course.lessons.map(lesson => ({
-          lessonId: lesson._id,
-          completed: false,
-          timeSpent: 0,
-          attempts: 0
-        }))
-      });
-      
-      userProgress = await newProgress.save();
-      
-      // Incrementar contador de matrículas
-      await Course.findByIdAndUpdate(courseId, {
-        $inc: { enrollmentCount: 1 }
-      });
-    }
+    // CORREÇÃO: Não criar progresso automaticamente no GET
+    // Deixar isso para a rota de matrícula específica
     
-    console.log('Course access granted');
+    console.log('Course access granted, progress found:', !!userProgress);
     
     res.json({
       ...course,
@@ -223,6 +205,31 @@ const getCourse = async (req, res) => {
       msg: 'Erro no servidor', 
       error: err.message 
     });
+  }
+};
+
+// ADICIONAR: Função para verificar se usuário está matriculado
+const checkEnrollment = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.usuario.id;
+    
+    console.log('=== CHECK ENROLLMENT ===');
+    console.log('Course ID:', courseId);
+    console.log('User ID:', userId);
+    
+    const progress = await CourseProgress.findOne({
+      userId: userId,
+      courseId: courseId
+    });
+    
+    res.json({
+      enrolled: !!progress,
+      progress: progress || null
+    });
+  } catch (err) {
+    console.error('Erro ao verificar matrícula:', err);
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
   }
 };
 
@@ -792,5 +799,6 @@ module.exports = {
   updateLessonProgress,
   addLesson,
   updateLesson,
-  deleteLesson
+  deleteLesson,
+  checkEnrollment 
 };

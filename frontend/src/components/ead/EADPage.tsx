@@ -23,7 +23,8 @@ import {
   Edit,
   Eye,
   EyeOff,
-  Settings
+  Settings,
+  Lock 
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -100,31 +101,41 @@ const EADPage = () => {
   });
 
   // Carregar cursos da API
-  const fetchCourses = async () => {
-    try {
-      setIsLoading(true);
-      const response = await api.get('/courses');
-      console.log('Cursos carregados:', response);
-      
-      if (response.courses) {
-        setCourses(response.courses);
-      } else if (Array.isArray(response)) {
-        setCourses(response);
-      } else {
-        setCourses([]);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar cursos:', error);
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os cursos",
-        variant: "destructive"
-      });
-      setCourses([]);
-    } finally {
-      setIsLoading(false);
+  const fetchCourses = useCallback(async () => {
+  try {
+    setIsLoading(true);
+    const response = await api.get('/courses');
+    console.log('=== CURSOS CARREGADOS ===');
+    console.log('Response:', response);
+    
+    let coursesList = [];
+    
+    if (response.courses) {
+      coursesList = response.courses;
+    } else if (Array.isArray(response)) {
+      coursesList = response;
     }
-  };
+    
+    console.log('Lista de cursos processada:', coursesList.length, 'cursos');
+    
+    // Log dos contadores de matrícula
+    coursesList.forEach(course => {
+      console.log(`Curso: ${course.title} - Matrículas: ${course.enrollmentCount || 0}`);
+    });
+    
+    setCourses(coursesList);
+  } catch (error) {
+    console.error('Erro ao carregar cursos:', error);
+    toast({
+      title: "Erro",
+      description: "Não foi possível carregar os cursos",
+      variant: "destructive"
+    });
+    setCourses([]);
+  } finally {
+    setIsLoading(false);
+  }
+}, [toast]);
 
   // Carregar curso específico
   const fetchCourse = async (courseId) => {
@@ -146,60 +157,154 @@ const EADPage = () => {
     fetchCourses();
   }, []);
   
-  // Handler para matrícula no curso
-const handleEnrollCourse = useCallback(async (course) => {
-  try {
-    console.log('Matriculando no curso:', course.title);
-    
-    const response = await api.post(`/courses/${course._id}/enroll`);
-    
-    toast({
-      title: "Matrícula realizada!",
-      description: `Você foi matriculado no curso "${course.title}"`
-    });
-    
-    // Recarregar o curso para mostrar o progresso
-    const updatedCourse = await fetchCourse(course._id);
-    if (updatedCourse) {
-      setSelectedCourse(updatedCourse);
-    }
-    
-  } catch (error) {
-    console.error('Erro na matrícula:', error);
-    
-    if (error.message && error.message.includes('já matriculado')) {
-      toast({
-        title: "Já matriculado",
-        description: "Você já está matriculado neste curso",
-        variant: "default"
-      });
-      // Mesmo assim, abrir o curso
-      const courseData = await fetchCourse(course._id);
-      if (courseData) {
-        setSelectedCourse(courseData);
-      }
-    } else {
-      toast({
-        title: "Erro na matrícula",
-        description: "Não foi possível realizar a matrícula. Tente novamente.",
-        variant: "destructive"
-      });
-    }
-  }
-}, [toast]);
+  // Handler para matrícula no curso - VERSÃO FINAL CORRIGIDA
+	// Handler para matrícula EXPLÍCITA - permanece igual
+		const handleEnrollCourse = useCallback(async (course) => {
+		  try {
+			console.log('=== MATRÍCULA EXPLÍCITA SOLICITADA ===');
+			console.log('Curso:', course.title);
+			console.log('ID do curso:', course._id);
+			
+			setIsLoading(true);
+			
+			const response = await api.post(`/courses/${course._id}/enroll`, {});
+			
+			console.log('=== RESPOSTA DA MATRÍCULA ===');
+			console.log('Response completa:', response);
+			console.log('Já matriculado?', response.alreadyEnrolled);
+			console.log('Novo contador:', response.enrollmentCount);
+			
+			if (response.alreadyEnrolled) {
+			  toast({
+				title: "Já matriculado",
+				description: `Você já está matriculado no curso "${course.title}"`,
+				variant: "default"
+			  });
+			} else {
+			  toast({
+				title: "Matrícula realizada!",
+				description: `Você foi matriculado no curso "${course.title}"`,
+				variant: "default"
+			  });
+			}
+			
+			// Recarregar o curso para mostrar o progresso atualizado
+			const courseData = await fetchCourse(course._id);
+			if (courseData) {
+			  console.log('Curso recarregado com progresso:', courseData.userProgress);
+			  setSelectedCourse(courseData);
+			}
+			
+			// Recarregar lista de cursos para atualizar contadores
+			await fetchCourses();
+			
+		  } catch (error) {
+			console.error('=== ERRO NA MATRÍCULA ===');
+			console.error('Erro completo:', error);
+			
+			if (error.message && error.message.includes('400')) {
+			  console.log('Erro 400 - tentando carregar curso mesmo assim');
+			  try {
+				const courseData = await fetchCourse(course._id);
+				if (courseData && courseData.userProgress) {
+				  setSelectedCourse(courseData);
+				  toast({
+					title: "Curso já acessível",
+					description: "Você já tem acesso a este curso",
+					variant: "default"
+				  });
+				  return;
+				}
+			  } catch (fetchError) {
+				console.error('Erro ao tentar carregar curso:', fetchError);
+			  }
+			}
+			
+			toast({
+			  title: "Erro na matrícula",
+			  description: "Não foi possível realizar a matrícula. Tente novamente.",
+			  variant: "destructive"
+			});
+		  } finally {
+			setIsLoading(false);
+		  }
+		}, [toast, fetchCourse, fetchCourses]);
 
-// Handler para abrir curso (com matrícula automática se necessário)
-const handleOpenCourse = useCallback(async (course) => {
-  // Se o usuário não tem progresso no curso, fazer matrícula automática
-  if (!course.userProgress) {
-    await handleEnrollCourse(course);
-  } else {
+	// NOVA FUNÇÃO: Verificar status de matrícula
+	const checkEnrollmentStatus = useCallback(async (courseId) => {
+	  try {
+		const response = await api.get(`/courses/${courseId}/enrollment`);
+		return response;
+	  } catch (error) {
+		console.error('Erro ao verificar matrícula:', error);
+		return { enrolled: false, progress: null };
+	  }
+	}, []);
+
+// Handler para abrir curso - VERSÃO MELHORADA
+	const handleOpenCourse = useCallback(async (course) => {
+  try {
+    console.log('=== ABRINDO CURSO (SEM MATRÍCULA AUTOMÁTICA) ===');
+    console.log('Curso:', course.title);
+    console.log('Progresso atual:', course.userProgress);
+    
+    setIsLoading(true);
+    
+    // Carregar dados completos do curso SEM fazer matrícula
     const courseData = await fetchCourse(course._id);
+    
     if (courseData) {
+      console.log('Dados do curso carregados:', {
+        title: courseData.title,
+        hasProgress: !!courseData.userProgress,
+        progressValue: courseData.userProgress?.progress
+      });
+      
+      // Sempre abrir o curso, independente de ter progresso ou não
       setSelectedCourse(courseData);
+      
+      if (!courseData.userProgress) {
+        console.log('Usuário não matriculado - curso aberto mas conteúdo bloqueado');
+      } else {
+        console.log('Usuário matriculado - acesso completo ao conteúdo');
+      }
     }
+  } catch (error) {
+    console.error('Erro ao abrir curso:', error);
+    toast({
+      title: "Erro",
+      description: "Não foi possível acessar o curso",
+      variant: "destructive"
+    });
+  } finally {
+    setIsLoading(false);
   }
-}, [handleEnrollCourse]);
+}, [fetchCourse, toast]);
+
+
+// Componente para verificar acesso às aulas - VERSÃO FINAL
+const LessonAccessGuard = ({ lesson, courseProgress, children }) => {
+  const hasAccess = courseProgress && courseProgress.progress !== undefined;
+  
+  if (!hasAccess) {
+    return (
+      <div className="p-6 border-2 border-dashed border-gray-300 rounded-lg text-center bg-gray-50">
+        <div className="text-gray-500">
+          <Lock className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+          <h3 className="font-semibold text-lg mb-2">Conteúdo Bloqueado</h3>
+          <p className="text-sm mb-4">
+            Você precisa se matricular neste curso para acessar o conteúdo das aulas.
+          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-blue-800 text-sm">
+            💡 <strong>Dica:</strong> Use o botão "Matricular-se" no cabeçalho do curso para ter acesso completo.
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  return children;
+};
 
 // Função para obter progresso de uma aula específica
 const getLessonProgress = useCallback((lessonId) => {
@@ -813,7 +918,208 @@ const getLessonProgress = useCallback((lessonId) => {
   };
 
   // Vista Detalhada do Curso com VideoPlayer
-  const CourseDetailView = () => (
+ // Vista Detalhada do Curso - COM CONTROLE DE ACESSO
+const CourseDetailView = () => {
+  // Se não tem progresso (não matriculado), mostrar tela de apresentação
+  if (!selectedCourse.userProgress) {
+    return (
+      <div className="space-y-6">
+        {/* Header de navegação */}
+        <div className="flex items-center gap-4 mb-6">
+          <Button 
+            variant="ghost" 
+            onClick={() => setSelectedCourse(null)}
+            className="hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar aos Cursos
+          </Button>
+          
+          {canManageCourses && (
+            <Button
+              variant="outline"
+              onClick={() => handleEditCourse(selectedCourse)}
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Configurações do Curso
+            </Button>
+          )}
+        </div>
+
+        {/* Tela de Apresentação do Curso */}
+        <div className="max-w-4xl mx-auto">
+          <Card className="overflow-hidden">
+            {/* Banner do curso */}
+            <div className="relative h-64 bg-gradient-to-r from-red-500 to-red-600">
+              {selectedCourse.thumbnail ? (
+                <img 
+                  src={selectedCourse.thumbnail} 
+                  alt={selectedCourse.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <BookOpen className="h-16 w-16 text-white/80" />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-black/40"></div>
+              <div className="absolute bottom-6 left-6 right-6 text-white">
+                <div className="flex gap-2 mb-3">
+                  <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                    {selectedCourse.level}
+                  </Badge>
+                  <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                    {selectedCourse.category}
+                  </Badge>
+                </div>
+                <h1 className="text-3xl font-bold mb-2">{selectedCourse.title}</h1>
+                <p className="text-lg opacity-90">{selectedCourse.description}</p>
+              </div>
+            </div>
+
+            <CardContent className="p-8">
+              <div className="grid md:grid-cols-3 gap-8">
+                {/* Informações do curso */}
+                <div className="md:col-span-2 space-y-6">
+                  <div>
+                    <h2 className="text-xl font-semibold mb-4">Sobre este curso</h2>
+                    <p className="text-gray-600 leading-relaxed">
+                      {selectedCourse.description}
+                    </p>
+                  </div>
+
+                  {selectedCourse.objectives && selectedCourse.objectives.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">O que você vai aprender</h3>
+                      <ul className="space-y-2">
+                        {selectedCourse.objectives.map((objective, index) => (
+                          <li key={index} className="flex items-start gap-3">
+                            <CheckCircle className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-gray-600">{objective}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {selectedCourse.requirements && selectedCourse.requirements.length > 0 && (
+                    <div>
+                      <h3 className="text-lg font-semibold mb-3">Pré-requisitos</h3>
+                      <ul className="space-y-2">
+                        {selectedCourse.requirements.map((requirement, index) => (
+                          <li key={index} className="flex items-start gap-3">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full mt-2 flex-shrink-0"></div>
+                            <span className="text-gray-600">{requirement}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Conteúdo do curso (preview) */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Conteúdo do curso</h3>
+                    <div className="space-y-2">
+                      {selectedCourse.lessons?.map((lesson, index) => (
+                        <div key={lesson._id} className="flex items-center gap-3 p-3 border rounded-lg bg-gray-50">
+                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-700">{lesson.title}</p>
+                            <p className="text-sm text-gray-500">
+                              {lesson.type === 'video' && <Eye className="inline h-3 w-3 mr-1" />}
+                              {lesson.type === 'text' && <FileText className="inline h-3 w-3 mr-1" />}
+                              {lesson.duration || 'Sem duração'}
+                              {lesson.materials && lesson.materials.length > 0 && (
+                                <span> • {lesson.materials.length} materiais</span>
+                              )}
+                            </p>
+                          </div>
+                          <Lock className="h-4 w-4 text-gray-400" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sidebar com call-to-action */}
+                <div className="space-y-6">
+                  <Card className="border-2 border-red-200 bg-red-50">
+                    <CardContent className="p-6 text-center">
+                      <div className="mb-4">
+                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <BookOpen className="h-8 w-8 text-red-600" />
+                        </div>
+                        <h3 className="font-semibold text-lg mb-2">Comece agora!</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Matricule-se gratuitamente e tenha acesso completo ao conteúdo
+                        </p>
+                      </div>
+                      
+                      <Button 
+                        className="w-full bg-red-600 hover:bg-red-700 text-white mb-3"
+                        size="lg"
+                        onClick={() => handleEnrollCourse(selectedCourse)}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? (
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                        ) : (
+                          <>
+                            <Plus className="h-5 w-5 mr-2" />
+                            Matricular-se Gratuitamente
+                          </>
+                        )}
+                      </Button>
+                      
+                      <p className="text-xs text-gray-500">
+                        Acesso imediato • Sem custos • Certificado incluído
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Detalhes do curso */}
+                  <Card>
+                    <CardContent className="p-6">
+                      <h3 className="font-semibold mb-4">Detalhes do curso</h3>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Duração:</span>
+                          <span className="font-medium">{selectedCourse.estimatedDuration || 'Flexível'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Aulas:</span>
+                          <span className="font-medium">{selectedCourse.lessons?.length || 0} aulas</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Nível:</span>
+                          <span className="font-medium">{selectedCourse.level}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Alunos:</span>
+                          <span className="font-medium">{selectedCourse.enrollmentCount || 0} matriculados</span>
+                        </div>
+                        {selectedCourse.certificateEnabled && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Certificado:</span>
+                            <span className="font-medium text-green-600">✓ Disponível</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Se tem progresso (matriculado), mostrar a interface normal do curso
+  return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 mb-6">
         <Button 
@@ -834,10 +1140,16 @@ const getLessonProgress = useCallback((lessonId) => {
             Configurações do Curso
           </Button>
         )}
+        
+        {/* Indicador de matrícula */}
+        <Badge className="bg-green-500 text-white">
+          <CheckCircle className="h-4 w-4 mr-1" />
+          Matriculado
+        </Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Player de Conteúdo */}
+        {/* Player de Conteúdo - ACESSO LIBERADO */}
         <div className="lg:col-span-2">
           <VideoPlayer 
             lesson={selectedLesson}
@@ -845,18 +1157,29 @@ const getLessonProgress = useCallback((lessonId) => {
             onComplete={handleVideoComplete}
           />
           
-          {/* Informações da Aula Atual */}
+          {/* Resto do conteúdo da aula permanece igual... */}
           {selectedLesson && (
             <Card className="mt-4">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
-                    <CheckCircle className={`h-5 w-5 ${selectedLesson.completed ? 'text-green-500' : 'text-gray-300'}`} />
+                    <CheckCircle className={`h-5 w-5 ${
+                      getLessonProgress(selectedLesson._id)?.completed 
+                        ? 'text-green-500' 
+                        : 'text-gray-300'
+                    }`} />
                     {selectedLesson.title}
                   </CardTitle>
                   <div className="flex gap-2">
-                    <Badge variant={selectedLesson.completed ? "default" : "secondary"}>
-                      {selectedLesson.completed ? 'Concluída' : 'Pendente'}
+                    <Badge variant={
+                      getLessonProgress(selectedLesson._id)?.completed 
+                        ? "default" 
+                        : "secondary"
+                    }>
+                      {getLessonProgress(selectedLesson._id)?.completed 
+                        ? 'Concluída' 
+                        : 'Pendente'
+                      }
                     </Badge>
                     {!selectedLesson.isPublished && (
                       <Badge variant="outline" className="text-orange-600">
@@ -878,6 +1201,7 @@ const getLessonProgress = useCallback((lessonId) => {
                 </div>
               </CardHeader>
               <CardContent>
+                {/* Conteúdo da aula - já tem acesso */}
                 <div className="space-y-4">
                   {selectedLesson.description && (
                     <p className="text-gray-600">{selectedLesson.description}</p>
@@ -896,42 +1220,42 @@ const getLessonProgress = useCallback((lessonId) => {
                     <h4 className="font-medium mb-3">Materiais da Aula</h4>
                     <div className="space-y-3">
                       {selectedLesson.materials?.map((material) => (
-						  <div key={material.id || material._id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
-							<div className="flex items-center gap-3">
-							  {getFileIcon(material.type)}
-							  <div>
-								<p className="font-medium">{material.name}</p>
-								{material.size && (
-								  <p className="text-sm text-gray-500">{material.size}</p>
-								)}
-								{material.description && (
-								  <p className="text-xs text-gray-400">{material.description}</p>
-								)}
-							  </div>
-							</div>
-							<div className="flex gap-2">
-							  <Button 
-								variant="ghost" 
-								size="sm"
-								onClick={() => handleDownloadMaterial(material)}
-								title={material.url ? "Abrir link" : "Fazer download"}
-							  >
-								<Download className="h-4 w-4" />
-							  </Button>
-							  {canManageMaterials && (
-								<Button 
-								  variant="ghost" 
-								  size="sm"
-								  onClick={() => handleRemoveMaterial(material.id || material._id)}
-								  className="text-red-500 hover:text-red-700"
-								  title="Remover material"
-								>
-								  <Trash2 className="h-4 w-4" />
-								</Button>
-							  )}
-							</div>
-						  </div>
-						))}
+                        <div key={material.id || material._id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                          <div className="flex items-center gap-3">
+                            {getFileIcon(material.type)}
+                            <div>
+                              <p className="font-medium">{material.name}</p>
+                              {material.size && (
+                                <p className="text-sm text-gray-500">{material.size}</p>
+                              )}
+                              {material.description && (
+                                <p className="text-xs text-gray-400">{material.description}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleDownloadMaterial(material)}
+                              title={material.url ? "Abrir link" : "Fazer download"}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            {canManageMaterials && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleRemoveMaterial(material.id || material._id)}
+                                className="text-red-500 hover:text-red-700"
+                                title="Remover material"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                       
                       {canManageMaterials && (
                         <Button 
@@ -951,7 +1275,7 @@ const getLessonProgress = useCallback((lessonId) => {
           )}
         </div>
 
-        {/* Sidebar com Lista de Aulas */}
+        {/* Sidebar com Lista de Aulas - ACESSO LIBERADO */}
         <div className="space-y-4">
           {/* Informações do Curso */}
           <Card>
@@ -979,58 +1303,71 @@ const getLessonProgress = useCallback((lessonId) => {
                     {selectedCourse.enrollmentCount || 0} alunos
                   </div>
                 </div>
+                
+                {/* Mostrar progresso */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Seu progresso</span>
+                    <span>{selectedCourse.userProgress.progress}%</span>
+                  </div>
+                  <Progress value={selectedCourse.userProgress.progress} className="h-2" />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Lista de Aulas */}
+          {/* Lista de Aulas - ACESSÍVEIS */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Conteúdo do Curso</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {selectedCourse.lessons?.map((lesson, index) => (
-                  <div
-                    key={lesson._id}
-                    className={`p-3 rounded-lg cursor-pointer transition-all ${
-                      selectedLesson?._id === lesson._id 
-                        ? 'bg-red-50 border-red-200 border-2' 
-                        : 'hover:bg-gray-50 border border-gray-200'
-                    }`}
-                    onClick={() => setSelectedLesson(lesson)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                        lesson.completed 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {lesson.completed ? <CheckCircle className="h-4 w-4" /> : lesson.order || index + 1}
-                      </div>
-                      
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm">{lesson.title}</p>
-                          {!lesson.isPublished && (
-                            <EyeOff className="h-3 w-3 text-orange-500" />
-                          )}
+                {selectedCourse.lessons?.map((lesson, index) => {
+                  const lessonProgress = getLessonProgress(lesson._id);
+                  
+                  return (
+                    <div
+                      key={lesson._id}
+                      className={`p-3 rounded-lg cursor-pointer transition-all ${
+                        selectedLesson?._id === lesson._id 
+                          ? 'bg-red-50 border-red-200 border-2' 
+                          : 'hover:bg-gray-50 border border-gray-200'
+                      }`}
+                      onClick={() => setSelectedLesson(lesson)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                          lessonProgress?.completed 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {lessonProgress?.completed ? <CheckCircle className="h-4 w-4" /> : lesson.order || index + 1}
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          {lesson.type === 'video' && <Eye className="h-3 w-3" />}
-                          {lesson.type === 'text' && <FileText className="h-3 w-3" />}
-                          <span>{lesson.duration || 'Sem duração'}</span>
-                          {lesson.materials && lesson.materials.length > 0 && (
-                            <>
-                              <span>•</span>
-                              <span>{lesson.materials.length} materiais</span>
-                            </>
-                          )}
+                        
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm">{lesson.title}</p>
+                            {!lesson.isPublished && (
+                              <EyeOff className="h-3 w-3 text-orange-500" />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            {lesson.type === 'video' && <Eye className="h-3 w-3" />}
+                            {lesson.type === 'text' && <FileText className="h-3 w-3" />}
+                            <span>{lesson.duration || 'Sem duração'}</span>
+                            {lesson.materials && lesson.materials.length > 0 && (
+                              <>
+                                <span>•</span>
+                                <span>{lesson.materials.length} materiais</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 
                 {canManageLessons && (
                   <Button 
@@ -1052,6 +1389,7 @@ const getLessonProgress = useCallback((lessonId) => {
       </div>
     </div>
   );
+};
 
   // Vista Principal com Lista de Cursos
   const CoursesGridView = () => (
@@ -1120,169 +1458,191 @@ const getLessonProgress = useCallback((lessonId) => {
         </CardContent>
       </Card>
 
-      {/* Grid de Cursos */}
-      <div className={viewMode === 'grid' 
-        ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-        : "space-y-4"
-      }>
-        {filteredCourses.map((course) => (
-          <Card 
-            key={course._id} 
-            className="hover:shadow-lg transition-shadow group relative"
-          >
-            {/* Botão de edição - só aparece para quem pode gerenciar */}
-            {canManageCourses && (
-              <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleEditCourse(course);
-                  }}
-                  className="bg-white/90 backdrop-blur-sm"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              </div>
+      {/* Grid de Cursos - COM INDICADORES MELHORADOS */}
+    <div className={viewMode === 'grid' 
+      ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+      : "space-y-4"
+    }>
+      {filteredCourses.map((course) => (
+        <Card 
+          key={course._id} 
+          className="hover:shadow-lg transition-shadow group relative"
+        >
+          {/* Indicadores de status */}
+          <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
+            <Badge 
+              variant={course.level === 'Obrigatório' ? 'destructive' : 'default'}
+              className="bg-white/90 text-gray-800 text-xs"
+            >
+              {course.level}
+            </Badge>
+            {!course.isPublished && (
+              <Badge variant="outline" className="bg-white/90 text-orange-600 text-xs">
+                <EyeOff className="h-3 w-3 mr-1" />
+                Rascunho
+              </Badge>
             )}
+            {course.userProgress && (
+              <Badge className="bg-green-500/90 text-white text-xs">
+                Matriculado
+              </Badge>
+            )}
+          </div>
 
-            <div 
-			  className="cursor-pointer"
-			  onClick={() => handleOpenCourse(course)}
-			>
-              {viewMode === 'grid' ? (
-                <>
-                  <div className="relative overflow-hidden rounded-t-lg">
-                    <img 
-                      src={course.thumbnail || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400'} 
-                      alt={course.title}
-                      className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-2 left-2 flex gap-2">
-                      <Badge 
-                        variant={course.level === 'Obrigatório' ? 'destructive' : 'default'}
-                        className="bg-white/90 text-gray-800"
-                      >
-                        {course.level}
-                      </Badge>
-                      {!course.isPublished && (
-                        <Badge variant="outline" className="bg-white/90 text-orange-600">
-                          <EyeOff className="h-3 w-3 mr-1" />
-                          Rascunho
-                        </Badge>
-                      )}
-                    </div>
-                    {course.userProgress?.progress > 0 && (
-                      <div className="absolute bottom-2 left-2 right-2">
+          {/* Botão de edição para admins */}
+          {canManageCourses && (
+            <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEditCourse(course);
+                }}
+                className="bg-white/90 backdrop-blur-sm"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          <div 
+            className="cursor-pointer"
+            onClick={() => handleOpenCourse(course)}
+          >
+            {viewMode === 'grid' ? (
+              <>
+                <div className="relative overflow-hidden rounded-t-lg">
+                  <img 
+                    src={course.thumbnail || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400'} 
+                    alt={course.title}
+                    className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  {course.userProgress && course.userProgress.progress > 0 && (
+                    <div className="absolute bottom-2 left-2 right-2">
+                      <div className="bg-white/90 rounded-full p-1">
                         <Progress value={course.userProgress.progress} className="h-1" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-lg group-hover:text-red-600 transition-colors">
+                        {course.title}
+                      </h3>
+                      <p className="text-gray-600 text-sm line-clamp-2">
+                        {course.description}
+                      </p>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm text-gray-500">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        {course.estimatedDuration || 'Sem duração'}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Users className="h-4 w-4" />
+                        {course.enrollmentCount || 0} alunos
+                      </div>
+                    </div>
+                    
+                    {course.userProgress && course.userProgress.progress > 0 ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Progresso</span>
+                        <Badge variant="outline" className="text-xs">
+                          {Math.round(course.userProgress.progress)}% concluído
+                        </Badge>
+                      </div>
+                    ) : (
+                      <div className="pt-2">
+                        <Button 
+                          size="sm" 
+                          className="w-full bg-red-600 hover:bg-red-700 text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEnrollCourse(course);
+                          }}
+                          disabled={isLoading}
+                        >
+                          {isLoading ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                          ) : (
+                            <>
+                              <Plus className="h-4 w-4 mr-2" />
+                              Matricular-se
+                            </>
+                          )}
+                        </Button>
                       </div>
                     )}
                   </div>
-                  
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
-                      <div>
-                        <h3 className="font-semibold text-lg group-hover:text-red-600 transition-colors">
-                          {course.title}
-                        </h3>
-                        <p className="text-gray-600 text-sm line-clamp-2">
-                          {course.description}
-                        </p>
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-sm text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          {course.estimatedDuration || 'Sem duração'}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Users className="h-4 w-4" />
-                          {course.enrollmentCount || 0}
-                        </div>
-                      </div>
-                      
-                      {course.userProgress?.progress > 0 ? (
-						  <div className="flex items-center justify-between">
-							<span className="text-sm text-gray-600">Progresso</span>
-							<Badge variant="outline" className="text-xs">
-							  {Math.round(course.userProgress.progress)}% concluído
-							</Badge>
-						  </div>
-						) : (
-						  <div className="pt-2">
-							<Button 
-							  size="sm" 
-							  className="w-full bg-red-600 hover:bg-red-700 text-white"
-							  onClick={(e) => {
-								e.stopPropagation();
-								handleEnrollCourse(course);
-							  }}
-							>
-							  <Plus className="h-4 w-4 mr-2" />
-							  Matricular-se
-							</Button>
-						  </div>
-						)}
-                    </div>
-                  </CardContent>
-                </>
-              ) : (
-                <CardContent className="p-4">
-                  <div className="flex gap-4">
-                    <img 
-                      src={course.thumbnail || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400'} 
-                      alt={course.title}
-                      className="w-24 h-16 object-cover rounded"
-                    />
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-start justify-between">
-                        <h3 className="font-semibold group-hover:text-red-600 transition-colors">
-                          {course.title}
-                        </h3>
-                        <div className="flex gap-2">
-                          <Badge variant={course.level === 'Obrigatório' ? 'destructive' : 'default'}>
-                            {course.level}
-                          </Badge>
-                          {!course.isPublished && (
-                            <Badge variant="outline" className="text-orange-600">
-                              <EyeOff className="h-3 w-3 mr-1" />
-                              Rascunho
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <p className="text-gray-600 text-sm">{course.description}</p>
-                      
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          {course.estimatedDuration || 'Sem duração'}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Users className="h-4 w-4" />
-                          {course.enrollmentCount || 0}
-                        </span>
-                      </div>
-                      
-                      {course.userProgress?.progress > 0 && (
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span>Progresso</span>
-                            <span>{course.userProgress.progress}%</span>
-                          </div>
-                          <Progress value={course.userProgress.progress} className="h-2" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </CardContent>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
+              </>
+            ) : (
+              // Vista em lista permanece similar com os mesmos indicadores
+              <CardContent className="p-4">
+                <div className="flex gap-4">
+                  <img 
+                    src={course.thumbnail || 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400'} 
+                    alt={course.title}
+                    className="w-24 h-16 object-cover rounded"
+                  />
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-start justify-between">
+                      <h3 className="font-semibold group-hover:text-red-600 transition-colors">
+                        {course.title}
+                      </h3>
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge variant={course.level === 'Obrigatório' ? 'destructive' : 'default'}>
+                          {course.level}
+                        </Badge>
+                        {!course.isPublished && (
+                          <Badge variant="outline" className="text-orange-600">
+                            <EyeOff className="h-3 w-3 mr-1" />
+                            Rascunho
+                          </Badge>
+                        )}
+                        {course.userProgress && (
+                          <Badge className="bg-green-500 text-white">
+                            Matriculado
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <p className="text-gray-600 text-sm">{course.description}</p>
+                    
+                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        {course.estimatedDuration || 'Sem duração'}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="h-4 w-4" />
+                        {course.enrollmentCount || 0} alunos
+                      </span>
+                    </div>
+                    
+                    {course.userProgress && course.userProgress.progress > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Progresso</span>
+                          <span>{Math.round(course.userProgress.progress)}%</span>
+                        </div>
+                        <Progress value={course.userProgress.progress} className="h-2" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </div>
+        </Card>
+      ))}
+    </div>
 
       {filteredCourses.length === 0 && !isLoading && (
         <div className="text-center py-12">

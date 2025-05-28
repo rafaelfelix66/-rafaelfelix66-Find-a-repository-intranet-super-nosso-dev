@@ -77,7 +77,18 @@ export const api = {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`Erro ${response.status}:`, errorText);
-        throw new Error(`Erro na requisição: ${response.status}`);
+       // CORREÇÃO: Tentar parsear o erro como JSON se possível
+        let errorDetail;
+        try {
+          errorDetail = JSON.parse(errorText);
+        } catch (e) {
+          errorDetail = { msg: errorText };
+        }
+        
+        // Criar erro com mais detalhes
+        const error = new Error(`Erro na requisição: ${response.status}`);
+        error.details = errorDetail;
+        throw error;
       }
       
       return response.json();

@@ -1,10 +1,11 @@
-// backend/models/CourseProgress.js
+// backend/models/CourseProgress.js - MODELO CORRIGIDO
+
 const mongoose = require('mongoose');
 
 const LessonProgressSchema = new mongoose.Schema({
   lessonId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Lesson',
+    ref: 'Course.lessons',
     required: true
   },
   completed: {
@@ -18,20 +19,18 @@ const LessonProgressSchema = new mongoose.Schema({
     type: Number,
     default: 0 // em segundos
   },
-  score: {
+  lastPosition: {
     type: Number,
-    min: 0,
-    max: 100
+    default: 0 // para vídeos, posição em segundos
   },
   attempts: {
     type: Number,
     default: 0
   },
-  notes: String,
-  lastPosition: {
-    type: Number,
-    default: 0 // para vídeos, posição em segundos
-  }
+  score: {
+    type: Number // para quizzes
+  },
+  notes: String // anotações do usuário
 });
 
 const CourseProgressSchema = new mongoose.Schema({
@@ -45,25 +44,6 @@ const CourseProgressSchema = new mongoose.Schema({
     ref: 'Course',
     required: true
   },
-  
-  // Progresso geral
-  progress: {
-    type: Number,
-    default: 0,
-    min: 0,
-    max: 100
-  },
-  
-  status: {
-    type: String,
-    enum: ['not_started', 'in_progress', 'completed', 'failed'],
-    default: 'not_started'
-  },
-  
-  // Aulas
-  lessonsProgress: [LessonProgressSchema],
-  
-  // Timestamps
   enrolledAt: {
     type: Date,
     default: Date.now
@@ -78,49 +58,45 @@ const CourseProgressSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  
-  // Aula atual
-  lastLessonId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Lesson'
+  status: {
+    type: String,
+    enum: ['not_started', 'in_progress', 'completed', 'dropped'],
+    default: 'not_started'
   },
-  
-  // Tempo total gasto no curso (em segundos)
-  totalTimeSpent: {
+  progress: {
     type: Number,
-    default: 0
-  },
-  
-  // Nota final (se aplicável)
-  finalScore: {
-    type: Number,
+    default: 0,
     min: 0,
     max: 100
   },
-  
-  // Certificado
+  lastLessonId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Course.lessons'
+  },
+  totalTimeSpent: {
+    type: Number,
+    default: 0 // em segundos
+  },
+  lessonsProgress: [LessonProgressSchema],
+  finalScore: {
+    type: Number // pontuação final do curso
+  },
   certificateIssued: {
     type: Boolean,
     default: false
   },
   certificateIssuedAt: {
     type: Date
-  },
-  certificateUrl: String
+  }
 });
 
-// Índices para melhor performance
+// Índices para performance
 CourseProgressSchema.index({ userId: 1, courseId: 1 }, { unique: true });
-CourseProgressSchema.index({ userId: 1, lastAccessedAt: -1 });
-CourseProgressSchema.index({ courseId: 1, progress: -1 });
+CourseProgressSchema.index({ courseId: 1 });
+CourseProgressSchema.index({ userId: 1 });
+CourseProgressSchema.index({ status: 1 });
 
-// Middleware para atualizar lastAccessedAt
-CourseProgressSchema.pre('save', function(next) {
-  this.lastAccessedAt = new Date();
-  next();
-});
-
-// Método para calcular o progresso
+// Método para calcular progresso
 CourseProgressSchema.methods.calculateProgress = function() {
   if (!this.lessonsProgress || this.lessonsProgress.length === 0) {
     this.progress = 0;
@@ -128,12 +104,12 @@ CourseProgressSchema.methods.calculateProgress = function() {
     return;
   }
   
-  const completedLessons = this.lessonsProgress.filter(lesson => lesson.completed).length;
+  const completedLessons = this.lessonsProgress.filter(lp => lp.completed).length;
   const totalLessons = this.lessonsProgress.length;
   
   this.progress = Math.round((completedLessons / totalLessons) * 100);
   
-  // Atualizar status
+  // Atualizar status baseado no progresso
   if (this.progress === 0) {
     this.status = 'not_started';
   } else if (this.progress === 100) {
@@ -149,94 +125,14 @@ CourseProgressSchema.methods.calculateProgress = function() {
   }
 };
 
-// Método para marcar aula como concluída
-CourseProgressSchema.methods.completeLesson = function(lessonId, timeSpent = 0, score = null) {
-  let lessonProgress = this.lessonsProgress.find(
-    lp => lp.lessonId.toString() === lessonId.toString()
-  );
+// Middleware para atualizar lastAccessedAt
+CourseProgressSchema.pre('save', function(next) {
+  this.lastAccessedAt = new Date();
   
-  if (!lessonProgress) {
-    lessonProgress = {
-      lessonId: lessonId,
-      completed: false,
-      timeSpent: 0,
-      attempts: 0
-    };
-    this.lessonsProgress.push(lessonProgress);
-  }
-  
-  lessonProgress.completed = true;
-  lessonProgress.completedAt = new Date();
-  lessonProgress.timeSpent += timeSpent;
-  lessonProgress.attempts += 1;
-  
-  if (score !== null) {
-    lessonProgress.score = score;
-  }
-  
-  this.totalTimeSpent += timeSpent;
-  this.lastLessonId = lessonId;
-  
-  // Recalcular progresso
+  // Calcular progresso automaticamente
   this.calculateProgress();
-};
-
-// Método para obter estatísticas do progresso
-CourseProgressSchema.methods.getStats = function() {
-  const completedLessons = this.lessonsProgress.filter(lesson => lesson.completed).length;
-  const totalLessons = this.lessonsProgress.length;
   
-  return {
-    progress: this.progress,
-    status: this.status,
-    completedLessons,
-    totalLessons,
-    totalTimeSpent: this.totalTimeSpent,
-    averageScore: this.getAverageScore(),
-    enrolledAt: this.enrolledAt,
-    lastAccessedAt: this.lastAccessedAt,
-    completedAt: this.completedAt
-  };
-};
-
-// Método para calcular nota média
-CourseProgressSchema.methods.getAverageScore = function() {
-  const lessonsWithScores = this.lessonsProgress.filter(lesson => 
-    lesson.completed && lesson.score !== undefined && lesson.score !== null
-  );
-  
-  if (lessonsWithScores.length === 0) return null;
-  
-  const totalScore = lessonsWithScores.reduce((sum, lesson) => sum + lesson.score, 0);
-  return Math.round(totalScore / lessonsWithScores.length);
-};
-
-// Método estático para obter ranking de usuários em um curso
-CourseProgressSchema.statics.getCourseRanking = function(courseId, limit = 10) {
-  return this.find({ courseId })
-    .populate('userId', 'nome email avatar')
-    .sort({ progress: -1, completedAt: 1 })
-    .limit(limit)
-    .lean();
-};
-
-// Método estático para obter estatísticas do curso
-CourseProgressSchema.statics.getCourseStats = function(courseId) {
-  return this.aggregate([
-    { $match: { courseId: mongoose.Types.ObjectId(courseId) } },
-    {
-      $group: {
-        _id: null,
-        totalEnrollments: { $sum: 1 },
-        completedStudents: {
-          $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
-        },
-        averageProgress: { $avg: '$progress' },
-        totalTimeSpent: { $sum: '$totalTimeSpent' },
-        averageTimeSpent: { $avg: '$totalTimeSpent' }
-      }
-    }
-  ]);
-};
+  next();
+});
 
 module.exports = mongoose.model('CourseProgress', CourseProgressSchema);
