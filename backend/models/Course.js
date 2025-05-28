@@ -1,4 +1,4 @@
-// backend/models/Course.js
+// backend/models/Course.js - ATUALIZADO
 const mongoose = require('mongoose');
 
 const MaterialSchema = new mongoose.Schema({
@@ -38,7 +38,8 @@ const LessonSchema = new mongoose.Schema({
     default: 'video'
   },
   content: String, // Para conteúdo textual
-  videoUrl: String,
+  videoUrl: String, // Para vídeos externos (YouTube, Vimeo, etc.)
+  videoPath: String, // Para vídeos locais
   duration: String,
   order: {
     type: Number,
@@ -103,6 +104,7 @@ const CourseSchema = new mongoose.Schema({
     }
   },
   
+  // NOVO: Controle de publicação
   isPublished: {
     type: Boolean,
     default: false

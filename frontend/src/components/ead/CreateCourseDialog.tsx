@@ -1,5 +1,5 @@
 import React from 'react';
-import { Upload, X, Save } from 'lucide-react';
+import { Upload, X, Save, Edit, Trash2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,8 +14,9 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 
-// Simulando o componente DepartamentoSelector para criação de cursos
+// Componente DepartamentoSelector para criação de cursos
 const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel = true }) => {
   const [selectedDepartments, setSelectedDepartments] = React.useState(initialSelected);
   
@@ -26,6 +27,10 @@ const DepartamentoSelector = ({ onChange, initialSelected = ['TODOS'], showLabel
     'LIDERANÇA', 
     'OPERACIONAL'
   ];
+
+  React.useEffect(() => {
+    setSelectedDepartments(initialSelected);
+  }, [JSON.stringify(initialSelected)]);
 
   const handleToggleDepartment = (dept) => {
     let newSelected;
@@ -80,6 +85,7 @@ interface CreateCourseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   courseForm: {
+    _id?: string;
     title: string;
     description: string;
     category: string;
@@ -89,10 +95,15 @@ interface CreateCourseDialogProps {
     allowDownload: boolean;
     certificateEnabled: boolean;
     passingScore: number;
+    isPublished: boolean;
     thumbnail: File | null;
+    currentThumbnail?: string;
   };
   setCourseForm: React.Dispatch<React.SetStateAction<any>>;
   onCreateCourse: () => void;
+  onUpdateCourse?: () => void;
+  onDeleteCourse?: () => void;
+  isEditing?: boolean;
 }
 
 const CreateCourseDialog: React.FC<CreateCourseDialogProps> = ({
@@ -100,15 +111,47 @@ const CreateCourseDialog: React.FC<CreateCourseDialogProps> = ({
   onOpenChange,
   courseForm,
   setCourseForm,
-  onCreateCourse
+  onCreateCourse,
+  onUpdateCourse,
+  onDeleteCourse,
+  isEditing = false
 }) => {
+  const handleSave = () => {
+    if (isEditing && onUpdateCourse) {
+      onUpdateCourse();
+    } else {
+      onCreateCourse();
+    }
+  };
+
+  const handleDelete = () => {
+    if (onDeleteCourse && confirm('Tem certeza que deseja excluir este curso? Esta ação não pode ser desfeita.')) {
+      onDeleteCourse();
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Criar Novo Curso</DialogTitle>
+          <DialogTitle className="flex items-center justify-between">
+            <span>{isEditing ? 'Editar Curso' : 'Criar Novo Curso'}</span>
+            {isEditing && onDeleteCourse && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir
+              </Button>
+            )}
+          </DialogTitle>
           <DialogDescription>
-            Preencha as informações básicas do curso. Você poderá adicionar aulas depois.
+            {isEditing 
+              ? 'Edite as informações do curso.' 
+              : 'Preencha as informações básicas do curso. Você poderá adicionar aulas depois.'
+            }
           </DialogDescription>
         </DialogHeader>
         
@@ -133,6 +176,33 @@ const CreateCourseDialog: React.FC<CreateCourseDialogProps> = ({
                     Remover
                   </Button>
                 </div>
+              ) : courseForm.currentThumbnail ? (
+                <div className="space-y-2">
+                  <img 
+                    src={courseForm.currentThumbnail} 
+                    alt="Thumbnail atual" 
+                    className="mx-auto h-32 w-auto rounded"
+                  />
+                  <p className="text-sm text-gray-500">Imagem atual</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setCourseForm(prev => ({ ...prev, thumbnail: file }));
+                      }
+                    }}
+                    className="hidden"
+                    id="course-thumbnail"
+                  />
+                  <label
+                    htmlFor="course-thumbnail"
+                    className="inline-block px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded cursor-pointer"
+                  >
+                    Alterar Imagem
+                  </label>
+                </div>
               ) : (
                 <div>
                   <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
@@ -140,7 +210,7 @@ const CreateCourseDialog: React.FC<CreateCourseDialogProps> = ({
                     Clique para selecionar uma imagem
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    PNG, JPG (máx. 5MB)
+                    PNG, JPG, WebP (máx. 5MB)
                   </p>
                   <input
                     type="file"
@@ -148,6 +218,11 @@ const CreateCourseDialog: React.FC<CreateCourseDialogProps> = ({
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
+                        // Validar tamanho (5MB)
+                        if (file.size > 5 * 1024 * 1024) {
+                          alert('Imagem muito grande. Máximo 5MB.');
+                          return;
+                        }
                         setCourseForm(prev => ({ ...prev, thumbnail: file }));
                       }
                     }}
@@ -163,6 +238,23 @@ const CreateCourseDialog: React.FC<CreateCourseDialogProps> = ({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Status de Publicação */}
+          <div className="flex items-center justify-between p-4 border rounded-lg">
+            <div>
+              <Label htmlFor="is-published" className="text-base font-medium">
+                Curso Publicado
+              </Label>
+              <p className="text-sm text-gray-500">
+                Quando ativado, o curso ficará visível para os alunos
+              </p>
+            </div>
+            <Switch
+              id="is-published"
+              checked={courseForm.isPublished}
+              onCheckedChange={(checked) => setCourseForm(prev => ({ ...prev, isPublished: checked }))}
+            />
           </div>
 
           {/* Informações Básicas */}
@@ -251,29 +343,37 @@ const CreateCourseDialog: React.FC<CreateCourseDialogProps> = ({
           <div className="space-y-4">
             <h4 className="font-medium">Configurações do Curso</h4>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
+            <div className="grid grid-cols-1 gap-4">
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <Label htmlFor="allow-download" className="text-sm font-medium">
+                    Permitir download de materiais
+                  </Label>
+                  <p className="text-xs text-gray-500">
+                    Alunos poderão baixar os materiais das aulas
+                  </p>
+                </div>
+                <Switch
                   id="allow-download"
                   checked={courseForm.allowDownload}
-                  onChange={(e) => setCourseForm(prev => ({ ...prev, allowDownload: e.target.checked }))}
+                  onCheckedChange={(checked) => setCourseForm(prev => ({ ...prev, allowDownload: checked }))}
                 />
-                <Label htmlFor="allow-download" className="text-sm">
-                  Permitir download de materiais
-                </Label>
               </div>
               
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <Label htmlFor="certificate-enabled" className="text-sm font-medium">
+                    Emitir certificado de conclusão
+                  </Label>
+                  <p className="text-xs text-gray-500">
+                    Certificado será gerado automaticamente ao concluir
+                  </p>
+                </div>
+                <Switch
                   id="certificate-enabled"
                   checked={courseForm.certificateEnabled}
-                  onChange={(e) => setCourseForm(prev => ({ ...prev, certificateEnabled: e.target.checked }))}
+                  onCheckedChange={(checked) => setCourseForm(prev => ({ ...prev, certificateEnabled: checked }))}
                 />
-                <Label htmlFor="certificate-enabled" className="text-sm">
-                  Emitir certificado de conclusão
-                </Label>
               </div>
             </div>
             
@@ -299,12 +399,21 @@ const CreateCourseDialog: React.FC<CreateCourseDialogProps> = ({
             Cancelar
           </Button>
           <Button 
-            onClick={onCreateCourse}
+            onClick={handleSave}
             disabled={!courseForm.title || !courseForm.description || !courseForm.category}
             className="bg-red-600 hover:bg-red-700"
           >
-            <Save className="h-4 w-4 mr-2" />
-            Criar Curso
+            {isEditing ? (
+              <>
+                <Edit className="h-4 w-4 mr-2" />
+                Atualizar Curso
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Criar Curso
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

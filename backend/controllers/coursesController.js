@@ -1,4 +1,4 @@
-// backend/controllers/coursesController.js
+// backend/controllers/coursesController.js - CORRIGIDO
 const Course = require('../models/Course');
 const CourseProgress = require('../models/CourseProgress');
 const { User } = require('../models');
@@ -178,7 +178,7 @@ const getCourse = async (req, res) => {
                      !course.departamentoVisibilidade ||
                      course.departamentoVisibilidade.length === 0;
     
-    if (!hasAccess) {
+    if (!hasAccess && course.isPublished) {
       console.log('Access denied to course');
       return res.status(403).json({ msg: 'Acesso negado ao curso' });
     }
@@ -190,7 +190,7 @@ const getCourse = async (req, res) => {
     }).lean();
     
     // Se não existe progresso, criar um novo registro
-    if (!userProgress) {
+    if (!userProgress && course.isPublished) {
       const newProgress = new CourseProgress({
         userId: req.usuario.id,
         courseId: courseId,
@@ -214,14 +214,14 @@ const getCourse = async (req, res) => {
     
     res.json({
       ...course,
-      userProgress: {
+      userProgress: userProgress ? {
         progress: userProgress.progress,
         status: userProgress.status,
         lessonsProgress: userProgress.lessonsProgress,
         lastAccessedAt: userProgress.lastAccessedAt,
         enrolledAt: userProgress.enrolledAt,
         totalTimeSpent: userProgress.totalTimeSpent
-      }
+      } : null
     });
   } catch (err) {
     console.error('Erro ao buscar curso:', err);
@@ -239,7 +239,7 @@ const createCourse = async (req, res) => {
   try {
     console.log('=== CREATE COURSE DEBUG ===');
     console.log('Body:', req.body);
-    console.log('Files:', req.files);
+    console.log('File:', req.file);
     
     const {
       title,
@@ -253,6 +253,7 @@ const createCourse = async (req, res) => {
       allowDownload,
       certificateEnabled,
       passingScore,
+      isPublished,
       tags
     } = req.body;
     
@@ -272,8 +273,8 @@ const createCourse = async (req, res) => {
     
     // Processar thumbnail se foi enviada
     let thumbnailPath = null;
-    if (req.files && req.files.thumbnail) {
-      thumbnailPath = `/uploads/courses/${req.files.thumbnail[0].filename}`;
+    if (req.file) {
+      thumbnailPath = `/uploads/courses/${req.file.filename}`;
     }
     
     // Criar curso
@@ -291,6 +292,7 @@ const createCourse = async (req, res) => {
       allowDownload: allowDownload !== 'false',
       certificateEnabled: certificateEnabled === 'true',
       passingScore: passingScore ? parseInt(passingScore) : 70,
+      isPublished: isPublished === 'true',
       tags: tags ? (Array.isArray(tags) ? tags : [tags]) : [],
       lessons: []
     });
@@ -433,12 +435,13 @@ const addLesson = async (req, res) => {
       videoUrl,
       duration,
       order,
-      materials
+      isPublished
     } = req.body;
     
     console.log('=== ADD LESSON DEBUG ===');
     console.log('Course ID:', courseId);
     console.log('Lesson data:', { title, type, order });
+    console.log('Files received:', req.files);
     
     const course = await Course.findById(courseId);
     if (!course) {
@@ -454,18 +457,14 @@ const addLesson = async (req, res) => {
       return res.status(403).json({ msg: 'Apenas o instrutor ou administradores podem adicionar aulas' });
     }
     
-    // Processar materiais se enviados
-    let processedMaterials = [];
-    if (materials) {
-      try {
-        processedMaterials = typeof materials === 'string' ? 
-          JSON.parse(materials) : materials;
-      } catch (e) {
-        console.error('Erro ao processar materiais:', e);
-      }
+    // Processar upload de vídeo se enviado
+    let videoPath = null;
+    if (req.files && req.files.videoFile && req.files.videoFile[0]) {
+      videoPath = `/uploads/courses/videos/${req.files.videoFile[0].filename}`;
     }
     
-    // Adicionar arquivos de materiais se enviados
+    // Processar materiais se enviados
+    let processedMaterials = [];
     if (req.files && req.files.materials) {
       req.files.materials.forEach((file, index) => {
         processedMaterials.push({
@@ -473,7 +472,7 @@ const addLesson = async (req, res) => {
           type: getFileType(file.mimetype),
           filePath: `/uploads/courses/materials/${file.filename}`,
           size: formatFileSize(file.size),
-          order: processedMaterials.length + index
+          order: index
         });
       });
     }
@@ -484,11 +483,12 @@ const addLesson = async (req, res) => {
       description,
       type: type || 'video',
       content,
-      videoUrl,
+      videoUrl: videoPath ? '' : videoUrl, // Se tem vídeo local, limpar URL externa
+      videoPath, // Caminho do vídeo local
       duration,
-      order: order || course.lessons.length + 1,
+      order: order ? parseInt(order) : course.lessons.length + 1,
       materials: processedMaterials,
-      isPublished: true
+      isPublished: isPublished !== 'false'
     };
     
     course.lessons.push(newLesson);

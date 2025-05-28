@@ -1,4 +1,4 @@
-// backend/routes/courses.js
+// backend/routes/courses.js - CORRIGIDO
 const express = require('express');
 const router = express.Router();
 const coursesController = require('../controllers/coursesController');
@@ -14,8 +14,9 @@ const { trackLessonView, trackLessonCompletion } = require('../middleware/trackE
 // Garantir que os diretórios de uploads existam
 const uploadsDir = path.join(__dirname, '../uploads/courses');
 const materialsDir = path.join(__dirname, '../uploads/courses/materials');
+const videosDir = path.join(__dirname, '../uploads/courses/videos');
 
-[uploadsDir, materialsDir].forEach(dir => {
+[uploadsDir, materialsDir, videosDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -26,6 +27,8 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     if (file.fieldname === 'thumbnail') {
       cb(null, uploadsDir);
+    } else if (file.fieldname === 'videoFile') {
+      cb(null, videosDir);
     } else if (file.fieldname === 'materials') {
       cb(null, materialsDir);
     } else {
@@ -39,7 +42,7 @@ const storage = multer.diskStorage({
   }
 });
 
-// Filtro de arquivos
+// Filtro de arquivos melhorado
 const fileFilter = (req, file, cb) => {
   if (file.fieldname === 'thumbnail') {
     // Para thumbnails, apenas imagens
@@ -51,25 +54,50 @@ const fileFilter = (req, file, cb) => {
       return cb(null, true);
     }
     cb(new Error('Apenas imagens são permitidas para thumbnail'), false);
-  } else {
+  } else if (file.fieldname === 'videoFile') {
+    // Para vídeos
+    const allowedTypes = /mp4|avi|mov|webm|mkv/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = file.mimetype.startsWith('video/');
+    
+    if (extname && mimetype) {
+      return cb(null, true);
+    }
+    cb(new Error('Apenas vídeos são permitidos'), false);
+  } else if (file.fieldname === 'materials') {
     // Para materiais, vários tipos de arquivo
-    const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|xls|xlsx|ppt|pptx|mp4|mp3|avi|mov/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|xls|xlsx|ppt|pptx|mp4|mp3|avi|mov|txt/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     
     if (extname) {
       return cb(null, true);
     }
     cb(new Error('Tipo de arquivo não suportado'), false);
+  } else {
+    cb(new Error('Campo de upload não reconhecido'), false);
   }
 };
 
-const upload = multer({
+// Configuração específica para cada rota
+const uploadCourse = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB
+    fileSize: 5 * 1024 * 1024 // 5MB para thumbnails
   }
-});
+}).single('thumbnail');
+
+const uploadLesson = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 500 * 1024 * 1024 // 500MB para vídeos
+  }
+}).fields([
+  { name: 'thumbnail', maxCount: 1 },
+  { name: 'videoFile', maxCount: 1 },
+  { name: 'materials', maxCount: 10 }
+]);
 
 // Middleware para verificar permissões de curso
 const checkCoursePermission = (action) => {
@@ -184,10 +212,15 @@ router.get('/my-progress', auth, async (req, res) => {
 router.post('/', 
   auth, 
   checkCoursePermission('courses:create'),
-  upload.fields([
-    { name: 'thumbnail', maxCount: 1 },
-    { name: 'materials', maxCount: 10 }
-  ]),
+  (req, res, next) => {
+    uploadCourse(req, res, (err) => {
+      if (err) {
+        console.error('Erro no upload do thumbnail:', err);
+        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
+      }
+      next();
+    });
+  },
   coursesController.createCourse
 );
 
@@ -206,10 +239,15 @@ router.get('/:id',
 // @access  Private (Instructor/Admin)
 router.put('/:id', 
   auth,
-  upload.fields([
-    { name: 'thumbnail', maxCount: 1 },
-    { name: 'materials', maxCount: 10 }
-  ]),
+  (req, res, next) => {
+    uploadCourse(req, res, (err) => {
+      if (err) {
+        console.error('Erro no upload do thumbnail:', err);
+        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
+      }
+      next();
+    });
+  },
   async (req, res) => {
     try {
       const Course = require('../models/Course');
@@ -243,8 +281,20 @@ router.put('/:id',
       }
       
       // Atualizar thumbnail se enviada
-      if (req.files && req.files.thumbnail) {
-        updateFields.thumbnail = `/uploads/courses/${req.files.thumbnail[0].filename}`;
+      if (req.file) {
+        updateFields.thumbnail = `/uploads/courses/${req.file.filename}`;
+      }
+      
+      // Converter strings booleanas
+      ['isPublished', 'allowDownload', 'certificateEnabled'].forEach(field => {
+        if (updateFields[field] !== undefined) {
+          updateFields[field] = updateFields[field] === 'true' || updateFields[field] === true;
+        }
+      });
+      
+      // Converter números
+      if (updateFields.passingScore) {
+        updateFields.passingScore = parseInt(updateFields.passingScore) || 70;
       }
       
       const updatedCourse = await Course.findByIdAndUpdate(
@@ -323,7 +373,15 @@ router.delete('/:id',
 // @access  Private (Instructor/Admin)
 router.post('/:id/lessons', 
   auth,
-  upload.array('materials', 10),
+  (req, res, next) => {
+    uploadLesson(req, res, (err) => {
+      if (err) {
+        console.error('Erro no upload da aula:', err);
+        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
+      }
+      next();
+    });
+  },
   coursesController.addLesson
 );
 
@@ -332,7 +390,15 @@ router.post('/:id/lessons',
 // @access  Private (Instructor/Admin)
 router.put('/:courseId/lessons/:lessonId', 
   auth,
-  upload.array('materials', 10),
+  (req, res, next) => {
+    uploadLesson(req, res, (err) => {
+      if (err) {
+        console.error('Erro no upload da aula:', err);
+        return res.status(400).json({ msg: 'Erro no upload: ' + err.message });
+      }
+      next();
+    });
+  },
   async (req, res) => {
     try {
       const Course = require('../models/Course');
@@ -357,11 +423,27 @@ router.put('/:courseId/lessons/:lessonId',
       }
       
       // Atualizar campos da aula
-      Object.assign(lesson, req.body);
+      Object.assign(lesson, {
+        title: req.body.title || lesson.title,
+        description: req.body.description || lesson.description,
+        type: req.body.type || lesson.type,
+        content: req.body.content || lesson.content,
+        videoUrl: req.body.videoUrl || lesson.videoUrl,
+        duration: req.body.duration || lesson.duration,
+        order: parseInt(req.body.order) || lesson.order,
+        isPublished: req.body.isPublished === 'true' || req.body.isPublished === true
+      });
+      
+      // Processar upload de vídeo se enviado
+      if (req.files && req.files.videoFile) {
+        lesson.videoPath = `/uploads/courses/videos/${req.files.videoFile[0].filename}`;
+        // Se subiu um vídeo local, limpar a URL externa
+        lesson.videoUrl = '';
+      }
       
       // Adicionar novos materiais se enviados
-      if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
+      if (req.files && req.files.materials) {
+        req.files.materials.forEach(file => {
           lesson.materials.push({
             name: file.originalname,
             type: getFileType(file.mimetype),
@@ -420,6 +502,14 @@ router.delete('/:courseId/lessons/:lessonId',
           }
         }
       });
+      
+      // Remover vídeo se existir
+      if (lesson.videoPath) {
+        const videoPath = path.join(__dirname, '..', lesson.videoPath);
+        if (fs.existsSync(videoPath)) {
+          fs.unlinkSync(videoPath);
+        }
+      }
       
       // Remover aula
       course.lessons.pull(req.params.lessonId);
