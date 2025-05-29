@@ -1639,6 +1639,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                           <div className="flex space-x-3">
                             <UserAvatar 
 							  user={{
+								id: post.user.id,  // IMPORTANTE: Incluir o ID
 								name: post.user.name,
 								avatar: post.user.avatar,
 								cargo: post.user.cargo,
@@ -1825,16 +1826,17 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 						  {post.comments.map((comment) => (
 							<div key={comment.id} className="flex space-x-3">
 							  <UserAvatar 
-								user={{
-								  name: comment.user.name,
-								  avatar: comment.user.avatar,
-								  cargo: comment.user.cargo,
-								  department: comment.user.department
-								}}
-								showAttributes={true}
-								size="sm"
-								enableModal={true}
-							  />
+								  user={{
+									id: comment.user.id,  // IMPORTANTE: Incluir o ID
+									name: comment.user.name,
+									avatar: comment.user.avatar,
+									cargo: comment.user.cargo,
+									department: comment.user.department
+								  }}
+								  showAttributes={false}
+								  size="sm"
+								  enableModal={true}
+								/>
 							  <div className="flex-1">
 								<div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-2 px-3">
 								  <div className="font-medium text-sm">{comment.user.name}</div>
@@ -1963,7 +1965,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								cargo: post.user.cargo,
 								department: post.user.department
 							  }}
-							  showAttributes={true}
+							  showAttributes={false}
 							  size="md"
 							  enableModal={true}
 							/>
@@ -2150,7 +2152,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  cargo: comment.user.cargo,
 								  department: comment.user.department
 								}}
-								showAttributes={true}
+								showAttributes={false}
 								size="sm"
 								enableModal={true}
 							  />
@@ -2269,7 +2271,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								cargo: post.user.cargo,
 								department: post.user.department
 							  }}
-							  showAttributes={true}
+							  showAttributes={false}
 							  size="md"
 							  enableModal={true}
 							/>
@@ -2456,7 +2458,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  cargo: comment.user.cargo,
 								  department: comment.user.department
 								}}
-								showAttributes={true}
+								showAttributes={false}
 								size="sm"
 								enableModal={true}
 							  />
@@ -2575,7 +2577,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								cargo: post.user.cargo,
 								department: post.user.department
 							  }}
-							  showAttributes={true}
+							  showAttributes={false}
 							  size="md"
 							  enableModal={true}
 							/>
@@ -2762,7 +2764,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  cargo: comment.user.cargo,
 								  department: comment.user.department
 								}}
-								showAttributes={true}
+								showAttributes={false}
 								size="sm"
 								enableModal={true}
 							  />

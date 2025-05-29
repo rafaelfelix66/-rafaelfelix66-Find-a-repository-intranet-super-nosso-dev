@@ -1,4 +1,4 @@
-// frontend/src/components/ui/user-avatar.tsx (Melhorado)
+// frontend/src/components/ui/user-avatar.tsx (Corrigido)
 import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,8 +9,10 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogClose
 } from "@/components/ui/dialog";
-import { Briefcase, Building2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Briefcase, Building2, X } from "lucide-react";
 import { UserAttributesBadge } from "@/components/user/UserAttributesBadge";
 import { useUserAttributes } from "@/hooks/useUserAttributes";
 
@@ -43,8 +45,20 @@ export function UserAvatar({
   const user = propUser || authUser;
   const [showImageModal, setShowImageModal] = useState(false);
   
-  // Usar o hook para buscar atributos do usuário
-  const { attributes, loading } = useUserAttributes(user?.id || '');
+  // CORREÇÃO: Garantir que o userId seja uma string válida
+  const userId = user?.id || user?._id || '';
+  console.log('UserAvatar - userId para buscar atributos:', userId);
+  console.log('UserAvatar - user object:', user);
+  
+  // Usar o hook para buscar atributos do usuário apenas se showAttributes for true E tiver userId
+  const { 
+    attributes, 
+    loading: attributesLoading 
+  } = useUserAttributes(showAttributes && userId ? userId : '');
+  
+  // Debug dos atributos
+  console.log('UserAvatar - Atributos carregados:', attributes);
+  console.log('UserAvatar - Loading atributos:', attributesLoading);
   
   const getInitials = (name: string) => {
     if (!name) return "??";
@@ -101,12 +115,12 @@ export function UserAvatar({
         </AvatarFallback>
       </Avatar>
       
-      {/* Mostrar badges de atributos se solicitado */}
-      {showAttributes && user?.id && attributes.length > 0 && (
+      {/* Mostrar badges de atributos se solicitado E se tiver userId válido */}
+      {showAttributes && userId && (
         <UserAttributesBadge 
-          userId={user.id} 
+          userId={userId} 
           attributeCounts={attributes}
-          loading={loading}
+          loading={attributesLoading}
           size={size === "lg" ? "md" : "sm"}
           maxToShow={size === "sm" ? 2 : 3}
         />
@@ -114,15 +128,28 @@ export function UserAvatar({
       
       {/* Modal para mostrar a imagem grande */}
       <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
-        <DialogContent className="max-w-md border-0 p-0 overflow-hidden">
-          {/* Título oculto para acessibilidade */}
-          <div className="sr-only">
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-transparent border-0">
+          <DialogHeader className="sr-only">
             <DialogTitle>Perfil de {user?.name || "usuário"}</DialogTitle>
-            <DialogDescription>Visualização do perfil</DialogDescription>
-          </div>
-          <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+            <DialogDescription>Visualização do perfil do usuário</DialogDescription>
+          </DialogHeader>
+          
+          {/* Botão de fechar */}
+          <DialogClose asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-4 right-4 z-50 h-8 w-8 rounded-full bg-black/20 hover:bg-black/40 text-white border-0"
+              onClick={() => setShowImageModal(false)}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Fechar</span>
+            </Button>
+          </DialogClose>
+          
+          <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-lg">
             {/* Background pattern */}
-            <div className="absolute inset-0 bg-grid-white/[0.02]" />
+            <div className="absolute inset-0 bg-grid-white/[0.02] rounded-lg" />
             
             {/* Glow effect */}
             <div className="absolute inset-0 flex items-center justify-center">
@@ -140,7 +167,7 @@ export function UserAvatar({
                   </div>
                   
                   {/* Avatar container */}
-                  <div className="relative w-64 h-64 rounded-full overflow-hidden border-4 border-gray-900">
+                  <div className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-gray-900">
                     {user?.avatar ? (
                       <img 
                         src={user.avatar} 
@@ -149,7 +176,7 @@ export function UserAvatar({
                       />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-[#e60909] to-[#ff4444] flex items-center justify-center">
-                        <span className="text-5xl text-white font-bold">
+                        <span className="text-3xl text-white font-bold">
                           {getInitials(user?.name || "")}
                         </span>
                       </div>
@@ -161,16 +188,16 @@ export function UserAvatar({
               {/* Informações do usuário */}
               <div className="text-center space-y-4">
                 <div>
-                  <h3 className="text-2xl font-bold text-white mb-1">
+                  <h3 className="text-xl font-bold text-white mb-2">
                     {user?.name || "Usuário"}
                   </h3>
                   
                   {/* Cargo e Departamento */}
-                  <div className="flex items-center justify-center gap-4 text-gray-400">
+                  <div className="flex items-center justify-center gap-4 text-gray-400 text-sm">
                     {user?.cargo && (
                       <div className="flex items-center gap-1">
-                        <Briefcase className="h-4 w-4" />
-                        <span className="text-sm">{user.cargo}</span>
+                        <Briefcase className="h-3 w-3" />
+                        <span>{user.cargo}</span>
                       </div>
                     )}
                     
@@ -180,23 +207,40 @@ export function UserAvatar({
                     
                     {user?.department && (
                       <div className="flex items-center gap-1">
-                        <Building2 className="h-4 w-4" />
-                        <span className="text-sm">{user.department}</span>
+                        <Building2 className="h-3 w-3" />
+                        <span>{user.department}</span>
                       </div>
                     )}
                   </div>
                 </div>
                 
-                {/* Mostrar atributos no modal */}
-                {user?.id && (
-                  <div className="flex flex-wrap justify-center gap-2 mt-4">
-                    <UserAttributesBadge 
-                      userId={user.id}
-                      attributeCounts={attributes}
-                      loading={loading}
-                      maxToShow={10}
-                      size="lg"
-                    />
+                {/* CORREÇÃO: Mostrar atributos no modal apenas se tiver userId */}
+                {userId && (
+                  <div className="mt-6">
+                    <h4 className="text-sm font-semibold text-white mb-3">
+                      Reconhecimentos Recebidos
+                    </h4>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {attributesLoading ? (
+                        <div className="flex gap-2">
+                          <div className="h-5 w-16 bg-gray-600 animate-pulse rounded-full"></div>
+                          <div className="h-5 w-12 bg-gray-600 animate-pulse rounded-full"></div>
+                          <div className="h-5 w-14 bg-gray-600 animate-pulse rounded-full"></div>
+                        </div>
+                      ) : attributes.length > 0 ? (
+                        <UserAttributesBadge 
+                          userId={userId}
+                          attributeCounts={attributes}
+                          loading={attributesLoading}
+                          maxToShow={10}
+                          size="md"
+                        />
+                      ) : (
+                        <p className="text-gray-400 text-xs">
+                          Nenhum reconhecimento recebido ainda
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

@@ -552,7 +552,7 @@ const sendMessageStreaming = async (req, res) => {
     // (vamos determinar isso após a resposta do LLM)
     
     // Construir o prompt com contexto numerado
-    const systemPrompt = "Você é um assistente da Intranet Super Nosso que responde perguntas com base nos documentos disponíveis. Seja claro, objetivo e útil.";
+    const systemPrompt = "Seu nome é Gabi, você é uma assistente da Intranet Super Nosso que responde perguntas com base nos documentos disponíveis. Seja clara, objetiva e útil.";
     
     let contextPrompt = "";
     let documentIds = [];
@@ -574,6 +574,7 @@ const sendMessageStreaming = async (req, res) => {
 	  contextPrompt += "2. Comece sua resposta com 'De acordo com os documentos fornecidos, ...' e cite cada fonte usada\n";
 	  contextPrompt += "3. Se você não encontrar a informação nos documentos, informe claramente\n";
 	  contextPrompt += "4. NUNCA invente informações que não estejam nos documentos\n";
+	  contextPrompt += "5. Seu nome é Gabi\n";
     } else {
       contextPrompt = "Não foram encontrados documentos relevantes para esta consulta. Por favor, responda com seu conhecimento geral.";
     }
