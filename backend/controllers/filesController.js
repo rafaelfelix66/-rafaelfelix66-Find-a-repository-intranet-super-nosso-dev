@@ -185,6 +185,7 @@ const uploadFile = async (req, res) => {
       description, 
       departamentoVisibilidade, 
       allowDownload,
+      allowRAG,
       type,
       linkUrl,
       linkName
@@ -194,6 +195,7 @@ const uploadFile = async (req, res) => {
     console.log('Body recebido:', req.body);
     console.log('Arquivo recebido:', req.file);
     console.log('Tipo:', type);
+    console.log('Allow RAG:', allowRAG);
     
     // Validar tipo
     const fileType = type || 'file';
@@ -218,6 +220,9 @@ const uploadFile = async (req, res) => {
         }
       }
       
+      // Processar flag RAG
+      const ragEnabled = allowRAG === 'true' || allowRAG === true;
+      
       // Criar link
       const newLink = new File({
         name: linkName,
@@ -228,7 +233,8 @@ const uploadFile = async (req, res) => {
         owner: req.usuario.id,
         departamentoVisibilidade: deptVisibilidade,
         isPublic: deptVisibilidade.includes('TODOS'),
-        allowDownload: false // Links não têm download
+        allowDownload: false, // Links não têm download
+        allowRAG: ragEnabled
       });
       
       const savedLink = await newLink.save();
@@ -265,6 +271,22 @@ const uploadFile = async (req, res) => {
         }
       }
       
+      // Processar flag RAG
+      let ragEnabled = allowRAG === 'true' || allowRAG === true;
+      
+      // Se o arquivo está sendo criado dentro de uma pasta, herdar a configuração RAG da pasta
+      if (folderId && !allowRAG) {
+        try {
+          const parentFolder = await Folder.findById(folderId);
+          if (parentFolder && parentFolder.allowRAG) {
+            ragEnabled = true;
+            console.log('Herdando flag RAG da pasta pai:', parentFolder.name);
+          }
+        } catch (err) {
+          console.error('Erro ao buscar pasta pai para herdar flag RAG:', err.message);
+        }
+      }
+      
       // Criar arquivo
       const newFile = new File({
         name: path.basename(fixedName, path.extname(fixedName)),
@@ -279,7 +301,8 @@ const uploadFile = async (req, res) => {
         owner: req.usuario.id,
         departamentoVisibilidade: deptVisibilidade,
         isPublic: deptVisibilidade.includes('TODOS'),
-        allowDownload: allowDownload !== 'false' // Permitir download por padrão
+        allowDownload: allowDownload !== 'false', // Permitir download por padrão
+        allowRAG: ragEnabled
       });
       
       const savedFile = await newFile.save();
@@ -615,11 +638,13 @@ const deleteItem = async (req, res) => {
     console.log('=== DELETE ITEM DEBUG ===');
     console.log('itemId:', itemId);
     console.log('itemType:', itemType);
+	console.log('req.params:', req.params);
+    console.log('req.url:', req.url);
     console.log('usuarioId:', req.usuario.id);
     
     let item;
     
-    if (itemType === 'file') {
+    if (itemType === 'file' || itemType === 'link') { // MODIFICADO: aceitar tanto 'file' quanto 'link'
       item = await File.findById(itemId);
       if (!item) {
         return res.status(404).json({ msg: 'Arquivo não encontrado' });

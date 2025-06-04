@@ -258,27 +258,42 @@ if (fs.existsSync(BASE_UPLOAD_PATH)) {
     
     // PARTE 1: Buscar arquivos do banco de dados MongoDB
     try {
-      console.log("Buscando arquivos do banco de dados...");
-      const userFiles = await File.find({
+       console.log("Buscando arquivos com RAG habilitado no banco de dados...");
+      
+      // FILTRO PRINCIPAL: Buscar apenas arquivos com allowRAG = true
+      const ragEnabledFiles = await File.find({
+        allowRAG: true, // NOVO: Filtro principal para RAG
         $or: [
           { owner: userId },
           { 'sharedWith.user': userId },
-          { isPublic: true }
+          { isPublic: true },
+          { departamentoVisibilidade: { $in: ['TODOS'] } }
         ]
       });
       
-      console.log(`Encontrados ${userFiles.length} arquivos no banco de dados`);
+      console.log(`Encontrados ${ragEnabledFiles.length} arquivos com RAG habilitado no banco de dados`);
       
-      // Processar arquivos do banco
-      for (const file of userFiles) {
+	  // Log detalhado dos arquivos encontrados
+      ragEnabledFiles.forEach(file => {
+        console.log(`- Arquivo RAG: ${file.name} (ID: ${file._id}) - Tipo: ${file.type}`);
+      });
+	  
+      // Processar arquivos do banco que têm RAG habilitado
+      for (const file of ragEnabledFiles) {
         try {
+          // Pular links, focar apenas em arquivos físicos
+          if (file.type === 'link') {
+            console.log(`Pulando link: ${file.name}`);
+            continue;
+          }
+          
           const filePath = resolveFilePath(file.path);
           
           if (!filePath || processedPaths.has(filePath)) continue;
           processedPaths.add(filePath);
           
           if (!fs.existsSync(filePath)) {
-            console.warn(`Arquivo não encontrado: ${filePath}`);
+            console.warn(`Arquivo com RAG não encontrado: ${filePath}`);
             continue;
           }
           
@@ -289,12 +304,20 @@ if (fs.existsSync(BASE_UPLOAD_PATH)) {
             file.extension
           );
           
-          if (!content) continue;
+          if (!content) {
+            console.log(`Não foi possível extrair conteúdo de: ${file.name}`);
+            continue;
+          }
           
           const fileEmbedding = await generateEmbedding(content);
-          if (!fileEmbedding) continue;
+          if (!fileEmbedding) {
+            console.log(`Não foi possível gerar embedding para: ${file.name}`);
+            continue;
+          }
           
           const similarity = cosineSimilarity(queryEmbedding, fileEmbedding);
+          
+          console.log(`Arquivo processado: ${file.name} - Similaridade: ${similarity.toFixed(4)}`);
           
           allDocuments.push({
             file: {
@@ -302,73 +325,45 @@ if (fs.existsSync(BASE_UPLOAD_PATH)) {
               name: file.name || path.basename(filePath),
               path: filePath,
               mimeType: file.mimeType,
-              extension: file.extension
+              extension: file.extension,
+              allowRAG: file.allowRAG
             },
-            content,
+            content: content.substring(0, 2000), // Limitar tamanho do contexto
             similarity
           });
           
         } catch (error) {
-          console.error(`Erro ao processar arquivo do banco ${file.name || file.path}:`, error.message);
+          console.error(`Erro ao processar arquivo RAG ${file.name || file.path}:`, error.message);
         }
       }
     } catch (dbError) {
-      console.error("Erro ao buscar arquivos do banco de dados:", dbError.message);
+      console.error("Erro ao buscar arquivos com RAG no banco de dados:", dbError.message);
     }
     
-    // PARTE 2: Buscar todos os arquivos do diretório
-    try {
-      console.log(`Buscando arquivos do diretório: ${BASE_UPLOAD_PATH}`);
-      const filesFromDir = getAllFiles(BASE_UPLOAD_PATH);
-      console.log(`Encontrados ${filesFromDir.length} arquivos no diretório`);
-      
-      for (const file of filesFromDir) {
-        try {
-          if (processedPaths.has(file.path)) continue;
-          processedPaths.add(file.path);
-          
-          // Ler conteúdo e calcular similaridade
-          const content = await extractTextFromFile(
-            file.path,
-            null,  // Não temos mimeType
-            file.extension
-          );
-          
-          if (!content) continue;
-          
-          const fileEmbedding = await generateEmbedding(content);
-          if (!fileEmbedding) continue;
-          
-          const similarity = cosineSimilarity(queryEmbedding, fileEmbedding);
-          
-          allDocuments.push({
-            file: {
-              id: path.basename(file.path),  // Usar nome do arquivo como ID
-              name: file.name,
-              path: file.path,
-              extension: file.extension
-            },
-            content,
-            similarity
-          });
-          
-        } catch (error) {
-          console.error(`Erro ao processar arquivo do diretório ${file.path}:`, error.message);
-        }
-      }
-    } catch (fsError) {
-      console.error("Erro ao buscar arquivos do diretório:", fsError.message);
-    }
+     // PARTE 2: REMOVIDA - Não buscar mais arquivos do diretório sem controle
+    // Agora só utilizamos arquivos explicitamente marcados para RAG
     
-    // Ordenar por similaridade e obter os mais relevantes
+        // Ordenar por similaridade e obter os mais relevantes
     const relevantDocuments = allDocuments
+      .filter(doc => doc.similarity > 0.1) // Filtro mínimo de similaridade
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, 5);  // Top 5 mais relevantes
     
-    console.log(`Selecionados ${relevantDocuments.length} documentos mais relevantes`);
+    console.log(`=== RESULTADO FINAL ===`);
+    console.log(`Total de documentos processados: ${allDocuments.length}`);
+    console.log(`Documentos relevantes selecionados: ${relevantDocuments.length}`);
+    
     relevantDocuments.forEach((doc, idx) => {
-      console.log(`Doc ${idx+1}: ${doc.file.name} (Similaridade: ${doc.similarity.toFixed(4)})`);
+      console.log(`${idx+1}. ${doc.file.name} (Similaridade: ${doc.similarity.toFixed(4)}) - RAG: ${doc.file.allowRAG}`);
     });
+    
+    if (relevantDocuments.length === 0) {
+      console.log("⚠️  NENHUM DOCUMENTO RELEVANTE ENCONTRADO");
+      console.log("Possíveis causas:");
+      console.log("- Nenhum arquivo tem a flag allowRAG habilitada");
+      console.log("- Nenhum arquivo é acessível pelo usuário");
+      console.log("- Baixa similaridade com a consulta");
+    }
     
     return relevantDocuments;
   } catch (error) {
@@ -381,13 +376,13 @@ if (fs.existsSync(BASE_UPLOAD_PATH)) {
 const getResponseWithContext = async (query, documents) => {
   try {
     // Construir o prompt com contexto melhorado
-    const systemPrompt = "Você é um assistente da Intranet Super Nosso que responde perguntas com base nos documentos disponíveis. Seja claro, objetivo e útil.";
+    const systemPrompt = "Você é a Gabi, assistente da Intranet Super Nosso que responde perguntas com base nos documentos disponíveis. Seja clara, objetiva e útil.";
     
     let contextPrompt = "";
     let documentIds = [];
     
     if (documents && documents.length > 0) {
-      contextPrompt = "Contexto extraído dos documentos:\n\n";
+      contextPrompt = "Contexto extraído dos documentos aprovados para IA:\n\n";
       
       documents.forEach((doc, index) => {
         // Adicionar documento numerado ao contexto
@@ -395,22 +390,32 @@ const getResponseWithContext = async (query, documents) => {
         documentIds.push({
           id: doc.file.id,
           name: doc.file.name,
-          index: index + 1
+          index: index + 1,
+          similarity: doc.similarity
         });
       });
       
       // Instruções específicas para identificar a fonte 
-      contextPrompt += "INSTRUÇÕES IMPORTANTES: Ao responder, indique explicitamente de qual documento (pelo número e nome) você obteve cada informação. " +
-                      "Se você usar múltiplos documentos, cite cada um deles quando usar sua informação. " +
-                      "Responda com base APENAS nos documentos fornecidos acima.";
+      contextPrompt += "INSTRUÇÕES IMPORTANTES:\n" +
+                      "1. Você DEVE citar explicitamente de qual documento (pelo número e nome) você obteve cada informação\n" +
+                      "2. Se usar múltiplos documentos, cite cada um deles quando usar sua informação\n" +
+                      "3. Responda com base APENAS nos documentos fornecidos acima\n" +
+                      "4. Se não encontrar a informação nos documentos, informe claramente\n" +
+                      "5. Todos os documentos foram pré-aprovados pela empresa para uso na IA\n";
     } else {
-      contextPrompt = "Não foram encontrados documentos relevantes para esta consulta. Por favor, responda com seu conhecimento geral.";
+      contextPrompt = "Não foram encontrados documentos relevantes aprovados para IA para esta consulta. " +
+                     "Isso pode significar que:\n" +
+                     "- Nenhum documento foi marcado como disponível para IA\n" +
+                     "- Os documentos disponíveis não são relevantes para sua pergunta\n" +
+                     "- Você pode não ter acesso aos documentos relacionados\n\n" +
+                     "Por favor, responda com seu conhecimento geral, mas informe que não há documentos específicos da empresa disponíveis.";
     }
     
     // Montar o prompt final
     const prompt = `${systemPrompt}\n\n${contextPrompt}\n\nPergunta: ${query}\n\nResposta:`;
     
     console.log(`Enviando prompt para o LLM (${prompt.length} caracteres)`);
+    console.log(`Documentos incluídos no contexto: ${documentIds.length}`);
     
     // Fazer requisição para o Ollama
     const response = await axios.post(`${OLLAMA_BASE_URL}/api/generate`, {
@@ -440,27 +445,36 @@ const getResponseWithContext = async (query, documents) => {
           `DOCUMENTO ${doc.index}`,
           `Documento ${doc.index}`,
           `documento ${doc.index}`,
-          doc.name
+          doc.name.toLowerCase()
         ];
         
-        if (docMentionPatterns.some(pattern => llmResponse.includes(pattern))) {
+        if (docMentionPatterns.some(pattern => 
+          llmResponse.toLowerCase().includes(pattern.toLowerCase())
+        )) {
           usedDocuments.push({
             id: doc.id,
-            name: doc.name
+            name: doc.name,
+            similarity: doc.similarity
           });
         }
       }
       
-      // Se não encontrou nenhuma menção explícita, usar apenas o documento mais relevante
+      // Se não encontrou nenhuma menção explícita mas há documentos, usar o mais relevante
       if (usedDocuments.length === 0 && documents.length > 0) {
         const mostRelevantDoc = documents[0];
         usedDocuments.push({
           id: mostRelevantDoc.file.id,
           name: mostRelevantDoc.file.name,
-          similarity: mostRelevantDoc.similarity
+          similarity: mostRelevantDoc.similarity,
+          note: 'Documento mais relevante (inferido)'
         });
       }
     }
+    
+    console.log(`Documentos utilizados na resposta: ${usedDocuments.length}`);
+    usedDocuments.forEach(doc => {
+      console.log(`- ${doc.name} (Similaridade: ${doc.similarity?.toFixed(4) || 'N/A'})`);
+    });
     
     return {
       response: llmResponse,
@@ -526,12 +540,12 @@ const sendMessage = async (req, res) => {
   }
 };
 
-// Função alternativa com suporte a streaming
+// Função para streaming com suporte melhorado para RAG
 const sendMessageStreaming = async (req, res) => {
   try {
-    // Log detalhado do que está sendo recebido
-    console.log('Requisição LLM recebida:');
+    console.log('=== INÍCIO PROCESSAMENTO LLM COM RAG ===');
     console.log('- Message:', req.body.message);
+    console.log('- Usuário:', req.usuario.id);
     
     const { message, conversationHistory = [] } = req.body;
     
@@ -539,8 +553,10 @@ const sendMessageStreaming = async (req, res) => {
       return res.status(400).json({ mensagem: 'Mensagem não fornecida' });
     }
     
-    // Buscar documentos relevantes à consulta
+    // Buscar documentos relevantes com RAG habilitado
+    console.log('Iniciando busca de documentos relevantes...');
     const relevantDocs = await findRelevantDocuments(message, req.usuario.id);
+    console.log(`Documentos encontrados: ${relevantDocs.length}`);
     
     // Configurar cabeçalhos para streaming
     res.setHeader('Content-Type', 'text/event-stream');
@@ -548,40 +564,42 @@ const sendMessageStreaming = async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Para Nginx
     
-    // IMPORTANTE: Aqui enviamos apenas os documentos que serão efetivamente utilizados
-    // (vamos determinar isso após a resposta do LLM)
-    
     // Construir o prompt com contexto numerado
-    const systemPrompt = "Seu nome é Gabi, você é uma assistente da Intranet Super Nosso que responde perguntas com base nos documentos disponíveis. Seja clara, objetiva e útil.";
+    const systemPrompt = "Seu nome é Gabi, você é uma assistente da Intranet Super Nosso que responde perguntas com base nos documentos aprovados para IA. Seja clara, objetiva e útil.";
     
     let contextPrompt = "";
     let documentIds = [];
     
     if (relevantDocs.length > 0) {
-      contextPrompt = "Contexto extraído dos documentos:\n\n";
+      contextPrompt = "Contexto extraído dos documentos aprovados para IA:\n\n";
       
       relevantDocs.forEach((doc, index) => {
         contextPrompt += `=== DOCUMENTO ${index + 1}: ${doc.file.name} ===\n${doc.content}\n\n`;
         documentIds.push({
           id: doc.file.id,
           name: doc.file.name,
-          index: index + 1
+          index: index + 1,
+          similarity: doc.similarity
         });
       });
       
-      contextPrompt += "INSTRUÇÕES MUITO IMPORTANTES: \n";
-	  contextPrompt += "1. Você DEVE citar explicitamente qual documento (número e nome) foi usado para cada parte da sua resposta\n";
-	  contextPrompt += "2. Comece sua resposta com 'De acordo com os documentos fornecidos, ...' e cite cada fonte usada\n";
-	  contextPrompt += "3. Se você não encontrar a informação nos documentos, informe claramente\n";
-	  contextPrompt += "4. NUNCA invente informações que não estejam nos documentos\n";
-	  contextPrompt += "5. Seu nome é Gabi\n";
+      contextPrompt += "INSTRUÇÕES MUITO IMPORTANTES:\n";
+      contextPrompt += "1. Você DEVE citar explicitamente qual documento (número e nome) foi usado para cada parte da sua resposta\n";
+      contextPrompt += "2. Comece sua resposta com 'De acordo com os documentos aprovados para IA, ...' e cite cada fonte usada\n";
+      contextPrompt += "3. Se você não encontrar a informação nos documentos, informe claramente\n";
+      contextPrompt += "4. NUNCA invente informações que não estejam nos documentos\n";
+      contextPrompt += "5. Seu nome é Gabi\n";
+      contextPrompt += "6. Todos os documentos foram pré-aprovados pela empresa para uso na IA\n";
     } else {
-      contextPrompt = "Não foram encontrados documentos relevantes para esta consulta. Por favor, responda com seu conhecimento geral.";
+      contextPrompt = "Não foram encontrados documentos relevantes aprovados para IA para esta consulta. " +
+                     "Informe ao usuário que não há documentos específicos da empresa disponíveis para esta pergunta, " +
+                     "mas ofereça ajuda com conhecimento geral se apropriado.";
     }
     
     const prompt = `${systemPrompt}\n\n${contextPrompt}\n\nPergunta: ${message}\n\nResposta:`;
     
     console.log(`Enviando prompt para o LLM (${prompt.length} caracteres)`);
+    console.log(`Documentos no contexto: ${documentIds.length}`);
     
     // Fazer requisição para o Ollama com streaming
     const response = await axios({
@@ -634,31 +652,49 @@ const sendMessageStreaming = async (req, res) => {
             
             // Verificar cada documento mencionado na resposta
             for (const doc of documentIds) {
-			  if (docMentionPatterns.some(pattern => completeResponse.includes(pattern))) {
-				usedDocuments.push({
-				  id: doc.id,
-				  name: doc.name
-				});
-			  }
-			}
+              const docMentionPatterns = [
+                `DOCUMENTO ${doc.index}`,
+                `Documento ${doc.index}`,
+                `documento ${doc.index}`,
+                doc.name.toLowerCase()
+              ];
+              
+              if (docMentionPatterns.some(pattern => 
+                completeResponse.toLowerCase().includes(pattern.toLowerCase())
+              )) {
+                usedDocuments.push({
+                  id: doc.id,
+                  name: doc.name,
+                  similarity: doc.similarity
+                });
+              }
+            }
             
-            // Garantir que pelo menos um documento seja citado
-			if (usedDocuments.length === 0 && relevantDocs.length > 0) {
-			  console.log('Nenhum documento foi mencionado explicitamente na resposta');
-			  const topDoc = relevantDocs[0];
-			  usedDocuments.push({
-				id: topDoc.file.id,
-				name: topDoc.file.name,
-				similarity: topDoc.similarity,
-				note: 'Documento mais relevante (inferido)'
-			  });
-			}
+            // Garantir que pelo menos um documento seja citado se houver contexto
+            if (usedDocuments.length === 0 && relevantDocs.length > 0) {
+              console.log('Nenhum documento foi mencionado explicitamente na resposta');
+              const topDoc = relevantDocs[0];
+              usedDocuments.push({
+                id: topDoc.file.id,
+                name: topDoc.file.name,
+                similarity: topDoc.similarity,
+                note: 'Documento mais relevante (inferido)'
+              });
+            }
 
-			// Enviar metadados com os documentos utilizados
-			res.write(`data: ${JSON.stringify({
-			  type: 'metadata',
-			  sources: usedDocuments
-			})}\n\n`);
+            console.log(`=== RESULTADO FINAL ===`);
+            console.log(`Documentos utilizados: ${usedDocuments.length}`);
+            usedDocuments.forEach(doc => {
+              console.log(`- ${doc.name} (${doc.similarity?.toFixed(4) || 'N/A'})`);
+            });
+
+            // Enviar metadados com os documentos utilizados
+            res.write(`data: ${JSON.stringify({
+              type: 'metadata',
+              sources: usedDocuments,
+              documentsFound: relevantDocs.length,
+              documentsUsed: usedDocuments.length
+            })}\n\n`);
           }
         } catch (e) {
           console.error('Erro ao processar chunk do stream:', e.message);
@@ -668,6 +704,7 @@ const sendMessageStreaming = async (req, res) => {
     
     // Quando o stream terminar
     response.data.on('end', () => {
+      console.log('=== STREAM FINALIZADO ===');
       res.end();
     });
     

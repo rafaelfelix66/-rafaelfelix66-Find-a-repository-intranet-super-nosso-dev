@@ -33,6 +33,7 @@ export interface FileItem {
   // Para links
   linkUrl?: string;
   allowDownload?: boolean;
+  allowRAG?: boolean;
   // Campos para departamentos
   departamentoVisibilidade?: string[];
   isRestrito?: boolean;
@@ -52,6 +53,7 @@ export interface UploadOptions {
   description?: string;
   departamentoVisibilidade?: string[];
   allowDownload?: boolean;
+  allowRAG?: boolean;
   type?: 'file' | 'link';
   linkName?: string;
   linkUrl?: string;
@@ -59,6 +61,7 @@ export interface UploadOptions {
 
 export interface FolderOptions {
   departamentoVisibilidade?: string[];
+  allowRAG?: boolean;
 }
 
 export interface DepartmentFilter {
@@ -77,6 +80,7 @@ interface FileContextType {
   isLoading: boolean;
   error: string | null;
   previewFile: FilePreview | null;
+  getCurrentFolder: () => FileItem | null;
   
   departmentFilter: string;
   availableDepartments: DepartmentFilter[];
@@ -270,6 +274,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           modified: new Date(folder.createdAt || folder.updatedAt || Date.now()).toLocaleDateString('pt-BR'),
           coverImage: folder.coverImage,
           parentId: folder.parentId,
+		  allowRAG: folder.allowRAG || false,
           departamentoVisibilidade: folder.departamentoVisibilidade || ['TODOS'],
           isRestrito: folder.departamentoVisibilidade && folder.departamentoVisibilidade.length > 0 && !folder.departamentoVisibilidade.includes('TODOS'),
           isPublic: folder.isPublic !== false,
@@ -293,6 +298,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           mimeType: file.mimeType,
           linkUrl: file.linkUrl,
           allowDownload: file.allowDownload !== false,
+		  allowRAG: file.allowRAG || false, 
           departamentoVisibilidade: file.departamentoVisibilidade || ['TODOS'],
           isRestrito: file.departamentoVisibilidade && file.departamentoVisibilidade.length > 0 && !file.departamentoVisibilidade.includes('TODOS'),
           isPublic: file.isPublic !== false,
@@ -501,6 +507,10 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (coverImage) {
         formData.append('coverImage', coverImage);
       }
+	  
+	  if (options.allowRAG !== undefined) {
+        formData.append('allowRAG', options.allowRAG.toString());
+      }
       
       const departamentos = options.departamentoVisibilidade || (userDepartment ? [userDepartment] : ['TODOS']);
       formData.append('departamentoVisibilidade', JSON.stringify(departamentos));
@@ -536,6 +546,10 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
   
+  const getCurrentFolder = (): FileItem | null => {
+  if (!currentParentId) return null;
+  return filteredFiles.find(item => item.type === 'folder' && item.id === currentParentId) || null;
+  };
   // CORREÇÃO: Melhorar download com verificação de token
   const downloadFile = async (fileId: string, fileName?: string) => {
     try {
@@ -783,6 +797,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isLoading,
       error,
       previewFile,
+	  getCurrentFolder,
       
       departmentFilter,
       availableDepartments,

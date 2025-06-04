@@ -13,9 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2, Upload, Image as ImageIcon } from "lucide-react";
+import { Loader2, Upload, Image as ImageIcon, Bot, Info } from "lucide-react";
 import { useFiles } from "@/contexts/FileContext";
 import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface NewFolderDialogProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(['TODOS']);
+  const [allowRAG, setAllowRAG] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -46,7 +48,8 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
     setIsLoading(true);
     try {
       await createNewFolder(folderName, folderDescription, coverImage, {
-        departamentoVisibilidade: selectedDepartments
+        departamentoVisibilidade: selectedDepartments,
+        allowRAG
       });
       
       // Reset form
@@ -55,6 +58,7 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
       setCoverImage(null);
       setCoverPreview(null);
       setSelectedDepartments(['TODOS']);
+      setAllowRAG(false);
       onOpenChange(false);
     } finally {
       setIsLoading(false);
@@ -103,13 +107,14 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
       setCoverImage(null);
       setCoverPreview(null);
       setSelectedDepartments(['TODOS']);
+      setAllowRAG(false);
     }
     onOpenChange(open);
   };
   
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nova Pasta</DialogTitle>
           <DialogDescription>
@@ -216,6 +221,48 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
             </p>
           </div>
           
+          {/* NOVA SEÇÃO: Configuração RAG/IA */}
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-blue-600" />
+              Integração com IA (RAG)
+            </Label>
+            
+            <Card className="border-blue-200 bg-blue-50">
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-start space-x-3">
+                  <Checkbox
+                    id="allow-rag"
+                    checked={allowRAG}
+                    onCheckedChange={setAllowRAG}
+                    className="mt-1"
+                  />
+                  <div className="flex-1">
+                    <Label 
+                      htmlFor="allow-rag" 
+                      className="cursor-pointer font-medium text-blue-900"
+                    >
+                      Permitir uso no sistema de IA
+                    </Label>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Os arquivos desta pasta poderão ser utilizados pela assistente Gabi 
+                      para responder perguntas no chat.
+                    </p>
+                  </div>
+                </div>
+                
+                <Alert className="border-amber-200 bg-amber-50">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription className="text-amber-800 text-sm">
+                    <strong>Nota:</strong> Esta configuração será aplicada como padrão para 
+                    novos arquivos adicionados a esta pasta. Arquivos individuais podem ter 
+                    suas próprias configurações de IA.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+          </div>
+          
           {/* Informações adicionais */}
           <Card className="border-blue-200 bg-blue-50">
             <CardContent className="pt-4">
@@ -229,6 +276,7 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
                     <li>• Use nomes descritivos e organizados</li>
                     <li>• A imagem de capa ajuda na identificação visual</li>
                     <li>• Configure a visibilidade apropriada para cada departamento</li>
+                    <li>• Ative a IA apenas para documentos que devem ser pesquisáveis</li>
                   </ul>
                 </div>
               </div>

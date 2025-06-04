@@ -1074,7 +1074,7 @@ const CourseDetailView = () => {
                       </Button>
                       
                       <p className="text-xs text-gray-500">
-                        Acesso imediato • Sem custos • Certificado incluído
+                        Acesso imediato • Sem custos
                       </p>
                     </CardContent>
                   </Card>
@@ -1397,7 +1397,7 @@ const CourseDetailView = () => {
       {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Centro de Aprendizagem EAD</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Centro de Aprendizagem</h1>
           <p className="text-gray-600 mt-2">Desenvolva suas habilidades com nossos cursos especializados</p>
         </div>
         

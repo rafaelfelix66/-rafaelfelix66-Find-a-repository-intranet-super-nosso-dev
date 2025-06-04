@@ -22,8 +22,17 @@ const UserSchema = new mongoose.Schema({
   avatar: String,
   dataCriacao: { type: Date, default: Date.now },
   ultimoAcesso: Date,
-  roles: [String],
+  roles: {
+  type: [String],
+  validate: {
+    validator: function(roles) {
+      return roles.length <= 1; // Permitir no máximo 1 papel
+    },
+    message: 'Um usuário pode ter apenas um papel atribuído'
+  }
+},
   permissoes: [String],
+  permissions: [String],
   ativo: { type: Boolean, default: true },
   ultimaSincronizacao: { type: Date, default: null },
   chapa:  { type: String, default: null },
@@ -31,6 +40,31 @@ const UserSchema = new mongoose.Schema({
   dataNascimento: { type: Date, default: null },
   dataAdmissao: { type: Date, default: null },
 });
+
+// NOVO: Middleware para sincronizar os campos permissions e permissoes
+UserSchema.pre('save', function(next) {
+  // Se permissions foi modificado, sincronizar com permissoes
+  if (this.isModified('permissions')) {
+    this.permissoes = this.permissions;
+  }
+  
+  // Se permissoes foi modificado, sincronizar com permissions
+  if (this.isModified('permissoes')) {
+    this.permissions = this.permissoes;
+  }
+  
+  // Se ambos estão vazios, garantir que ambos existam como arrays vazios
+  if (!this.permissions) this.permissions = [];
+  if (!this.permissoes) this.permissoes = [];
+  
+  next();
+});
+
+// NOVO: Virtual para sempre retornar permissions atualizado
+UserSchema.virtual('normalizedPermissions').get(function() {
+  return this.permissions || this.permissoes || [];
+});
+
 
 // Hash de senha antes de salvar
 UserSchema.pre('save', async function(next) {
@@ -105,6 +139,11 @@ UserSchema.methods.comparePassword = async function(candidatePassword) {
     return false;
   }
 };
+// NOVO: Método para verificar permissões (considera ambos os campos)
+UserSchema.methods.hasPermission = function(permission) {
+  const userPermissions = this.permissions || this.permissoes || [];
+  return userPermissions.includes(permission);
+};
 // Método para verificar permissões
 UserSchema.methods.hasPermission = function(permission) {
   return this.permissions.includes(permission);
@@ -113,6 +152,16 @@ UserSchema.methods.hasPermission = function(permission) {
 // Método para verificar papel
 UserSchema.methods.hasRole = function(role) {
   return this.roles.includes(role);
+};
+// NOVO: Método para obter permissões normalizadas
+UserSchema.methods.getNormalizedPermissions = function() {
+  return this.permissions || this.permissoes || [];
+};
+// NOVO: Método para definir permissões (atualiza ambos os campos)
+UserSchema.methods.setPermissions = function(permissions) {
+  this.permissions = permissions;
+  this.permissoes = permissions;
+  return this;
 };
   
 // CORRIGIDO: Schema do Post agora inclui eventData
@@ -268,6 +317,12 @@ const FileSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+    // NOVO: Flag para permitir uso no RAG/IA
+  allowRAG: {
+    type: Boolean,
+    default: false,
+    index: true // Indexar para buscas mais rápidas
+  },
   // NOVO: Departamentos que podem visualizar
   departamentoVisibilidade: {
     type: [String],
@@ -326,6 +381,12 @@ const FolderSchema = new mongoose.Schema({
   isPublic: {
     type: Boolean,
     default: false
+  },
+    // NOVO: Flag para permitir que arquivos desta pasta sejam usados no RAG por padrão
+  allowRAG: {
+    type: Boolean,
+    default: false,
+    index: true
   },
   // NOVO: Departamentos que podem visualizar
   departamentoVisibilidade: {

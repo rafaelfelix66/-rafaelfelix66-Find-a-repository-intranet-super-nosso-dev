@@ -110,6 +110,14 @@ export function Sidebar() {
     logout();
   };
 
+  //        <SidebarItem 
+  //          icon={HelpCircle} 
+  //          to="/base-conhecimento" 
+  //          label="Base de Conhecimento" 
+  //          active={getActivePath("/base-conhecimento")} 
+  //          isOpen={isOpen}
+  //        />
+
   const goToSettings = () => {
     navigate("/configuracoes");
   };
@@ -182,13 +190,6 @@ export function Sidebar() {
             to="/arquivos" 
             label="Arquivos" 
             active={getActivePath("/arquivos")} 
-            isOpen={isOpen}
-          />
-          <SidebarItem 
-            icon={HelpCircle} 
-            to="/base-conhecimento" 
-            label="Base de Conhecimento" 
-            active={getActivePath("/base-conhecimento")} 
             isOpen={isOpen}
           />
 		  <SidebarItem 

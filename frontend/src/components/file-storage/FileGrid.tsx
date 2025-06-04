@@ -1,6 +1,6 @@
-//src/components/file-storage/FileGrid.tsx - Versão Corrigida
+// src/components/file-storage/FileGrid.tsx - Versão com indicador RAG
 import React, { useState, useMemo } from "react";
-import { Download, MoreHorizontal, Trash, Pencil, ExternalLink, Eye } from "lucide-react";
+import { Download, MoreHorizontal, Trash, Pencil, ExternalLink, Eye, Bot, BotOff } from "lucide-react";
 import { useFiles, FileItem } from "@/contexts/FileContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { RenameDialog } from "./RenameDialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +23,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { FileIcon } from "./FileIcon";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const FileGrid = () => {
   const { 
@@ -50,6 +53,7 @@ export const FileGrid = () => {
         id: file.id,
         name: file.name,
         type: file.type,
+        allowRAG: file.allowRAG,
         hasAccess: canUserAccessItem(file)
       });
     });
@@ -61,8 +65,8 @@ export const FileGrid = () => {
       if (!item.icon) {
         if (item.type === 'folder') {
           item.icon = <FileIcon type="folder" />;
-		} else if (item.type === 'link') {  // ADICIONAR esta condição
-        item.icon = <FileIcon type="link" />;
+        } else if (item.type === 'link') {
+          item.icon = <FileIcon type="link" />;
         } else {
           item.icon = <FileIcon type="file" extension={item.extension} />;
         }
@@ -174,6 +178,80 @@ export const FileGrid = () => {
     );
   };
   
+  // Renderizar badges de status com indicador RAG
+  const renderStatusBadges = (item: FileItem) => {
+    const badges = [];
+    
+    // Badge de tipo
+    if (item.type === 'link') {
+      badges.push(
+        <Badge key="link" variant="outline" className="text-green-600 border-green-200">
+          Link
+        </Badge>
+      );
+    }
+    
+    // NOVO: Badge de RAG
+    if (item.allowRAG) {
+      badges.push(
+        <TooltipProvider key="rag-enabled">
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">
+                <Bot className="h-3 w-3 mr-1" />
+                IA
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Disponível para a assistente Gabi</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    
+    // Badge de download restrito
+    if (item.type === 'file' && !item.allowDownload) {
+      badges.push(
+        <TooltipProvider key="no-download">
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="outline" className="text-red-600 border-red-200">
+                <BotOff className="h-3 w-3 mr-1" />
+                Sem Download
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Download não permitido</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    
+    // Badge de visibilidade restrita
+    if (item.departamentoVisibilidade && 
+        !item.departamentoVisibilidade.includes('TODOS') && 
+        item.departamentoVisibilidade.length > 0) {
+      badges.push(
+        <TooltipProvider key="restricted">
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="outline" className="text-orange-600 border-orange-200">
+                Restrito
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Visível apenas para: {item.departamentoVisibilidade.join(', ')}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    
+    return badges;
+  };
+  
   if (isLoading) {
     return (
       <div className="space-y-1">
@@ -209,7 +287,7 @@ export const FileGrid = () => {
         {itemsWithIcons.length > 0 ? (
           itemsWithIcons.map((file) => {
             const hasAccess = canUserAccessItem(file);
-            console.log(`DEBUG FileGrid - Renderizando item ${file.name}, hasAccess: ${hasAccess}`);
+            console.log(`DEBUG FileGrid - Renderizando item ${file.name}, hasAccess: ${hasAccess}, allowRAG: ${file.allowRAG}`);
             
             return (
               <div 
@@ -224,7 +302,7 @@ export const FileGrid = () => {
                 {/* Ícone ou imagem da pasta */}
                 <div className="flex-shrink-0 mr-4">
                   {file.type === 'folder' && file.coverImage ? (
-                    <div className="h-20 w-20 rounded-lg overflow-hidden shadow-sm border border-gray-200">
+                    <div className="h-20 w-20 rounded-lg overflow-hidden shadow-sm border border-gray-200 relative">
                       <img 
                         src={file.coverImage} 
                         alt={`Capa de ${file.name}`}
@@ -237,10 +315,44 @@ export const FileGrid = () => {
                           }
                         }}
                       />
+                      {/* Indicador RAG para pastas com capa */}
+                      {file.allowRAG && (
+                        <div className="absolute top-1 right-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <div className="bg-blue-500 text-white rounded-full p-1">
+                                  <Bot className="h-3 w-3" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Pasta habilitada para IA</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="h-12 w-12 flex items-center justify-center">
+                    <div className="h-12 w-12 flex items-center justify-center relative">
                       {file.icon}
+                      {/* Indicador RAG para itens sem capa */}
+                      {file.allowRAG && (
+                        <div className="absolute -top-1 -right-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <div className="bg-blue-500 text-white rounded-full p-0.5">
+                                  <Bot className="h-2.5 w-2.5" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{file.type === 'folder' ? 'Pasta habilitada para IA' : 'Disponível para a assistente Gabi'}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -259,6 +371,11 @@ export const FileGrid = () => {
                             Sem acesso
                           </span>
                         )}
+                      </div>
+                      
+                      {/* Badges de status */}
+                      <div className="flex flex-wrap gap-1 mb-1 mt-1">
+                        {renderStatusBadges(file)}
                       </div>
                       
                       {file.description && (
@@ -351,6 +468,16 @@ export const FileGrid = () => {
                           </>
                         )}
                         
+                        <DropdownMenuSeparator />
+                        
+                        {/* Indicador de status RAG no menu */}
+                        <DropdownMenuItem disabled className="text-xs">
+                          <Bot className={`h-4 w-4 mr-2 ${file.allowRAG ? 'text-blue-500' : 'text-gray-400'}`} />
+                          {file.allowRAG ? 'Disponível para IA' : 'Não disponível para IA'}
+                        </DropdownMenuItem>
+                        
+                        <DropdownMenuSeparator />
+                        
                         {/* Ações gerais */}
                         <DropdownMenuItem onClick={(e) => handleRename(file, e)}>
                           <Pencil className="h-4 w-4 mr-2" />
@@ -405,6 +532,11 @@ export const FileGrid = () => {
               {itemToDelete?.type === 'folder' && (
                 <p className="mt-2 text-red-500 font-medium">
                   ⚠️ Atenção: Todos os arquivos e subpastas também serão excluídos permanentemente!
+                </p>
+              )}
+              {itemToDelete?.allowRAG && (
+                <p className="mt-2 text-blue-600 font-medium">
+                  ℹ️ Este item está habilitado para IA e será removido da base de conhecimento da Gabi.
                 </p>
               )}
             </AlertDialogDescription>

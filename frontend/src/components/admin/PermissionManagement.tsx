@@ -1,4 +1,4 @@
-// src/components/admin/PermissionManagement.tsx
+// src/components/admin/PermissionManagement.tsx - CORRIGIDO
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
@@ -38,7 +38,7 @@ interface User {
   cargo: string;
   departamento: string;
   roles: string[];
-  permissions: string[];
+  permissions: string[]; // CORRIGIDO: usar 'permissions' consistentemente
 }
 
 interface Role {
@@ -99,13 +99,13 @@ export function PermissionManagement() {
       permissions: [
         { key: 'timeline:view', description: 'Visualizar posts' },
         { key: 'timeline:create', description: 'Criar publicações' },
-		{ key: 'timeline:like', description: 'Curtir publicações' },
-		{ key: 'timeline:like_comment', description: 'Curtir comentarios' },
+        { key: 'timeline:like', description: 'Curtir publicações' },
+        { key: 'timeline:like_comment', description: 'Curtir comentarios' },
         { key: 'timeline:edit_own', description: 'Editar próprias publicações' },
         { key: 'timeline:delete_own', description: 'Excluir próprias publicações' },
         { key: 'timeline:delete_any', description: 'Excluir qualquer publicação' },
         { key: 'timeline:comment', description: 'Adicionar comentários' },
-		{ key: 'timeline:react', description: 'Reagir com emojis às publicações' },
+        { key: 'timeline:react', description: 'Reagir com emojis às publicações' },
         { key: 'timeline:delete_comment_own', description: 'Excluir próprios comentários' },
         { key: 'timeline:delete_comment_any', description: 'Excluir qualquer comentário' },
       ],
@@ -168,72 +168,71 @@ export function PermissionManagement() {
         { key: 'roles:manage', description: 'Gerenciar papéis e permissões' },
       ],
     },
-	{
+    {
       name: 'SuperCoins',
       key: 'supercoins',
       permissions: [
         { key: 'supercoins:send_message', description: 'Enviar mensagem no atributo' },
-        
       ],
     },
-	{
-	  name: 'Institucional',
-	  key: 'institutional',
-	  permissions: [
-		{ key: 'institutional:view', description: 'Visualizar áreas institucionais' },
-		{ key: 'institutional:create', description: 'Criar áreas institucionais' },
-		{ key: 'institutional:edit', description: 'Editar áreas institucionais' },
-		{ key: 'institutional:delete', description: 'Excluir áreas institucionais' },
-		{ key: 'institutional:manage', description: 'Gerenciar todas as áreas' },
-	  ],
-	},
-	{
-	  name: 'Links Úteis',
-	  key: 'useful_links',
-	  permissions: [
-		{ key: 'useful_links:view', description: 'Visualizar links úteis' },
-		{ key: 'useful_links:create', description: 'Criar links úteis' },
-		{ key: 'useful_links:edit', description: 'Editar links úteis' },
-		{ key: 'useful_links:delete', description: 'Excluir links úteis' },
-		{ key: 'useful_links:manage', description: 'Gerenciar todos os links úteis' },
-	  ],
-	},
-	{
-	  name: 'Vagas',
-	  key: 'jobs',
-	  permissions: [
-		{ key: 'jobs:view', description: 'Visualizar vagas' },
-		{ key: 'jobs:create', description: 'Criar vagas' },
-		{ key: 'jobs:edit', description: 'Editar vagas' },
-		{ key: 'jobs:delete', description: 'Excluir vagas' },
-		{ key: 'jobs:manage', description: 'Gerenciar todas as vagas' },
-	  ],
-	},
-		{
-	  name: 'Cursos',
-	  key: 'courses',
-	  permissions: [
-		{ key: 'courses:view', description: 'Visualizar cursos disponíveis' },
-		{ key: 'courses:view_all', description: 'Visualizar todos os cursos (incluindo de outros departamentos)' },
-		{ key: 'courses:enroll', description: 'Matricular-se em cursos' },
-		{ key: 'courses:create', description: 'Criar novos cursos' },
-		{ key: 'courses:edit_any', description: 'Editar qualquer curso' },
-		{ key: 'courses:delete_any', description: 'Excluir qualquer curso' },
-		{ key: 'courses:manage_lessons', description: 'Adicionar, editar e excluir aulas' },
-		{ key: 'courses:manage_materials', description: 'Gerenciar materiais das aulas' },
-		{ key: 'courses:view_progress', description: 'Visualizar próprio progresso' },
-		{ key: 'courses:view_all_progress', description: 'Visualizar progresso de todos os usuários' },
-		{ key: 'courses:manage_enrollments', description: 'Gerenciar matrículas de usuários' },
-		{ key: 'courses:view_certificates', description: 'Visualizar certificados emitidos' },
-		{ key: 'courses:issue_certificates', description: 'Emitir certificados de conclusão' },
-		{ key: 'courses:view_analytics', description: 'Visualizar estatísticas e relatórios de cursos' },
-		{ key: 'courses:export_data', description: 'Exportar dados de cursos e progresso' },
-		{ key: 'courses:admin', description: 'Administração completa do sistema de cursos' },
-		{ key: 'courses:manage_categories', description: 'Gerenciar categorias de cursos' },
-		{ key: 'courses:moderate_content', description: 'Moderar conteúdo de cursos' },			
-	  ],
-	},
-];
+    {
+      name: 'Institucional',
+      key: 'institutional',
+      permissions: [
+        { key: 'institutional:view', description: 'Visualizar áreas institucionais' },
+        { key: 'institutional:create', description: 'Criar áreas institucionais' },
+        { key: 'institutional:edit', description: 'Editar áreas institucionais' },
+        { key: 'institutional:delete', description: 'Excluir áreas institucionais' },
+        { key: 'institutional:manage', description: 'Gerenciar todas as áreas' },
+      ],
+    },
+    {
+      name: 'Links Úteis',
+      key: 'useful_links',
+      permissions: [
+        { key: 'useful_links:view', description: 'Visualizar links úteis' },
+        { key: 'useful_links:create', description: 'Criar links úteis' },
+        { key: 'useful_links:edit', description: 'Editar links úteis' },
+        { key: 'useful_links:delete', description: 'Excluir links úteis' },
+        { key: 'useful_links:manage', description: 'Gerenciar todos os links úteis' },
+      ],
+    },
+    {
+      name: 'Vagas',
+      key: 'jobs',
+      permissions: [
+        { key: 'jobs:view', description: 'Visualizar vagas' },
+        { key: 'jobs:create', description: 'Criar vagas' },
+        { key: 'jobs:edit', description: 'Editar vagas' },
+        { key: 'jobs:delete', description: 'Excluir vagas' },
+        { key: 'jobs:manage', description: 'Gerenciar todas as vagas' },
+      ],
+    },
+    {
+      name: 'Cursos',
+      key: 'courses',
+      permissions: [
+        { key: 'courses:view', description: 'Visualizar cursos disponíveis' },
+        { key: 'courses:view_all', description: 'Visualizar todos os cursos (incluindo de outros departamentos)' },
+        { key: 'courses:enroll', description: 'Matricular-se em cursos' },
+        { key: 'courses:create', description: 'Criar novos cursos' },
+        { key: 'courses:edit_any', description: 'Editar qualquer curso' },
+        { key: 'courses:delete_any', description: 'Excluir qualquer curso' },
+        { key: 'courses:manage_lessons', description: 'Adicionar, editar e excluir aulas' },
+        { key: 'courses:manage_materials', description: 'Gerenciar materiais das aulas' },
+        { key: 'courses:view_progress', description: 'Visualizar próprio progresso' },
+        { key: 'courses:view_all_progress', description: 'Visualizar progresso de todos os usuários' },
+        { key: 'courses:manage_enrollments', description: 'Gerenciar matrículas de usuários' },
+        { key: 'courses:view_certificates', description: 'Visualizar certificados emitidos' },
+        { key: 'courses:issue_certificates', description: 'Emitir certificados de conclusão' },
+        { key: 'courses:view_analytics', description: 'Visualizar estatísticas e relatórios de cursos' },
+        { key: 'courses:export_data', description: 'Exportar dados de cursos e progresso' },
+        { key: 'courses:admin', description: 'Administração completa do sistema de cursos' },
+        { key: 'courses:manage_categories', description: 'Gerenciar categorias de cursos' },
+        { key: 'courses:moderate_content', description: 'Moderar conteúdo de cursos' },
+      ],
+    },
+  ];
 
   // Recuperar todos os permissões como lista plana
   const getAllPermissions = (): Permission[] => {
@@ -255,15 +254,17 @@ export function PermissionManagement() {
           console.log('Tentando buscar usuários...');
           const usersData = await api.get('/admin/users');
           console.log('Usuários recebidos:', usersData);
-          setUsers(usersData);
-          setFilteredUsers(usersData);
+          
+          // CORREÇÃO: Normalizar o campo permissions para todos os usuários
+          const normalizedUsers = usersData.map((user: any) => ({
+            ...user,
+            permissions: user.permissions || user.permissoes || [] // Mapear permissoes para permissions
+          }));
+          
+          setUsers(normalizedUsers);
+          setFilteredUsers(normalizedUsers);
         } catch (userError) {
           console.error('Erro ao buscar usuários:', userError);
-          console.log('Detalhes do erro:', {
-            status: userError.response?.status,
-            message: userError.response?.data?.message,
-            fullError: userError
-          });
         }
 
         try {
@@ -273,13 +274,6 @@ export function PermissionManagement() {
           setRoles(rolesData);
         } catch (roleError) {
           console.error('Erro ao buscar papéis:', roleError);
-          console.log('Detalhes do erro:', {
-            status: roleError.response?.status,
-            message: roleError.response?.data?.message,
-            fullError: roleError
-          });
-          
-          // Exibir mensagem de erro toast
           toast({
             title: "Erro ao buscar papéis",
             description: roleError.message || "Não foi possível carregar os papéis",
@@ -318,6 +312,8 @@ export function PermissionManagement() {
   
   // Manipuladores de eventos
   const handleEditUser = (user: User) => {
+    console.log('Editando usuário:', user);
+    console.log('Permissões do usuário:', user.permissions);
     setSelectedUser(user);
     setIsUserDialogOpen(true);
   };
@@ -328,6 +324,8 @@ export function PermissionManagement() {
   };
   
   const handleEditUserPermissions = (user: User) => {
+    console.log('Editando permissões do usuário:', user);
+    console.log('Permissões atuais:', user.permissions);
     setSelectedUser(user);
     setIsPermissionDialogOpen(true);
   };
@@ -335,21 +333,32 @@ export function PermissionManagement() {
   const handleSaveUserRoles = async () => {
     if (!selectedUser) return;
     
-	console.log('Papéis a serem salvos:', selectedUser.roles);
-	// Filtrar apenas as roles que existem no sistema
+    console.log('Salvando papéis do usuário:', selectedUser.roles);
+    
+    // Filtrar apenas as roles que existem no sistema
     const validRoles = selectedUser.roles.filter(role => 
-     roles.some(r => r.name === role)
-   );
+      roles.some(r => r.name === role)
+    );
   
-   try {
-     await api.put(`/admin/users/${selectedUser._id}/roles`, {
-       roles: validRoles,
-     });
+    try {
+      const response = await api.put(`/admin/users/${selectedUser._id}/roles`, {
+        roles: validRoles,
+      });
       
-      // Atualizar a lista de usuários
-      setUsers(users.map(u => 
-        u._id === selectedUser._id ? { ...u, roles: selectedUser.roles } : u
-      ));
+      console.log('Resposta da API ao salvar papéis:', response);
+      
+      // CORREÇÃO: Atualizar o estado local corretamente
+      setUsers(prevUsers => 
+        prevUsers.map(u => 
+          u._id === selectedUser._id 
+            ? { 
+                ...u, 
+                roles: validRoles,
+                permissions: response.permissions || response.permissoes || u.permissions // Manter permissões atualizadas
+              } 
+            : u
+        )
+      );
       
       toast({
         title: 'Sucesso',
@@ -368,17 +377,41 @@ export function PermissionManagement() {
   };
   
   const handleSaveUserPermissions = async () => {
-    if (!selectedUser) return;
+    if (!selectedUser) {
+      console.error('Nenhum usuário selecionado para salvar permissões');
+      return;
+    }
+    
+    console.log('Salvando permissões do usuário:', {
+      userId: selectedUser._id,
+      permissions: selectedUser.permissions
+    });
     
     try {
-      await api.put(`/admin/users/${selectedUser._id}/permissions`, {
+      const response = await api.put(`/admin/users/${selectedUser._id}/permissions`, {
         permissions: selectedUser.permissions,
       });
       
-      // Atualizar a lista de usuários
-      setUsers(users.map(u => 
-        u._id === selectedUser._id ? { ...u, permissions: selectedUser.permissions } : u
-      ));
+      console.log('Resposta da API ao salvar permissões:', response);
+      
+      // CORREÇÃO: Atualizar o estado local e o filtro corretamente
+      const updatedUser = {
+        ...selectedUser,
+        permissions: response.permissions || response.permissoes || selectedUser.permissions
+      };
+      
+      setUsers(prevUsers => 
+        prevUsers.map(u => 
+          u._id === selectedUser._id ? updatedUser : u
+        )
+      );
+      
+      // Atualizar também a lista filtrada se necessário
+      setFilteredUsers(prevFiltered =>
+        prevFiltered.map(u => 
+          u._id === selectedUser._id ? updatedUser : u
+        )
+      );
       
       toast({
         title: 'Sucesso',
@@ -386,11 +419,19 @@ export function PermissionManagement() {
       });
       
       setIsPermissionDialogOpen(false);
-    } catch (error) {
+      setSelectedUser(null); // Limpar seleção
+      
+    } catch (error: any) {
       console.error('Erro ao salvar permissões do usuário:', error);
+      
+      // Mostrar erro mais específico se disponível
+      const errorMessage = error?.response?.data?.mensagem || 
+                          error?.message || 
+                          'Não foi possível atualizar as permissões do usuário';
+      
       toast({
         title: 'Erro',
-        description: 'Não foi possível atualizar as permissões do usuário',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -467,21 +508,30 @@ export function PermissionManagement() {
   
   // Função para verificar permissões do usuário selecionado
   const userHasPermission = (userPermissions: string[] | undefined, permission: string): boolean => {
-    return userPermissions?.includes(permission) || false;
+    const hasPermission = userPermissions?.includes(permission) || false;
+    console.log(`Verificando permissão ${permission}:`, hasPermission, 'em', userPermissions);
+    return hasPermission;
   };
   
   // Alternar permissão para o usuário selecionado
   const togglePermission = (permission: string) => {
     if (!selectedUser) return;
     
+    console.log(`Alternando permissão ${permission} para usuário ${selectedUser.nome}`);
+    console.log('Permissões antes:', selectedUser.permissions);
+    
     const permissions = [...(selectedUser.permissions || [])];
     const index = permissions.indexOf(permission);
     
     if (index === -1) {
       permissions.push(permission);
+      console.log(`Adicionando permissão ${permission}`);
     } else {
       permissions.splice(index, 1);
+      console.log(`Removendo permissão ${permission}`);
     }
+    
+    console.log('Permissões depois:', permissions);
     
     setSelectedUser({
       ...selectedUser,
@@ -513,30 +563,15 @@ export function PermissionManagement() {
     return rolePermissions?.includes(permission) || false;
   };
   
-  // Verificar se o usuário tem um papel
-  const hasRole = (userRoles: string[], roleName: string): boolean => {
-    return userRoles?.includes(roleName) || false;
-  };
+const setUserRole = (roleName: string) => {
+  if (!selectedUser) return;
   
-  // Alternar papel para o usuário selecionado
-  const toggleRole = (roleName: string) => {
-    if (!selectedUser) return;
-    
-    const userRoles = [...(selectedUser.roles || [])];
-    const index = userRoles.indexOf(roleName);
-    
-    if (index === -1) {
-      userRoles.push(roleName);
-    } else {
-      userRoles.splice(index, 1);
-    }
-    
-    setSelectedUser({
-      ...selectedUser,
-      roles: userRoles,
-    });
-  };
-  
+  setSelectedUser({
+    ...selectedUser,
+    roles: roleName ? [roleName] : []
+  });
+};
+   
   if (isLoading) {
     return (
       <div className="w-full h-96 flex items-center justify-center">
@@ -606,22 +641,18 @@ export function PermissionManagement() {
                         <TableCell>{user.cargo}</TableCell>
                         <TableCell>{user.departamento}</TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {user.roles?.map((role) => (
-                              <span
-                                key={role}
-                                className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded-md text-xs"
-                              >
-                                {role}
-                              </span>
-                            ))}
-                            {!user.roles?.length && (
-                              <span className="text-xs text-muted-foreground italic">
-                                Sem papéis atribuídos
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
+						  <div className="flex flex-wrap gap-1">
+							{user.roles?.length > 0 ? (
+							  <span className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded-md text-xs">
+								{user.roles[0]}
+							  </span>
+							) : (
+							  <span className="text-xs text-muted-foreground italic">
+								Sem papel atribuído
+							  </span>
+							)}
+						  </div>
+						</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
@@ -747,31 +778,44 @@ export function PermissionManagement() {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {roles.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhum papel disponível. Crie papéis primeiro.
-              </p>
-            ) : (
-              roles.map((role) => (
-                <div key={role._id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`role-${role._id}`}
-                    checked={hasRole(selectedUser?.roles || [], role.name)}
-                    onCheckedChange={() => toggleRole(role.name)}
-                  />
-                  <Label
-                    htmlFor={`role-${role._id}`}
-                    className="flex flex-col cursor-pointer"
-                  >
-                    <span className="font-medium">{role.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {role.description}
-                    </span>
-                  </Label>
-                </div>
-              ))
-            )}
-          </div>
+		  {roles.length === 0 ? (
+			<p className="text-sm text-muted-foreground">
+			  Nenhum papel disponível. Crie papéis primeiro.
+			</p>
+		  ) : (
+			<div className="space-y-2">
+			  <Label htmlFor="user-role">Papel do Usuário</Label>
+			  <Select
+				  value={selectedUser?.roles?.[0] || "none"}
+				  onValueChange={(value) => {
+					if (selectedUser) {
+					  setSelectedUser({
+						...selectedUser,
+						roles: value === "none" ? [] : [value]
+					  });
+					}
+				  }}
+				>
+				  <SelectTrigger>
+					<SelectValue placeholder="Selecione um papel" />
+				  </SelectTrigger>
+				  <SelectContent>
+					<SelectItem value="none">Nenhum papel</SelectItem>
+					{roles.map((role) => (
+					  <SelectItem key={role._id} value={role.name}>
+						<div>
+						  <div className="font-medium">{role.name}</div>
+						  <div className="text-xs text-muted-foreground">
+							{role.description}
+						  </div>
+						</div>
+					  </SelectItem>
+					))}
+				  </SelectContent>
+				</Select>
+			</div>
+		  )}
+		</div>
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsUserDialogOpen(false)}>

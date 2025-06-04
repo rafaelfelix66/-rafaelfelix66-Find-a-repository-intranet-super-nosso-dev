@@ -1,4 +1,4 @@
-// src/components/file-storage/UploadDialog.tsx - Versão melhorada
+// src/components/file-storage/UploadDialog.tsx - Versão com flag RAG
 import React, { useRef, useState } from "react";
 import { 
   Dialog,
@@ -13,11 +13,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Upload, File, X, Link, FileText } from "lucide-react";
+import { Upload, File, X, Link, FileText, Bot, Info } from "lucide-react";
 import { useFiles } from "@/contexts/FileContext";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface UploadDialogProps {
   isOpen: boolean;
@@ -27,13 +28,14 @@ interface UploadDialogProps {
 import DepartamentoSelector from "@/components/timeline/DepartamentoSelector";
 
 export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
-  const { uploadFile, isLoading } = useFiles();
+  const { uploadFile, isLoading, currentFolderId, getCurrentFolder } = useFiles();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Estados comuns
   const [description, setDescription] = useState("");
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(['TODOS']);
   const [allowDownload, setAllowDownload] = useState(true);
+  const [allowRAG, setAllowRAG] = useState(false);
   const [progress, setProgress] = useState(0);
   const [activeTab, setActiveTab] = useState("file");
   
@@ -44,6 +46,10 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
   // Estados para link
   const [linkName, setLinkName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  
+  // Verificar se estamos em uma pasta que tem RAG habilitado
+  const currentFolder = getCurrentFolder();
+  const folderHasRAG = currentFolder?.allowRAG || false;
   
   // Manipuladores de arquivo
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,6 +118,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
         description,
         departamentoVisibilidade: selectedDepartments,
         allowDownload,
+        allowRAG,
         type: 'file'
       });
       
@@ -136,6 +143,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
         description,
         departamentoVisibilidade: selectedDepartments,
         allowDownload: false,
+        allowRAG,
         type: 'link',
         linkName: linkName.trim(),
         linkUrl: linkUrl.trim()
@@ -154,6 +162,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
     setDescription("");
     setSelectedDepartments(['TODOS']);
     setAllowDownload(true);
+    setAllowRAG(folderHasRAG); // Herdar da pasta se aplicável
     setProgress(0);
     setIsDragging(false);
     setLinkName("");
@@ -169,13 +178,20 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
     onOpenChange(open);
   };
   
+  // Inicializar com configuração da pasta atual quando o dialog abre
+  React.useEffect(() => {
+    if (isOpen && folderHasRAG && !allowRAG) {
+      setAllowRAG(true);
+    }
+  }, [isOpen, folderHasRAG]);
+  
   // Verificar se pode submeter
   const canSubmitFile = selectedFile && !isLoading && progress === 0;
   const canSubmitLink = linkName.trim() && linkUrl.trim() && isValidUrl(linkUrl) && !isLoading;
   
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Adicionar Item</DialogTitle>
           <DialogDescription>
@@ -355,6 +371,61 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
             <p className="text-xs text-gray-500">
               Selecione quais departamentos podem ver este item
             </p>
+          </div>
+          
+          {/* NOVA SEÇÃO: Configuração RAG/IA */}
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-blue-600" />
+              Integração com IA (RAG)
+            </Label>
+            
+            <Card className="border-blue-200 bg-blue-50">
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-start space-x-3">
+                  <Checkbox
+                    id="allow-rag-upload"
+                    checked={allowRAG}
+                    onCheckedChange={setAllowRAG}
+                    className="mt-1"
+                  />
+                  <div className="flex-1">
+                    <Label 
+                      htmlFor="allow-rag-upload" 
+                      className="cursor-pointer font-medium text-blue-900"
+                    >
+                      Permitir uso no sistema de IA
+                    </Label>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Este {activeTab === 'file' ? 'arquivo' : 'link'} poderá ser utilizado pela assistente Gabi 
+                      para responder perguntas no chat.
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Mostrar informação sobre herança da pasta */}
+                {folderHasRAG && (
+                  <Alert className="border-green-200 bg-green-50">
+                    <Info className="h-4 w-4" />
+                    <AlertDescription className="text-green-800 text-sm">
+                      <strong>Pasta com IA habilitada:</strong> Esta pasta está configurada 
+                      para permitir uso de IA. Os itens adicionados herdarão essa configuração 
+                      por padrão.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                
+                {activeTab === 'file' && (
+                  <Alert className="border-amber-200 bg-amber-50">
+                    <Info className="h-4 w-4" />
+                    <AlertDescription className="text-amber-800 text-sm">
+                      <strong>Tipos suportados:</strong> Documentos de texto (PDF, DOC, TXT), 
+                      planilhas e outros formatos legíveis são mais eficazes para a IA.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
           </div>
           
           {activeTab === "file" && (
