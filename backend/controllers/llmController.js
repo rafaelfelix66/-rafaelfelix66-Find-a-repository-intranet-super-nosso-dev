@@ -3,7 +3,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { File } = require('../models');
-
+const { User } = require('../models');
 
 let pdfParseAvailable = false;
 let pdfParse;
@@ -260,16 +260,26 @@ if (fs.existsSync(BASE_UPLOAD_PATH)) {
     try {
        console.log("Buscando arquivos com RAG habilitado no banco de dados...");
       
+	  const user = await User.findById(userId);
+      const userDepartment = user?.departamento || 'PUBLICO';
+      const isAdmin = user?.roles?.includes('admin') || false;
+
+     console.log(`Usuário ${userId}: departamento=${userDepartment}, isAdmin=${isAdmin}`);
       // FILTRO PRINCIPAL: Buscar apenas arquivos com allowRAG = true
-      const ragEnabledFiles = await File.find({
-        allowRAG: true, // NOVO: Filtro principal para RAG
-        $or: [
-          { owner: userId },
-          { 'sharedWith.user': userId },
-          { isPublic: true },
-          { departamentoVisibilidade: { $in: ['TODOS'] } }
-        ]
-      });
+      let query = { allowRAG: true };
+
+if (!isAdmin) {
+  query.$or = [
+    { owner: userId },
+    { 'sharedWith.user': userId },
+    { isPublic: true },
+    { departamentoVisibilidade: { $in: ['TODOS', userDepartment] } },
+    { departamentoVisibilidade: { $exists: false } },
+    { departamentoVisibilidade: { $eq: [] } }
+  ];
+}
+    console.log('Query RAG:', JSON.stringify(query, null, 2));
+const ragEnabledFiles = await File.find(query);
       
       console.log(`Encontrados ${ragEnabledFiles.length} arquivos com RAG habilitado no banco de dados`);
       
@@ -403,13 +413,24 @@ const getResponseWithContext = async (query, documents) => {
                       "4. Se não encontrar a informação nos documentos, informe claramente\n" +
                       "5. Todos os documentos foram pré-aprovados pela empresa para uso na IA\n";
     } else {
-      contextPrompt = "Não foram encontrados documentos relevantes aprovados para IA para esta consulta. " +
-                     "Isso pode significar que:\n" +
-                     "- Nenhum documento foi marcado como disponível para IA\n" +
-                     "- Os documentos disponíveis não são relevantes para sua pergunta\n" +
-                     "- Você pode não ter acesso aos documentos relacionados\n\n" +
-                     "Por favor, responda com seu conhecimento geral, mas informe que não há documentos específicos da empresa disponíveis.";
+  contextPrompt = "IMPORTANTE: Não foram encontrados documentos aprovados para IA relacionados a esta consulta.\n\n" +
+                 "INSTRUÇÕES OBRIGATÓRIAS:\n" +
+                 "1. Informe ao usuário que não há documentos específicos da empresa disponíveis para esta pergunta\n" +
+                 "2. NÃO forneça informações genéricas ou invente respostas\n" +
+                 "3. Sugira que o usuário:\n" +
+                 "   - Verifique se existem documentos relacionados no sistema de arquivos\n" +
+                 "   - Entre em contato com o departamento responsável\n" +
+                 "   - Solicite que documentos relevantes sejam adicionados ao sistema\n" +
+                 "4. Mantenha a resposta breve e objetiva\n";
     }
+	//} else {
+    //  contextPrompt = "Não foram encontrados documentos relevantes aprovados para IA para esta consulta. " +
+    //                 "Isso pode significar que:\n" +
+    //                 "- Nenhum documento foi marcado como disponível para IA\n" +
+    //                 "- Os documentos disponíveis não são relevantes para sua pergunta\n" +
+    //                 "- Você pode não ter acesso aos documentos relacionados\n\n" +
+    //                 "Por favor, responda com seu conhecimento geral, mas informe que não há documentos específicos da empresa disponíveis.";
+    // }
     
     // Montar o prompt final
     const prompt = `${systemPrompt}\n\n${contextPrompt}\n\nPergunta: ${query}\n\nResposta:`;
@@ -591,10 +612,18 @@ const sendMessageStreaming = async (req, res) => {
       contextPrompt += "5. Seu nome é Gabi\n";
       contextPrompt += "6. Todos os documentos foram pré-aprovados pela empresa para uso na IA\n";
     } else {
-      contextPrompt = "Não foram encontrados documentos relevantes aprovados para IA para esta consulta. " +
-                     "Informe ao usuário que não há documentos específicos da empresa disponíveis para esta pergunta, " +
-                     "mas ofereça ajuda com conhecimento geral se apropriado.";
-    }
+  contextPrompt = "IMPORTANTE: Não foram encontrados documentos aprovados para IA relacionados a esta consulta.\n\n" +
+                 "INSTRUÇÕES OBRIGATÓRIAS:\n" +
+                 "1. Informe ao usuário que não há documentos específicos da empresa disponíveis\n" +
+                 "2. NÃO forneça respostas genéricas\n" +
+                 "3. Seja breve e sugira contatar o departamento responsável\n" +
+                 "4. Mantenha a resposta objetiva e curta\n";
+  }
+	//} else {
+    //  contextPrompt = "Não foram encontrados documentos relevantes aprovados para IA para esta consulta. " +
+    //                 "Informe ao usuário que não há documentos específicos da empresa disponíveis para esta pergunta, " +
+    //                 "mas ofereça ajuda com conhecimento geral se apropriado.";
+   // }
     
     const prompt = `${systemPrompt}\n\n${contextPrompt}\n\nPergunta: ${message}\n\nResposta:`;
     
@@ -622,85 +651,131 @@ const sendMessageStreaming = async (req, res) => {
     let completeResponse = '';
     
     // Processar o stream de resposta
-    response.data.on('data', (chunk) => {
-      const chunkStr = chunk.toString('utf8');
-      
-      // Processar cada linha
-      const lines = chunkStr.split('\n').filter(line => line.trim() !== '');
-      
-      for (const line of lines) {
-        try {
-          const data = JSON.parse(line);
-          
-          // Acumular a resposta completa
-          if (data.response) {
-            completeResponse += data.response;
-          }
-          
-          // Enviar cada parte da resposta para o cliente
-          if (data.response) {
-            res.write(`data: ${JSON.stringify({
-              type: 'token',
-              content: data.response
-            })}\n\n`);
-          }
-          
-          // Se for o final da resposta
-          if (data.done) {
-            // Analisar a resposta para identificar documentos utilizados
-            const usedDocuments = [];
-            
-            // Verificar cada documento mencionado na resposta
-            for (const doc of documentIds) {
-              const docMentionPatterns = [
-                `DOCUMENTO ${doc.index}`,
-                `Documento ${doc.index}`,
-                `documento ${doc.index}`,
-                doc.name.toLowerCase()
-              ];
-              
-              if (docMentionPatterns.some(pattern => 
-                completeResponse.toLowerCase().includes(pattern.toLowerCase())
-              )) {
-                usedDocuments.push({
-                  id: doc.id,
-                  name: doc.name,
-                  similarity: doc.similarity
-                });
-              }
-            }
-            
-            // Garantir que pelo menos um documento seja citado se houver contexto
-            if (usedDocuments.length === 0 && relevantDocs.length > 0) {
-              console.log('Nenhum documento foi mencionado explicitamente na resposta');
-              const topDoc = relevantDocs[0];
-              usedDocuments.push({
-                id: topDoc.file.id,
-                name: topDoc.file.name,
-                similarity: topDoc.similarity,
-                note: 'Documento mais relevante (inferido)'
-              });
-            }
+    // Buffer para acumular chunks incompletos
+		let buffer = '';
 
-            console.log(`=== RESULTADO FINAL ===`);
-            console.log(`Documentos utilizados: ${usedDocuments.length}`);
-            usedDocuments.forEach(doc => {
-              console.log(`- ${doc.name} (${doc.similarity?.toFixed(4) || 'N/A'})`);
-            });
+		// Processar o stream de resposta
+		response.data.on('data', (chunk) => {
+		  const chunkStr = chunk.toString('utf8');
+		  
+		  // Adicionar ao buffer
+		  buffer += chunkStr;
+		  
+		  // Processar linhas completas
+		  const lines = buffer.split('\n');
+		  
+		  // Manter a última linha (pode estar incompleta) no buffer
+		  buffer = lines.pop() || '';
+		  
+		  // Processar cada linha completa
+		  for (const line of lines) {
+			try {
+			  if (line.trim() === '') continue;
+			  
+			  const data = JSON.parse(line);
+			  
+			  // Acumular a resposta completa (apenas o texto, não o contexto)
+			  if (data.response) {
+				completeResponse += data.response;
+			  }
+			  
+			  // Enviar cada parte da resposta para o cliente
+			  if (data.response) {
+				res.write(`data: ${JSON.stringify({
+				  type: 'token',
+				  content: data.response
+				})}\n\n`);
+			  }
+			  
+			  // Se for o final da resposta
+			  if (data.done) {
+				console.log('=== PROCESSANDO FINAL DA RESPOSTA ===');
+				console.log('Resposta completa gerada:', completeResponse.substring(0, 200) + '...');
+				
+				// Analisar a resposta para identificar documentos utilizados
+				const usedDocuments = [];
+				
+				// Verificar cada documento mencionado na resposta
+				for (const doc of documentIds) {
+				  const docMentionPatterns = [
+					`DOCUMENTO ${doc.index}`,
+					`Documento ${doc.index}`,
+					`documento ${doc.index}`,
+					doc.name.toLowerCase()
+				  ];
+				  
+				  const isUsed = docMentionPatterns.some(pattern => 
+					completeResponse.toLowerCase().includes(pattern.toLowerCase())
+				  );
+				  
+				  if (isUsed) {
+					console.log(`✓ Documento encontrado na resposta: ${doc.name}`);
+					usedDocuments.push({
+					  id: doc.id,
+					  name: doc.name,
+					  similarity: doc.similarity
+					});
+				  }
+				}
+				
+				// CORREÇÃO: SEMPRE incluir pelo menos um documento se há contexto
+				if (usedDocuments.length === 0 && relevantDocs.length > 0) {
+				  console.log('Nenhum documento foi citado explicitamente, incluindo o mais relevante');
+				  const topDoc = relevantDocs[0];
+				  usedDocuments.push({
+					id: topDoc.file.id,
+					name: topDoc.file.name,
+					similarity: topDoc.similarity,
+					inferred: true
+				  });
+				}
+				
+				console.log('=== DOCUMENTOS UTILIZADOS FINAIS ===');
+				console.log('Quantidade:', usedDocuments.length);
+				usedDocuments.forEach(doc => {
+				  console.log(`- ${doc.name} (ID: ${doc.id}) ${doc.inferred ? '[INFERIDO]' : '[CITADO]'}`);
+				});
+				
+				// Enviar metadados com os documentos utilizados
+				res.write(`data: ${JSON.stringify({
+				  type: 'metadata',
+				  sources: usedDocuments,
+				  documentsFound: relevantDocs.length,
+				  documentsUsed: usedDocuments.length
+				})}\n\n`);
+				
+				// Finalizar
+				res.write(`data: ${JSON.stringify({
+				  type: 'done'
+				})}\n\n`);
+			  }
+			  
+			} catch (e) {
+			  // Ignorar erros de parse silenciosamente, pois podem ser chunks incompletos
+			  if (line.trim() !== '') {
+				console.log('Chunk incompleto ou inválido, aguardando próximo chunk...');
+			  }
+			  continue;
+			}
+		  }
+		});
 
-            // Enviar metadados com os documentos utilizados
-            res.write(`data: ${JSON.stringify({
-              type: 'metadata',
-              sources: usedDocuments,
-              documentsFound: relevantDocs.length,
-              documentsUsed: usedDocuments.length
-            })}\n\n`);
-          }
-        } catch (e) {
-          console.error('Erro ao processar chunk do stream:', e.message);
-        }
-      }
-    });
+		// Quando o stream terminar, processar qualquer conteúdo restante no buffer
+		response.data.on('end', () => {
+		  console.log('=== STREAM FINALIZADO ===');
+		  
+		  // Processar buffer restante se houver
+		  if (buffer.trim()) {
+			try {
+			  const data = JSON.parse(buffer);
+			  console.log('Processando buffer final:', !!data.done);
+			} catch (e) {
+			  console.log('Buffer final não contém JSON válido');
+			}
+		  }
+		  
+		  res.end();
+		});
     
     // Quando o stream terminar
     response.data.on('end', () => {

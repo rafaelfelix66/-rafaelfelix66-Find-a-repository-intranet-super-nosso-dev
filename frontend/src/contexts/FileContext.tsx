@@ -236,37 +236,60 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAvailableDepartments(departments);
   };
   
-  // CORREÇÃO: Melhorar carregamento de arquivos
-  const loadFiles = async (folderId: string | null = null) => {
-    setIsLoading(true);
-    setError(null);
+  // CORREÇÃO PRINCIPAL: Função loadFiles com mapeamento correto do allowRAG
+const loadFiles = async (folderId: string | null = null) => {
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    console.log(`🔍 Buscando arquivos da pasta ${folderId || 'raiz'}`);
     
-    try {
-      console.log(`Buscando arquivos da pasta ${folderId || 'raiz'}`);
-      
-      const queryParams = new URLSearchParams();
-      if (folderId) {
-        queryParams.append('folderId', folderId);
-      }
-      
-      const url = `/files${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-      console.log('URL da requisição:', url);
-      
-      const response = await api.get(url);
-      console.log('Resposta da API:', response);
-      
-      if (!response) {
-        throw new Error('Resposta vazia da API');
-      }
-      
-      const folders = Array.isArray(response.folders) ? response.folders : [];
-      const filesData = Array.isArray(response.files) ? response.files : [];
-      
-      console.log(`Recebidos ${folders.length} pastas e ${filesData.length} arquivos`);
-      
-      const mappedFiles: FileItem[] = [
-        // Mapear pastas
-        ...folders.map((folder: any) => ({
+    const queryParams = new URLSearchParams();
+    if (folderId) {
+      queryParams.append('folderId', folderId);
+    }
+    
+    const url = `/files${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    console.log('📡 URL da requisição:', url);
+    
+    const response = await api.get(url);
+    console.log('📦 Resposta completa da API:', response);
+    
+    if (!response) {
+      throw new Error('Resposta vazia da API');
+    }
+    
+    const folders = Array.isArray(response.folders) ? response.folders : [];
+    const filesData = Array.isArray(response.files) ? response.files : [];
+    
+    console.log(`📂 Recebidos ${folders.length} pastas e ${filesData.length} arquivos`);
+    
+    // CORREÇÃO: Log detalhado dos dados RAG recebidos
+    console.log('📂 Dados das pastas (RAG):');
+    folders.forEach((folder: any, index: number) => {
+      console.log(`  ${index + 1}. ${folder.name}:`, {
+        allowRAG: folder.allowRAG,
+        allowRAGType: typeof folder.allowRAG,
+        allowRAGValue: String(folder.allowRAG)
+      });
+    });
+    
+    console.log('📄 Dados dos arquivos (RAG):');
+    filesData.forEach((file: any, index: number) => {
+      console.log(`  ${index + 1}. ${file.name}:`, {
+        allowRAG: file.allowRAG,
+        allowRAGType: typeof file.allowRAG,
+        allowRAGValue: String(file.allowRAG)
+      });
+    });
+    
+    const mappedFiles: FileItem[] = [
+      // CORREÇÃO: Mapear pastas com conversão explícita do allowRAG
+      ...folders.map((folder: any) => {
+        const allowRAG = Boolean(folder.allowRAG === true || folder.allowRAG === 'true' || folder.allowRAG === 1);
+        console.log(`📂 Mapeando pasta "${folder.name}": allowRAG ${folder.allowRAG} → ${allowRAG}`);
+        
+        return {
           id: folder._id,
           name: folder.name,
           description: folder.description,
@@ -274,7 +297,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           modified: new Date(folder.createdAt || folder.updatedAt || Date.now()).toLocaleDateString('pt-BR'),
           coverImage: folder.coverImage,
           parentId: folder.parentId,
-		  allowRAG: folder.allowRAG || false,
+          allowRAG: allowRAG, // CORREÇÃO: Conversão explícita
           departamentoVisibilidade: folder.departamentoVisibilidade || ['TODOS'],
           isRestrito: folder.departamentoVisibilidade && folder.departamentoVisibilidade.length > 0 && !folder.departamentoVisibilidade.includes('TODOS'),
           isPublic: folder.isPublic !== false,
@@ -284,10 +307,15 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             nome: folder.owner?.nome,
             departamento: folder.owner?.departamento
           }
-        })),
+        };
+      }),
+      
+      // CORREÇÃO: Mapear arquivos e links com conversão explícita do allowRAG
+      ...filesData.map((file: any) => {
+        const allowRAG = Boolean(file.allowRAG === true || file.allowRAG === 'true' || file.allowRAG === 1);
+        console.log(`📄 Mapeando arquivo "${file.name}": allowRAG ${file.allowRAG} → ${allowRAG}`);
         
-        // Mapear arquivos e links
-        ...filesData.map((file: any) => ({
+        return {
           id: file._id,
           name: file.name,
           description: file.description,
@@ -298,7 +326,7 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           mimeType: file.mimeType,
           linkUrl: file.linkUrl,
           allowDownload: file.allowDownload !== false,
-		  allowRAG: file.allowRAG || false, 
+          allowRAG: allowRAG, // CORREÇÃO: Conversão explícita
           departamentoVisibilidade: file.departamentoVisibilidade || ['TODOS'],
           isRestrito: file.departamentoVisibilidade && file.departamentoVisibilidade.length > 0 && !file.departamentoVisibilidade.includes('TODOS'),
           isPublic: file.isPublic !== false,
@@ -310,27 +338,37 @@ export const FileProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             nome: file.owner?.nome,
             departamento: file.owner?.departamento
           }
-        }))
-      ];
+        };
+      })
+    ];
 
-      console.log(`${mappedFiles.length} itens recebidos do backend (já filtrados)`);
+    // CORREÇÃO: Log final dos itens mapeados
+    console.log(`📦 ${mappedFiles.length} itens mapeados:`);
+    mappedFiles.forEach((item, index) => {
+      console.log(`  ${index + 1}. ${item.name} (${item.type}): allowRAG = ${item.allowRAG}`);
+    });
+    
+    // CORREÇÃO: Contar itens com RAG habilitado
+    const itemsWithRAG = mappedFiles.filter(item => item.allowRAG === true);
+    console.log(`✅ ${itemsWithRAG.length} itens com RAG habilitado:`, 
+      itemsWithRAG.map(item => `${item.name} (${item.type})`));
 
-      setFiles(mappedFiles);
-      updateAvailableDepartments(mappedFiles);
-      
-    } catch (err: any) {
-      console.error('Erro ao carregar arquivos:', err);
-      const errorMessage = err.response?.data?.msg || err.message || 'Erro ao carregar arquivos';
-      setError(errorMessage);
-      toast({
-        title: "Erro",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    setFiles(mappedFiles);
+    updateAvailableDepartments(mappedFiles);
+    
+  } catch (err: any) {
+    console.error('❌ Erro ao carregar arquivos:', err);
+    const errorMessage = err.response?.data?.msg || err.message || 'Erro ao carregar arquivos';
+    setError(errorMessage);
+    toast({
+      title: "Erro",
+      description: errorMessage,
+      variant: "destructive"
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
   
   useEffect(() => {
     if (isAuthenticated) {

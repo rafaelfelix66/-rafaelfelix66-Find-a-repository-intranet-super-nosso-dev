@@ -3,11 +3,12 @@ const { File, Folder, User } = require('../models');
 const path = require('path');
 const fs = require('fs');
 
+// CORREÇÃO na função getFiles - Garantir que allowRAG seja retornado
 const getFiles = async (req, res) => {
   try {
     const { folderId } = req.query;
     
-    console.log('=== GET FILES DEBUG ===');
+    console.log('=== GET FILES DEBUG (RAG) ===');
     console.log('folderId:', folderId);
     console.log('usuarioId:', req.usuario.id);
     
@@ -29,48 +30,41 @@ const getFiles = async (req, res) => {
     });
     
     // Definir consultas base
-let fileQuery = {};
-let folderQuery = {};
+    let fileQuery = {};
+    let folderQuery = {};
 
-// Filtrar por pasta atual
-if (folderId) {
-  fileQuery.folderId = folderId;
-  folderQuery.parentId = folderId;
-} else {
-  fileQuery.folderId = null;
-  folderQuery.parentId = null;
-}
+    // Filtrar por pasta atual
+    if (folderId) {
+      fileQuery.folderId = folderId;
+      folderQuery.parentId = folderId;
+    } else {
+      fileQuery.folderId = null;
+      folderQuery.parentId = null;
+    }
 
-console.log('DEBUG - User department:', userDepartment);
-console.log('DEBUG - Is admin:', isAdmin);
+    console.log('DEBUG - User department:', userDepartment);
+    console.log('DEBUG - Is admin:', isAdmin);
 
-// CORREÇÃO: Para admins, não aplicar filtros de acesso
-if (!isAdmin) {
-  // CORREÇÃO: Query correta para MongoDB com arrays
-  const accessConditions = [
-    { owner: req.usuario.id }, // Proprietário
-    { 'sharedWith.user': req.usuario.id }, // Compartilhado diretamente
-    { isPublic: true }, // Público
-    { departamentoVisibilidade: { $in: ['TODOS'] } }, // Array contém TODOS
-    { departamentoVisibilidade: { $in: [userDepartment] } }, // Array contém departamento do usuário
-    { departamentoVisibilidade: { $exists: false } }, // Campo não existe
-    { departamentoVisibilidade: { $eq: [] } } // Array vazio
-  ];
-  
-  fileQuery.$or = accessConditions;
-  folderQuery.$or = accessConditions;
-}
+    // Para admins, não aplicar filtros de acesso
+    if (!isAdmin) {
+      const accessConditions = [
+        { owner: req.usuario.id },
+        { 'sharedWith.user': req.usuario.id },
+        { isPublic: true },
+        { departamentoVisibilidade: { $in: ['TODOS'] } },
+        { departamentoVisibilidade: { $in: [userDepartment] } },
+        { departamentoVisibilidade: { $exists: false } },
+        { departamentoVisibilidade: { $eq: [] } }
+      ];
+      
+      fileQuery.$or = accessConditions;
+      folderQuery.$or = accessConditions;
+    }
 
-console.log('DEBUG - File query:', JSON.stringify(fileQuery, null, 2));
-console.log('DEBUG - Folder query:', JSON.stringify(folderQuery, null, 2));
+    console.log('DEBUG - File query:', JSON.stringify(fileQuery, null, 2));
+    console.log('DEBUG - Folder query:', JSON.stringify(folderQuery, null, 2));
     
-	// Na função getFiles, após construir as queries:
-console.log('DEBUG - User department:', userDepartment);
-console.log('DEBUG - Is admin:', isAdmin);
-console.log('DEBUG - File query:', JSON.stringify(fileQuery, null, 2));
-console.log('DEBUG - Folder query:', JSON.stringify(folderQuery, null, 2));
-	
-    // Buscar arquivos e pastas
+    // CORREÇÃO: Buscar arquivos e pastas com TODOS os campos, incluindo allowRAG
     const files = await File.find(fileQuery)
       .populate('owner', ['nome', 'departamento'])
       .sort({ createdAt: -1 });
@@ -81,29 +75,74 @@ console.log('DEBUG - Folder query:', JSON.stringify(folderQuery, null, 2));
     
     console.log(`Encontrados ${folders.length} pastas e ${files.length} arquivos`);
     
-    // Log detalhado para debug
-    folders.forEach(folder => {
-      console.log('Pasta:', {
+    // CORREÇÃO: Log detalhado para verificar allowRAG
+    console.log('=== VERIFICAÇÃO ALLOWRAG ===');
+    folders.forEach((folder, index) => {
+      console.log(`Pasta ${index + 1}: ${folder.name}`, {
         id: folder._id,
-        name: folder.name,
+        allowRAG: folder.allowRAG,
+        allowRAGType: typeof folder.allowRAG,
+        allowRAGValue: String(folder.allowRAG),
         owner: folder.owner?.nome,
         departamentoVisibilidade: folder.departamentoVisibilidade,
         isPublic: folder.isPublic
       });
     });
     
-    files.forEach(file => {
-      console.log('Arquivo:', {
+    files.forEach((file, index) => {
+      console.log(`Arquivo ${index + 1}: ${file.name}`, {
         id: file._id,
-        name: file.name,
         type: file.type,
+        allowRAG: file.allowRAG,
+        allowRAGType: typeof file.allowRAG,
+        allowRAGValue: String(file.allowRAG),
         owner: file.owner?.nome,
         departamentoVisibilidade: file.departamentoVisibilidade,
         isPublic: file.isPublic
       });
     });
     
-    res.json({ folders, files });
+    // CORREÇÃO: Garantir que allowRAG seja incluído na resposta
+    const responseData = {
+      folders: folders.map(folder => ({
+        _id: folder._id,
+        name: folder.name,
+        description: folder.description,
+        coverImage: folder.coverImage,
+        parentId: folder.parentId,
+        owner: folder.owner,
+        departamentoVisibilidade: folder.departamentoVisibilidade,
+        isPublic: folder.isPublic,
+        allowRAG: Boolean(folder.allowRAG), // CORREÇÃO: Garantir que seja boolean
+        createdAt: folder.createdAt,
+        updatedAt: folder.updatedAt
+      })),
+      files: files.map(file => ({
+        _id: file._id,
+        name: file.name,
+        description: file.description,
+        type: file.type,
+        size: file.size,
+        extension: file.extension,
+        mimeType: file.mimeType,
+        originalName: file.originalName,
+        linkUrl: file.linkUrl,
+        allowDownload: file.allowDownload,
+        allowRAG: Boolean(file.allowRAG), // CORREÇÃO: Garantir que seja boolean
+        folderId: file.folderId,
+        owner: file.owner,
+        departamentoVisibilidade: file.departamentoVisibilidade,
+        isPublic: file.isPublic,
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt
+      }))
+    };
+    
+    console.log('=== RESPOSTA FINAL ===');
+    console.log('Pastas com allowRAG:', responseData.folders.filter(f => f.allowRAG).map(f => f.name));
+    console.log('Arquivos com allowRAG:', responseData.files.filter(f => f.allowRAG).map(f => f.name));
+    
+    res.json(responseData);
   } catch (err) {
     console.error('Erro ao buscar arquivos:', err.message);
     res.status(500).json({ msg: 'Erro no servidor', error: err.message });
@@ -116,7 +155,7 @@ const createFolder = async (req, res) => {
     console.log('Body recebido:', req.body);
     console.log('Arquivo recebido:', req.file);
     
-    const { name, parentId, description, departamentoVisibilidade } = req.body;
+    const { name, parentId, description, departamentoVisibilidade, allowRAG } = req.body;
     
     console.log('Dados extraídos:', {
       name,
@@ -157,15 +196,24 @@ const createFolder = async (req, res) => {
     }
     
     // Criar nova pasta
-    const newFolder = new Folder({
-      name,
-      description: description || '',
-      coverImage: coverImageUrl,
-      parentId: parentId || null,
-      owner: req.usuario.id,
-      departamentoVisibilidade: deptVisibilidade,
-      isPublic: deptVisibilidade.includes('TODOS')
-    });
+    // Processar flag RAG
+let ragEnabled = false;
+if (allowRAG !== undefined) {
+  ragEnabled = allowRAG === 'true' || allowRAG === true;
+}
+
+console.log('Processando allowRAG:', { allowRAG, ragEnabled });
+
+const newFolder = new Folder({
+  name,
+  description: description || '',
+  coverImage: coverImageUrl,
+  parentId: parentId || null,
+  owner: req.usuario.id,
+  departamentoVisibilidade: deptVisibilidade,
+  isPublic: deptVisibilidade.includes('TODOS'),
+  allowRAG: ragEnabled  // ADICIONAR ESTA LINHA
+});
     
     const folder = await newFolder.save();
     const populatedFolder = await Folder.findById(folder._id).populate('owner', ['nome', 'departamento']);

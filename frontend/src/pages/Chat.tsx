@@ -1,4 +1,4 @@
-// src/pages/Chat.tsx - SIMPLIFICADO SEM HISTÓRICO DE CONVERSAS
+// src/pages/Chat.tsx - VERSÃO COMPLETAMENTE CORRIGIDA
 import { useState, useRef, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { api } from "@/services/api";
@@ -12,8 +12,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
   Search, 
   Send, 
-  Paperclip, 
-  FileText,
   MessageCircle, 
   AlertCircle, 
   Loader2,
@@ -21,7 +19,11 @@ import {
   Database,
   Menu,
   X,
-  RefreshCw
+  RefreshCw,
+  Download,
+  ExternalLink,
+  FileText,
+  Bot
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -36,10 +38,22 @@ import {
   DialogHeader, 
   DialogTitle 
 } from "@/components/ui/dialog";
-import { fileService } from "@/services/fileService";
-import { FileItem } from "@/contexts/FileContext";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+
+// Interface para arquivos RAG (apenas o necessário para o chat)
+interface RAGFile {
+  id: string;
+  name: string;
+  description?: string;
+  type: 'file' | 'folder' | 'link';
+  size?: string;
+  allowRAG: boolean;
+  allowDownload?: boolean;
+  linkUrl?: string;
+  mimeType?: string;
+  extension?: string;
+}
 
 const Chat = () => {
   const { toast } = useToast();
@@ -54,27 +68,31 @@ const Chat = () => {
   const [isStatusChecking, setIsStatusChecking] = useState(false);
   const [showSourceDetails, setShowSourceDetails] = useState(false);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [userFiles, setUserFiles] = useState<FileItem[]>([]);
+  const [userFiles, setUserFiles] = useState<RAGFile[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [gabiUser, setGabiUser] = useState<any>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Avatar da Gabi em Base64 - assistente virtual
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const [scrollTimeout, setScrollTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+
+  // Avatar da Gabi
   const getGabiAvatar = () => {
-    // Se temos dados da Gabi do banco, usar o avatar dela
     if (gabiUser && gabiUser.avatar) {
       return gabiUser.avatar;
     }
-    
-    // Fallback para o SVG original se não tiver avatar
     return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNTAiIGN5PSI1MCIgcj0iNTAiIGZpbGw9IiNmM2Y0ZjYiLz48cGF0aCBkPSJNMjAgMjVjMC04IDEwLTE1IDMwLTE1czMwIDcgMzAgMTVjMCA4LTEwIDE1LTMwIDE1cy0zMC03LTMwLTE1eiIgZmlsbD0iIzNlMmIxOSIvPjxjaXJjbGUgY3g9IjUwIiBjeT0iNDUiIHI9IjIwIiBmaWxsPSIjZjJjNjc0Ii8+PGVsbGlwc2UgY3g9IjQzIiBjeT0iNDIiIHJ4PSI0IiByeT0iNiIgZmlsbD0iIzJkM2E0ZiIvPjxlbGxpcHNlIGN4PSI1NyIgY3k9IjQyIiByeD0iNCIgcnk9IjYiIGZpbGw9IiMyZDNhNGYiLz48ZWxsaXBzZSBjeD0iNTAiIGN5PSI0OCIgcng9IjIiIHJ5PSIxIiBmaWxsPSIjZjJjNjc0Ii8+PHBhdGggZD0iTTQ1IDUyYzMgMyA3IDMgMTAgMGMtMyAzLTcgMy0xMCAwIiBzdHJva2U9IiNkNjM0NGYiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PHBhdGggZD0iTTMwIDY1YzUgLTUgMTUtNSAyMCAwczE1IDUgMjAgMGwwIDE1bC00MCAway0wIC0xNXoiIGZpbGw9IiNmZmQ3MDAiLz48L3N2Zz4=";
   };
   
   const getGabiAvatar2 = () => {
     return "/Gabi.png";
-};
+  };
   
   // Limpar chat
   const handleClearChat = () => {
@@ -125,17 +143,81 @@ const Chat = () => {
     setFilteredMessages(filtered);
   }, [searchQuery, messages]);
   
-  // Rolar para a última mensagem
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  // Detectar quando usuário está scrollando manualmente
+useEffect(() => {
+  const container = messagesContainerRef.current;
+  if (!container) return;
+
+  const handleScroll = () => {
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+    
+    setIsAtBottom(isNearBottom);
+    
+    // Se não está no final, usuário está navegando
+    if (!isNearBottom) {
+      setIsUserScrolling(true);
+      
+      // Limpar timeout anterior
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+      
+      // Após 3 segundos sem scroll, considerar que parou de navegar
+      const timeout = setTimeout(() => {
+        setIsUserScrolling(false);
+      }, 3000);
+      
+      setScrollTimeout(timeout);
+    } else {
+      // Se voltou ao final, pode fazer auto-scroll novamente
+      setIsUserScrolling(false);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+        setScrollTimeout(null);
+      }
     }
-  }, [filteredMessages]);
+  };
+
+  container.addEventListener('scroll', handleScroll);
+  return () => {
+    container.removeEventListener('scroll', handleScroll);
+    if (scrollTimeout) {
+      clearTimeout(scrollTimeout);
+    }
+  };
+}, [scrollTimeout]);
+
+// Auto-scroll inteligente - só funciona se usuário não estiver navegando
+useEffect(() => {
+  if (isStreaming && !isUserScrolling && isAtBottom && messagesEndRef.current) {
+    const timeoutId = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'end'
+      });
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }
+}, [filteredMessages, isStreaming, isUserScrolling, isAtBottom]);
+
+// Scroll inicial quando nova conversa começa
+useEffect(() => {
+  if (filteredMessages.length === 1 && !isUserScrolling) {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'end'
+      });
+    }, 100);
+  }
+}, [filteredMessages.length]);
+ 
   
   const fetchGabiUser = async () => {
     try {
       const response = await api.get('/usuarios');
-      // Procurar pela Gabi pelo CPF
       const gabi = response.find((user: any) => user.cpf === '00000336366');
       if (gabi) {
         setGabiUser(gabi);
@@ -146,14 +228,98 @@ const Chat = () => {
     }
   };
   
-  // Carregar arquivos do usuário
+  // CORREÇÃO 2: Função melhorada para carregar arquivos RAG com cache de IDs
+  const [fileIdCache, setFileIdCache] = useState<Map<string, RAGFile>>(new Map());
+  
   const fetchUserFiles = async () => {
     try {
-      const files = await fileService.getFiles();
-      setUserFiles(files);
+      console.log('🔍 Buscando arquivos com RAG habilitado...');
+      
+      const response = await api.get('/files');
+      console.log('📁 Resposta completa da API:', response);
+      
+      if (!response || (!response.folders && !response.files)) {
+        console.error('❌ Resposta da API inválida:', response);
+        setUserFiles([]);
+        setFileIdCache(new Map());
+        return;
+      }
+      
+      const allItems: RAGFile[] = [];
+      const newFileIdCache = new Map<string, RAGFile>();
+      
+      // Processar pastas
+      if (response.folders && Array.isArray(response.folders)) {
+        console.log(`📂 Processando ${response.folders.length} pastas...`);
+        response.folders.forEach((folder: any) => {
+          const hasRAG = folder.allowRAG === true;
+          console.log(`📂 Pasta: ${folder.name} - RAG: ${hasRAG} (${folder.allowRAG})`);
+          
+          if (hasRAG) {
+            const ragFile: RAGFile = {
+              id: folder._id,
+              name: folder.name,
+              description: folder.description,
+              type: 'folder',
+              allowRAG: true
+            };
+            allItems.push(ragFile);
+            newFileIdCache.set(folder._id, ragFile);
+          }
+        });
+      }
+      
+      // Processar arquivos
+      if (response.files && Array.isArray(response.files)) {
+        console.log(`📄 Processando ${response.files.length} arquivos...`);
+        response.files.forEach((file: any) => {
+          const hasRAG = file.allowRAG === true;
+          console.log(`📄 Arquivo: ${file.name} - RAG: ${hasRAG} (${file.allowRAG}) - Tipo: ${file.type}`);
+          
+          if (hasRAG) {
+            const ragFile: RAGFile = {
+              id: file._id,
+              name: file.name,
+              description: file.description,
+              type: file.type || 'file',
+              size: file.size ? formatFileSize(file.size) : undefined,
+              allowRAG: true,
+              allowDownload: file.allowDownload !== false,
+              linkUrl: file.linkUrl,
+              mimeType: file.mimeType,
+              extension: file.extension
+            };
+            allItems.push(ragFile);
+            newFileIdCache.set(file._id, ragFile);
+          }
+        });
+      }
+      
+      console.log(`✅ Total de itens com RAG: ${allItems.length}`);
+      console.log('📋 Itens com RAG:', allItems.map(item => `${item.name} (${item.type}) - ID: ${item.id}`));
+      
+      setUserFiles(allItems);
+      setFileIdCache(newFileIdCache);
+      
     } catch (error) {
-      console.error("Erro ao carregar arquivos:", error);
+      console.error("❌ Erro ao carregar arquivos:", error);
+      setUserFiles([]);
+      setFileIdCache(new Map());
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os arquivos disponíveis para IA.",
+        variant: "destructive"
+      });
     }
+  };
+  
+  // Função auxiliar para formatar tamanho
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   
   // Verificar status do LLM
@@ -271,13 +437,49 @@ const Chat = () => {
     }
   };
   
-  // Exibir detalhes de uma fonte
+  // CORREÇÃO 2: Função melhorada para exibir detalhes da fonte
   const showSourceInfo = (sourceId: string) => {
+    console.log('🔍 Tentando mostrar fonte:', sourceId);
+    console.log('📂 Cache de arquivos RAG:', Array.from(fileIdCache.keys()));
+    console.log('📂 Arquivos RAG disponíveis:', userFiles.map(f => ({ id: f.id, name: f.name, type: f.type })));
+    
+    // CORREÇÃO 2: Buscar primeiro no cache, depois na lista atual
+    let sourceFile = fileIdCache.get(sourceId);
+    
+    if (!sourceFile) {
+      // Fallback: buscar na lista atual
+      sourceFile = userFiles.find(file => file.id === sourceId);
+    }
+    
+    if (!sourceFile) {
+      console.error('❌ Arquivo fonte não encontrado:', sourceId);
+      
+      // CORREÇÃO 2: Tentar recarregar os arquivos antes de mostrar erro
+      console.log('🔄 Tentando recarregar arquivos para encontrar a fonte...');
+      fetchUserFiles().then(() => {
+        // Tentar novamente após recarregar
+        const reloadedFile = fileIdCache.get(sourceId) || userFiles.find(file => file.id === sourceId);
+        if (reloadedFile) {
+          console.log('✅ Arquivo fonte encontrado após reload:', reloadedFile);
+          setSelectedSource(sourceId);
+          setShowSourceDetails(true);
+        } else {
+          toast({
+            title: "Arquivo não encontrado",
+            description: `O arquivo fonte (ID: ${sourceId}) não foi encontrado na lista de arquivos disponíveis para IA. Pode ter sido removido ou você não tem mais acesso.`,
+            variant: "destructive"
+          });
+        }
+      });
+      return;
+    }
+    
+    console.log('✅ Arquivo fonte encontrado:', sourceFile);
     setSelectedSource(sourceId);
     setShowSourceDetails(true);
   };
   
-  // Função formatMessage modificada para mostrar o cursor piscante
+  // Função formatMessage
   const formatMessage = (message: ChatMessage) => {
     if (message.isLoading) {
       return (
@@ -360,22 +562,33 @@ const Chat = () => {
           )}
         </div>
         
-        {/* Arquivos disponíveis */}
+        {/* Arquivos disponíveis para IA */}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-medium text-sm">Arquivos Disponíveis</h3>
-            <Badge variant="outline" className="text-xs">
-              {userFiles.length}
-            </Badge>
+            <h3 className="font-medium text-sm">Arquivos para IA</h3>
+            <div className="flex gap-1">
+              <Badge variant="outline" className="text-xs">
+                {userFiles.length}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchUserFiles}
+                title="Recarregar arquivos"
+                className="h-6 w-6 p-0"
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
           
           <div className="max-h-32 lg:max-h-48 overflow-y-auto border rounded-md p-2">
             {userFiles.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-4 text-center text-gray-500">
-                <Database className="h-6 w-6 mb-2 text-gray-400" />
-                <p className="text-xs">Nenhum arquivo disponível</p>
+                <Bot className="h-6 w-6 mb-2 text-gray-400" />
+                <p className="text-xs">Nenhum arquivo habilitado para IA</p>
                 <p className="text-xs mt-1 text-gray-400">
-                  Adicione arquivos na seção "Arquivos"
+                  Ative a flag "RAG" nos seus arquivos
                 </p>
               </div>
             ) : (
@@ -384,30 +597,21 @@ const Chat = () => {
                   <div 
                     key={file.id}
                     className="flex items-center p-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors"
+                    title={`${file.name} (${file.type}) - ID: ${file.id}`}
                   >
-                    <FileText className="h-3 w-3 mr-2 text-gray-500 flex-shrink-0" />
+                    <Bot className="h-3 w-3 mr-2 text-blue-500 flex-shrink-0" />
                     <span className="truncate">{file.name}</span>
+                    <span className="ml-auto text-gray-400">({file.type})</span>
                   </div>
                 ))}
                 {userFiles.length > (isMobile ? 3 : 5) && (
                   <p className="text-xs text-gray-500 text-center pt-2">
-                    +{userFiles.length - (isMobile ? 3 : 5)} arquivos
+                    +{userFiles.length - (isMobile ? 3 : 5)} itens
                   </p>
                 )}
               </div>
             )}
           </div>
-        </div>
-        
-        {/* Barra de busca */}
-        <div className="relative mt-4">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input 
-            placeholder="Buscar mensagens..." 
-            className="pl-8 focus-visible:ring-supernosso-red text-sm"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
         </div>
       </div>
       
@@ -420,10 +624,19 @@ const Chat = () => {
           </h3>
           <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 list-disc pl-4">
             <li>Faça perguntas sobre documentos</li>
-            <li>Gabi buscará informações relevantes</li>
+            <li>Gabi usa apenas arquivos com IA habilitada</li>
             <li>Verifique as fontes das respostas</li>
             <li>Use "Limpar" para nova conversa</li>
           </ul>
+          
+          {userFiles.length === 0 && (
+            <div className="mt-3 pt-2 border-t border-gray-200">
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                💡 <strong>Dica:</strong> Ative a flag "Permitir uso no sistema de IA" 
+                nos seus arquivos para que a Gabi possa utilizá-los.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -486,145 +699,127 @@ const Chat = () => {
                 </Button>
               </div>
 
-              {/* Chat Messages */}
-              <div className="flex-1 overflow-auto p-3 lg:p-4 space-y-3">
-                {filteredMessages.filter(msg => msg.sender === "user").length === 0 ? (
-  <div className="flex items-center justify-center h-full flex-col px-4">
-    <div className="relative mb-6">
-      <div className="flex justify-center">
-        <img 
-          src={getGabiAvatar2()} 
-          alt="Gabi - Assistente Virtual"
-          className={cn(
-            "object-contain rounded-lg shadow-lg",
-            isMobile ? "h-72 w-auto max-w-[350px]" : "h-[28rem] w-auto max-w-[500px]"
-          )}
-          onError={(e) => {
-            e.currentTarget.style.display = 'none';
-            e.currentTarget.nextElementSibling?.classList.remove('hidden');
-          }}
-        />
-        {/* Fallback avatar */}
-        <div className="hidden">
-          <div className="bg-gradient-to-br from-[#e60909] to-[#ff4444] rounded-full p-3 lg:p-4">
-            <Avatar className={cn(
-              "border-2 border-white",
-              isMobile ? "h-16 w-16" : "h-20 w-20"
-            )}>
-               <AvatarFallback className="bg-gradient-to-br from-[#e60909] to-[#ff4444] text-white font-bold">
-                GB
-              </AvatarFallback>
-            </Avatar>
+              {/* Chat Messages - VERSÃO CORRIGIDA PARA SCROLL LIVRE */}
+<div className="chat-messages-container">
+  <div className="chat-messages-content">
+    {filteredMessages.filter(msg => msg.sender === "user").length === 0 ? (
+      <div className="flex items-center justify-center flex-1 flex-col px-4">
+        <div className="relative mb-6">
+          <div className="flex justify-center">
+            <img 
+              src={getGabiAvatar2()} 
+              alt="Gabi - Assistente Virtual"
+              className={cn(
+                "object-contain rounded-lg shadow-lg",
+                isMobile ? "h-72 w-auto max-w-[350px]" : "h-[28rem] w-auto max-w-[500px]"
+              )}
+            />
           </div>
+          <div className="absolute -bottom-2 -right-2 w-4 h-4 lg:w-6 lg:h-6 bg-green-500 rounded-full border-2 border-white"></div>
         </div>
+        <h3 className={cn(
+          "font-medium text-center",
+          isMobile ? "text-lg" : "text-xl"
+        )}>
+          Olá! Eu sou a Gabi
+        </h3>
+        {searchQuery ? (
+          <p className="text-gray-500 mt-2 text-center text-sm">
+            Nenhuma mensagem encontrada para "<span className="font-medium">{searchQuery}</span>"
+          </p>
+        ) : (
+          <p className={cn(
+            "text-gray-500 mt-2 text-center max-w-md",
+            isMobile ? "text-sm px-4" : "text-base"
+          )}>
+            Sua assistente virtual da Intranet Super Nosso. 
+            Como posso ajudar você hoje?
+          </p>
+        )}
       </div>
-      <div className="absolute -bottom-2 -right-2 w-4 h-4 lg:w-6 lg:h-6 bg-green-500 rounded-full border-2 border-white"></div>
-    </div>
-    <h3 className={cn(
-      "font-medium text-center",
-      isMobile ? "text-lg" : "text-xl"
-    )}>
-      Olá! Eu sou a Gabi
-    </h3>
-                    {searchQuery ? (
-                      <p className="text-gray-500 mt-2 text-center text-sm">
-                        Nenhuma mensagem encontrada para "<span className="font-medium">{searchQuery}</span>"
-                      </p>
-                    ) : (
-                      <p className={cn(
-                        "text-gray-500 mt-2 text-center max-w-md",
-                        isMobile ? "text-sm px-4" : "text-base"
-                      )}>
-                        Sua assistente virtual da Intranet Super Nosso. 
-                        Como posso ajudar você hoje?
-                      </p>
-                    )}
+    ) : (
+      <>
+        {filteredMessages.map((message) => (
+          <div 
+            key={message.id}
+            className={cn(
+              "flex flex-col",
+              isMobile ? "max-w-[90%]" : "max-w-[85%] lg:max-w-[80%]",
+              message.sender === "user" 
+                ? "ml-auto items-end" 
+                : message.sender === "system"
+                  ? "mx-auto items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg max-w-full"
+                  : "mr-auto items-start"
+            )}
+          >
+            {/* Cabeçalho da mensagem */}
+            <div className="flex items-center mb-1 gap-2">
+              {message.sender === "user" ? (
+                <>
+                  <div className="text-xs text-gray-500 mr-2">
+                    {new Date(message.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
                   </div>
-                ) : (
-                  filteredMessages.map((message) => (
-                    <div 
-                      key={message.id}
-                      className={cn(
-                        "flex flex-col",
-                        isMobile ? "max-w-[90%]" : "max-w-[85%] lg:max-w-[80%]",
-                        message.sender === "user" 
-                          ? "ml-auto items-end" 
-                          : message.sender === "system"
-                            ? "mx-auto items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-lg max-w-full"
-                            : "mr-auto items-start"
-                      )}
-                    >
-                      {/* Cabeçalho da mensagem com avatar e info do remetente */}
-                      <div className="flex items-center mb-1 gap-2">
-                        {message.sender === "user" ? (
-                          <>
-                            <div className="text-xs text-gray-500 mr-2">
-                              {new Date(message.timestamp).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </div>
-                            <div className="font-medium text-sm">Você</div>
-                            <Avatar className={cn(
-                              isMobile ? "h-7 w-7" : "h-8 w-8"
-                            )}>
-                              <AvatarFallback className="bg-blue-100 text-blue-900 text-xs">
-                                {user?.name?.substring(0, 2).toUpperCase() || "VC"}
-                              </AvatarFallback>
-                            </Avatar>
-                          </>
-                        ) : message.sender === "assistant" ? (
-                          <>
-                            <Avatar className={cn(
-                              isMobile ? "h-16 w-16" : "h-16 w-16"
-                            )}>
-                              <AvatarImage src={getGabiAvatar()} alt="Gabi" />
-                              <AvatarFallback className="bg-supernosso-red text-white text-xs">
-                                GB
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="font-medium text-sm">Gabi</div>
-                            <div className="text-xs text-gray-500 ml-2">
-                              {new Date(message.timestamp).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <Avatar className={cn(
-                              isMobile ? "h-16 w-16" : "h-16 w-16"
-                            )}>
-							  <AvatarImage src={getGabiAvatar()} alt="Gabi" />
-                              <AvatarFallback className="bg-gray-200 text-gray-700 text-xs">
-                                SN
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="font-medium text-sm"></div>
-                          </>
-                        )}
-                      </div>
-                      
-                      {/* Conteúdo da mensagem */}
-                      <div 
-                        className={cn(
-                          "rounded-lg py-2 px-3",
-                          isMobile ? "text-sm" : "text-base",
-                          message.sender === "user"
-                            ? "bg-blue-100 text-gray-900 dark:bg-blue-800 dark:text-gray-50"
-                            : message.sender === "system"
-                              ? "bg-transparent" 
-                              : "bg-white border text-gray-900 dark:bg-gray-800 dark:text-gray-50"
-                        )}
-                      >
-                        {formatMessage(message)}
-                      </div>
-                    </div>
-                  ))
-                )}
-                <div ref={messagesEndRef} />
-              </div>
+                  <div className="font-medium text-sm">Você</div>
+                  <Avatar className={cn(isMobile ? "h-7 w-7" : "h-8 w-8")}>
+                    <AvatarFallback className="bg-blue-100 text-blue-900 text-xs">
+                      {user?.name?.substring(0, 2).toUpperCase() || "VC"}
+                    </AvatarFallback>
+                  </Avatar>
+                </>
+              ) : message.sender === "assistant" ? (
+                <>
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage src={getGabiAvatar()} alt="Gabi" />
+                    <AvatarFallback className="bg-supernosso-red text-white text-xs">
+                      GB
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="font-medium text-sm">Gabi</div>
+                  <div className="text-xs text-gray-500 ml-2">
+                    {new Date(message.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Avatar className="h-16 w-16">
+                    <AvatarImage src={getGabiAvatar()} alt="Gabi" />
+                    <AvatarFallback className="bg-gray-200 text-gray-700 text-xs">
+                      SN
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="font-medium text-sm"></div>
+                </>
+              )}
+            </div>
+            
+            {/* Conteúdo da mensagem */}
+            <div 
+              className={cn(
+                "rounded-lg py-2 px-3",
+                isMobile ? "text-sm" : "text-base",
+                message.sender === "user"
+                  ? "bg-blue-100 text-gray-900 dark:bg-blue-800 dark:text-gray-50"
+                  : message.sender === "system"
+                    ? "bg-transparent" 
+                    : "bg-white border text-gray-900 dark:bg-gray-800 dark:text-gray-50"
+              )}
+            >
+              {formatMessage(message)}
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} className="h-4" />
+      </>
+    )}
+  </div>
+</div>
+
               
               {/* Message Input */}
               <div className={cn(
@@ -679,7 +874,7 @@ const Chat = () => {
         </Card>
       </div>
       
-      {/* Diálogo para exibir detalhes da fonte */}
+      {/* CORREÇÃO 2: Diálogo melhorado para exibir detalhes da fonte */}
       <Dialog open={showSourceDetails} onOpenChange={setShowSourceDetails}>
         <DialogContent className={cn(
           isMobile ? "max-w-[95vw] max-h-[90vh]" : "max-w-md"
@@ -693,50 +888,177 @@ const Chat = () => {
           
           {selectedSource && (
             <div className="mt-4 space-y-4">
-              {userFiles.find(file => file.id === selectedSource) ? (
-                <div>
-                  <div className="flex items-center mb-4">
-                    <FileText className="h-10 w-10 mr-3 text-supernosso-red" />
-                    <div className="flex-1">
-                      <h3 className="font-medium break-words">
-                        {userFiles.find(file => file.id === selectedSource)?.name}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {userFiles.find(file => file.id === selectedSource)?.size || 'Tamanho desconhecido'}
-                      </p>
+              {(() => {
+                console.log('🔍 Buscando fonte no diálogo:', selectedSource);
+                console.log('📂 Cache de arquivos RAG no diálogo:', Array.from(fileIdCache.keys()));
+                console.log('📂 Arquivos RAG no diálogo:', userFiles.map(f => ({ id: f.id, name: f.name })));
+                
+                // CORREÇÃO 2: Buscar primeiro no cache, depois na lista atual
+                let sourceFile = fileIdCache.get(selectedSource);
+                
+                if (!sourceFile) {
+                  sourceFile = userFiles.find(file => file.id === selectedSource);
+                }
+                
+                if (!sourceFile) {
+                  console.error('❌ Arquivo fonte não encontrado no diálogo:', selectedSource);
+                  return (
+                    <div className="flex items-center justify-center py-8 text-center text-gray-500">
+                      <div className="text-center">
+                        <AlertCircle className="h-10 w-10 mb-2 mx-auto text-red-400" />
+                        <p className="font-medium">Arquivo não encontrado</p>
+                        <p className="text-sm mt-1">
+                          Este arquivo pode ter sido excluído, movido ou você não tem mais acesso a ele
+                        </p>
+                        <p className="text-xs mt-2 text-gray-400 font-mono bg-gray-100 px-2 py-1 rounded">
+                          ID: {selectedSource}
+                        </p>
+                        <div className="mt-4 space-y-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => {
+                              console.log('🔄 Recarregando arquivos RAG...');
+                              fetchUserFiles();
+                            }}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Recarregar arquivos
+                          </Button>
+                          <div className="text-xs text-gray-500">
+                            Total de arquivos RAG ativos: {userFiles.length}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                console.log('✅ Arquivo fonte encontrado no diálogo:', sourceFile);
+                
+                return (
+                  <div>
+                    <div className="flex items-center mb-4">
+                      <div className="h-10 w-10 mr-3 text-supernosso-red flex items-center justify-center">
+                        {sourceFile.type === 'link' ? (
+                          <ExternalLink className="h-8 w-8" />
+                        ) : sourceFile.type === 'folder' ? (
+                          <Database className="h-8 w-8" />
+                        ) : (
+                          <FileText className="h-8 w-8" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-medium break-words">
+                          {sourceFile.name}
+                        </h3>
+                        <div className="text-sm text-gray-500 space-y-1">
+                          <p>Tipo: {sourceFile.type === 'folder' ? 'Pasta' : sourceFile.type === 'link' ? 'Link' : 'Arquivo'}</p>
+                          {sourceFile.size && <p>Tamanho: {sourceFile.size}</p>}
+                          {sourceFile.extension && <p>Extensão: {sourceFile.extension}</p>}
+                          <div className="flex items-center gap-2">
+                            <Bot className="h-3 w-3 text-blue-500" />
+                            <span className="text-xs text-blue-600">Habilitado para IA</span>
+                          </div>
+                          <p className="text-xs text-gray-400 font-mono bg-gray-100 px-1 rounded">
+                            ID: {sourceFile.id}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {sourceFile.description && (
+                      <div className="mb-4">
+                        <h4 className="font-medium text-sm mb-1">Descrição:</h4>
+                        <p className="text-sm text-gray-600">{sourceFile.description}</p>
+                      </div>
+                    )}
+                    
+                    <div className="flex flex-col sm:flex-row justify-end gap-2 mt-4">
+                      <Button
+                        variant="outline"
+                        className="w-full sm:w-auto"
+                        onClick={() => setShowSourceDetails(false)}
+                      >
+                        Fechar
+                      </Button>
+                      
+                      {sourceFile.type === 'link' && sourceFile.linkUrl ? (
+                        <Button
+                          className="w-full sm:w-auto bg-supernosso-red hover:bg-supernosso-red/90"
+                          onClick={() => {
+                            window.open(sourceFile.linkUrl, '_blank', 'noopener,noreferrer');
+                            setShowSourceDetails(false);
+                          }}
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Abrir Link
+                        </Button>
+                      ) : sourceFile.allowDownload ? (
+                        <Button
+                          className="w-full sm:w-auto bg-supernosso-red hover:bg-supernosso-red/90"
+                          onClick={async () => {
+                            try {
+                              // Download direto via API
+                              const token = localStorage.getItem('token');
+                              const baseUrl = process.env.NODE_ENV === 'production' 
+                                ? '/api' 
+                                : 'http://localhost:3000/api';
+                              
+                              const response = await fetch(`${baseUrl}/files/download/${selectedSource}`, {
+                                method: 'GET',
+                                headers: {
+                                  'Authorization': `Bearer ${token}`,
+                                  'x-auth-token': token || ''
+                                }
+                              });
+                              
+                              if (!response.ok) {
+                                throw new Error('Erro ao baixar arquivo');
+                              }
+                              
+                              const blob = await response.blob();
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = sourceFile.name;
+                              document.body.appendChild(a);
+                              a.click();
+                              window.URL.revokeObjectURL(url);
+                              document.body.removeChild(a);
+                              
+                              setShowSourceDetails(false);
+                              
+                              toast({
+                                title: "Download iniciado",
+                                description: `Arquivo "${sourceFile.name}" está sendo baixado.`
+                              });
+                            } catch (error) {
+                              console.error('Erro no download:', error);
+                              toast({
+                                title: "Erro",
+                                description: "Não foi possível baixar o arquivo.",
+                                variant: "destructive"
+                              });
+                            }
+                          }}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Baixar Arquivo
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          className="w-full sm:w-auto"
+                          disabled
+                        >
+                          Download não permitido
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  
-                  <div className="flex flex-col sm:flex-row justify-end gap-2 mt-4">
-                    <Button
-                      variant="outline"
-                      className="w-full sm:w-auto"
-                      onClick={() => setShowSourceDetails(false)}
-                    >
-                      Fechar
-                    </Button>
-                    <Button
-                      className="w-full sm:w-auto bg-supernosso-red hover:bg-supernosso-red/90"
-                      onClick={() => {
-                        fileService.downloadFile(selectedSource);
-                        setShowSourceDetails(false);
-                      }}
-                    >
-                      Baixar Arquivo
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center py-8 text-center text-gray-500">
-                  <div className="text-center">
-                    <AlertCircle className="h-10 w-10 mb-2 mx-auto text-gray-400" />
-                    <p>Arquivo não encontrado</p>
-                    <p className="text-sm mt-1">
-                      Este arquivo pode ter sido excluído ou movido
-                    </p>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </DialogContent>

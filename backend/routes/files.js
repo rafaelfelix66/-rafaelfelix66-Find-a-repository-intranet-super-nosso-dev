@@ -615,6 +615,66 @@ router.get('/stats',
   }
 );
 
+// @route   GET api/files/info/:id
+// @desc    Obter informações detalhadas do arquivo
+// @access  Private
+router.get('/info/:id', auth, async (req, res) => {
+  try {
+    console.log('=== GET FILE INFO DEBUG ===');
+    console.log('fileId:', req.params.id);
+    console.log('usuarioId:', req.usuario.id);
+    
+    const file = await File.findById(req.params.id);
+    if (!file) {
+      return res.status(404).json({ msg: 'Arquivo não encontrado' });
+    }
+    
+    // Verificar acesso - CORREÇÃO: Permitir acesso para admins
+    const user = await User.findById(req.usuario.id);
+    const userDepartment = user?.departamento || 'PUBLICO';
+    const isAdmin = user?.roles?.includes('admin') || false;
+    
+    const hasAccess = 
+      isAdmin || // Admin pode ver qualquer arquivo
+      file.owner.toString() === req.usuario.id || 
+      file.isPublic || 
+      file.sharedWith.some(share => share.user.toString() === req.usuario.id) ||
+      file.departamentoVisibilidade.includes('TODOS') ||
+      file.departamentoVisibilidade.includes(userDepartment);
+      
+    if (!hasAccess) {
+      console.log('Acesso negado às informações do arquivo');
+      return res.status(401).json({ msg: 'Acesso negado' });
+    }
+    
+    console.log('Acesso autorizado às informações do arquivo');
+    
+    res.json({
+      _id: file._id,
+      name: file.name,
+      description: file.description,
+      originalName: file.originalName,
+      extension: file.extension,
+      mimeType: file.mimeType,
+      size: file.size,
+      type: file.type,
+      linkUrl: file.linkUrl,
+      allowDownload: file.allowDownload,
+      allowRAG: file.allowRAG,
+      departamentoVisibilidade: file.departamentoVisibilidade,
+      createdAt: file.createdAt,
+      updatedAt: file.updatedAt,
+      owner: file.owner
+    });
+  } catch (err) {
+    console.error('Erro ao obter informações do arquivo:', err.message);
+    if (err.kind === 'ObjectId') {
+      return res.status(404).json({ msg: 'Arquivo não encontrado' });
+    }
+    res.status(500).json({ msg: 'Erro no servidor', error: err.message });
+  }
+});
+
 // Função auxiliar para formatar tamanho de arquivo
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 Bytes';
