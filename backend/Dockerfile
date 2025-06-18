@@ -1,44 +1,53 @@
-# Dockerfile para o backend com suporte Oracle
+# Dockerfile para o backend com Oracle Client 23c - Debian
 FROM node:18
 WORKDIR /app
 
-# Instalar dependências para o Oracle
+# Instalar dependencias para o Oracle (Debian packages)
 RUN apt-get update && apt-get install -y \
+    libaio-dev \
     libaio1 \
     wget \
     unzip \
-	iputils-ping \
+    iputils-ping \
     net-tools \
     curl \
     traceroute \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar Oracle Instant Client
+# Instalar Oracle Instant Client 23c
 RUN mkdir -p /opt/oracle && \
     cd /opt/oracle && \
-    wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip && \
-    unzip instantclient-basiclite-linuxx64.zip && \
-    rm instantclient-basiclite-linuxx64.zip && \
-    cd /opt/oracle/instantclient* && \
-    (ln -s libclntsh.so.21.1 libclntsh.so || true) && \
-    (ln -s libocci.so.21.1 libocci.so || true)
+    wget -O instantclient-basic-linux.x64-23.8.0.25.04.zip "https://download.oracle.com/otn_software/linux/instantclient/2380000/instantclient-basic-linux.x64-23.8.0.25.04.zip" && \
+    unzip instantclient-basic-linux.x64-23.8.0.25.04.zip && \
+    rm instantclient-basic-linux.x64-23.8.0.25.04.zip
 
-# Encontrar e configurar o caminho correto do instantclient
+# Configurar Oracle Client
 RUN CLIENT_DIR=$(find /opt/oracle -type d -name "instantclient*" | head -n 1) && \
-    echo "export LD_LIBRARY_PATH=$CLIENT_DIR:\$LD_LIBRARY_PATH" >> /etc/bash.bashrc && \
-    echo "export ORACLE_CLIENT_PATH=$CLIENT_DIR" >> /etc/bash.bashrc
+    echo "Oracle Client configurado em: $CLIENT_DIR" && \
+    chmod +x "$CLIENT_DIR"/*.so* && \
+    echo "$CLIENT_DIR" > /etc/ld.so.conf.d/oracle-instantclient.conf && \
+    ldconfig
 
-# Configurar variáveis de ambiente para Oracle
-ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_23_7:$LD_LIBRARY_PATH
-ENV ORACLE_CLIENT_PATH=/opt/oracle/instantclient_23_7
+# Configurar variaveis de ambiente para Oracle
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient_23_8:$LD_LIBRARY_PATH
+ENV ORACLE_CLIENT_PATH=/opt/oracle/instantclient_23_8
+ENV ORACLE_HOME=/opt/oracle/instantclient_23_8
+
+# Verificar se libaio esta disponivel
+RUN echo "=== VERIFICACAO LIBAIO ===" && \
+    ldconfig -p | grep libaio && \
+    echo "=== VERIFICACAO ORACLE CLIENT ===" && \
+    ls -la /opt/oracle/instantclient_23_8/libclntsh.so && \
+    echo "=== TESTE DEPENDENCIAS ===" && \
+    ldd /opt/oracle/instantclient_23_8/libclntsh.so | head -10
 
 # Copiar package.json
 COPY package*.json ./
 
-# Instalar dependências
+# Instalar dependencias Node.js
 RUN npm install
 
-# Copiar o resto do código
+# Copiar o resto do codigo
 COPY . .
 
 EXPOSE 3000

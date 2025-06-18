@@ -47,8 +47,8 @@ export function UserAvatar({
   
   // CORREÇÃO: Garantir que o userId seja uma string válida
   const userId = user?.id || user?._id || '';
-  console.log('UserAvatar - userId para buscar atributos:', userId);
-  console.log('UserAvatar - user object:', user);
+  //console.log('UserAvatar - userId para buscar atributos:', userId);
+  //console.log('UserAvatar - user object:', user);
   
   // Usar o hook para buscar atributos do usuário apenas se showAttributes for true E tiver userId
   const { 
@@ -57,8 +57,8 @@ export function UserAvatar({
   } = useUserAttributes(showAttributes && userId ? userId : '');
   
   // Debug dos atributos
-  console.log('UserAvatar - Atributos carregados:', attributes);
-  console.log('UserAvatar - Loading atributos:', attributesLoading);
+  //console.log('UserAvatar - Atributos carregados:', attributes);
+  //console.log('UserAvatar - Loading atributos:', attributesLoading);
   
   const getInitials = (name: string) => {
     if (!name) return "??";
@@ -104,6 +104,8 @@ export function UserAvatar({
         <AvatarImage 
           src={user?.avatar} 
           alt={user?.name}
+		  className="object-cover w-full h-full"
+		  style={{ aspectRatio: '1 / 1' }}
         />
         <AvatarFallback 
           className={cn(

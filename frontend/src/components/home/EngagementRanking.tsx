@@ -163,9 +163,12 @@ export function EngagementRanking() {
                       user={{
                         name: user.userName,
                         avatar: user.userAvatar,
+						cargo: user.cargo,
                         department: user.userDepartment
                       }}
+					  showAttributes={true}
                       size="md"
+					  enableModal={true}
                     />
                     <div className="ml-3 flex-1">
                       <p className="font-medium">{user.userName}</p>

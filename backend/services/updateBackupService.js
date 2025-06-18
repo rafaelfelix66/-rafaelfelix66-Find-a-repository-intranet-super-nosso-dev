@@ -4,6 +4,85 @@ const fs = require('fs').promises;
 const path = require('path');
 require('dotenv').config();
 
+// Função para detectar o Oracle Client e verificar se existe
+function findOracleClient() {
+  const possiblePaths = [
+    '/opt/oracle/instantclient_23_8',
+    '/opt/oracle/instantclient_23_7',
+    '/opt/oracle/instantclient_23_6'
+  ];
+
+  console.log('🔍 Procurando Oracle Client...');
+  
+  for (const clientPath of possiblePaths) {
+    // Verificar se o diretório existe
+    try {
+      const fs = require('fs');
+      if (fs.existsSync(clientPath)) {
+        console.log(`📁 Diretório encontrado: ${clientPath}`);
+        
+        // Verificar se o libclntsh.so existe diretamente no diretório
+        const libPath = path.join(clientPath, 'libclntsh.so');
+        if (fs.existsSync(libPath)) {
+          console.log(`✅ Oracle Client válido encontrado: ${clientPath}`);
+          console.log(`✅ libclntsh.so confirmado: ${libPath}`);
+          return clientPath;
+        } else {
+          console.log(`❌ libclntsh.so não encontrado em: ${libPath}`);
+          
+          // Listar o que há no diretório para debug
+          try {
+            const files = fs.readdirSync(clientPath);
+            console.log(`📋 Arquivos em ${clientPath}:`, files.slice(0, 10));
+          } catch (e) {
+            console.log(`❌ Erro ao listar ${clientPath}:`, e.message);
+          }
+        }
+      } else {
+        console.log(`❌ Diretório não existe: ${clientPath}`);
+      }
+    } catch (err) {
+      console.log(`❌ Erro ao verificar ${clientPath}:`, err.message);
+    }
+  }
+  
+  console.log('❌ Oracle Client não encontrado em nenhum caminho conhecido');
+  return null;
+}
+
+// Detectar Oracle Client
+const oracleClientPath = findOracleClient();
+
+// Inicializar Oracle Client se encontrado
+let oracleInitialized = false;
+if (oracleClientPath) {
+  try {
+    // Verificar se já foi inicializado
+    if (oracledb.oracleClientVersion) {
+      console.log('ℹ️ Oracle Client já estava inicializado');
+      oracleInitialized = true;
+    } else {
+      console.log(`🔧 Inicializando Oracle Client: ${oracleClientPath}`);
+      oracledb.initOracleClient({
+        libDir: oracleClientPath
+      });
+      console.log('✅ Oracle Client inicializado com sucesso');
+      oracleInitialized = true;
+    }
+  } catch (err) {
+    if (err.message.includes('has already been initialized') || err.message.includes('DPI-1040')) {
+      console.log('ℹ️ Oracle Client já estava inicializado (caught exception)');
+      oracleInitialized = true;
+    } else {
+      console.error('❌ Erro ao inicializar Oracle Client:', err.message);
+      oracleInitialized = false;
+    }
+  }
+} else {
+  console.error('❌ CRÍTICO: Oracle Client não encontrado - backup não funcionará');
+  oracleInitialized = false;
+}
+
 // Configuração do Oracle
 const dbConfig = {
   user: process.env.ORACLE_USER,
@@ -54,6 +133,11 @@ async function updateUserBackup() {
   try {
     console.log('Iniciando atualização do backup de usuários...');
     
+    // Verificar se Oracle Client foi inicializado
+    if (!oracleInitialized) {
+      throw new Error('Oracle Client não foi inicializado corretamente. Verifique a instalação do Oracle Instant Client.');
+    }
+    
     // Garantir que o diretório existe
     await ensureBackupDirectoryExists();
     
@@ -64,8 +148,14 @@ async function updateUserBackup() {
     // Criar um Set de CPFs existentes para verificação rápida
     const existingCPFs = new Set(existingUsers.map(user => user.CPF));
     
-    // Conectar ao Oracle
+    // Debug da configuração de conexão
     console.log('Conectando ao Oracle...');
+    console.log(`Oracle Client Path: ${oracleClientPath}`);
+    console.log(`Oracle Inicializado: ${oracleInitialized}`);
+    console.log(`User: ${dbConfig.user}`);
+    console.log(`Connection String: ${dbConfig.connectString}`);
+    
+    // Conectar ao Oracle
     connection = await oracledb.getConnection(dbConfig);
     console.log('Conexão Oracle estabelecida com sucesso');
     
@@ -144,6 +234,31 @@ async function updateUserBackup() {
     
   } catch (err) {
     console.error('Erro na atualização do backup:', err);
+    
+    // Debug adicional
+    if (err.message.includes('DPI-1047')) {
+      console.error('💡 Diagnóstico do erro DPI-1047:');
+      console.error(`- Oracle Client Path detectado: ${oracleClientPath || 'NENHUM'}`);
+      console.error(`- Oracle Client inicializado: ${oracleInitialized}`);
+      
+      // Verificar se o arquivo existe
+      if (oracleClientPath) {
+        try {
+          const fs = require('fs');
+          const libPath = path.join(oracleClientPath, 'libclntsh.so');
+          const exists = fs.existsSync(libPath);
+          console.error(`- libclntsh.so existe: ${exists ? 'SIM' : 'NÃO'} (${libPath})`);
+          
+          if (exists) {
+            console.error('- O arquivo existe mas não pode ser carregado - problema de dependências');
+            console.error('- Execute: ldd ' + libPath + ' | grep "not found"');
+          }
+        } catch (e) {
+          console.error(`- Erro ao verificar arquivo: ${e.message}`);
+        }
+      }
+    }
+    
     return {
       success: false,
       error: err.message
@@ -164,6 +279,8 @@ async function updateUserBackup() {
 async function runManualUpdate() {
   console.log('=== ATUALIZAÇÃO MANUAL DO BACKUP INICIADA ===');
   console.log(`Horário: ${new Date().toLocaleString('pt-BR')}`);
+  console.log(`Oracle Client Path: ${oracleClientPath || 'NÃO ENCONTRADO'}`);
+  console.log(`Oracle Inicializado: ${oracleInitialized}`);
   
   const result = await updateUserBackup();
   

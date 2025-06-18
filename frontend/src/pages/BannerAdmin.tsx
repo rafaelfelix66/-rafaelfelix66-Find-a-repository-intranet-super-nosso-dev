@@ -265,12 +265,40 @@ const handleSave = async () => {
   
   // Handler para selecionar imagem
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+  if (e.target.files && e.target.files[0]) {
+    const file = e.target.files[0];
+    
+    // Validar tamanho do arquivo
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Arquivo muito grande",
+        description: "A imagem deve ter no máximo 5MB.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Verificar dimensões da imagem
+    const img = new Image();
+    img.onload = () => {
+      const aspectRatio = img.width / img.height;
+      const idealRatio = 3; // 1200/400 = 3
+      
+      if (Math.abs(aspectRatio - idealRatio) > 0.5) {
+        toast({
+          title: "⚠️ Proporção não ideal",
+          description: `Imagem atual: ${img.width}x${img.height} (proporção ${aspectRatio.toFixed(1)}:1). Para melhor resultado, use imagens com proporção 3:1 (ex: 1200x400px).`,
+          variant: "default"
+        });
+      }
+      
       setImage(file);
       setPreviewImage(URL.createObjectURL(file));
-    }
-  };
+    };
+    
+    img.src = URL.createObjectURL(file);
+  }
+};
   
   return (
     <Layout>
@@ -401,6 +429,12 @@ const handleSave = async () => {
                             <div className="mt-1 text-xs text-gray-400">
                               Formato: JPG, PNG, WebP (máx. 5MB)
                             </div>
+							<div className="mt-1 text-xs text-blue-600 font-medium">
+							  📏 Tamanho ideal: 1200x400 pixels (proporção 3:1)
+							</div>
+							<div className="mt-0.5 text-xs text-gray-400">
+							  Imagens com essa proporção evitam cortes indesejados
+							</div>
                           </>
                         )}
                       </div>

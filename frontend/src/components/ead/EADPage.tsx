@@ -38,6 +38,7 @@ import VideoPlayer from './VideoPlayer';
 import CreateCourseDialog from './CreateCourseDialog';
 import CreateLessonDialog from './CreateLessonDialog';
 import AddMaterialDialog from './AddMaterialDialog';
+import EnrolledStudentsDialog from './EnrolledStudentsDialog';
 
 const EADPage = () => {
   const { toast } = useToast();
@@ -54,6 +55,8 @@ const EADPage = () => {
   const [viewMode, setViewMode] = useState('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [showEnrolledStudents, setShowEnrolledStudents] = useState(false);
+  const [selectedCourseForStudents, setSelectedCourseForStudents] = useState(null);
   
   // Estados para criação/edição
   const [showCreateCourse, setShowCreateCourse] = useState(false);
@@ -305,6 +308,13 @@ const LessonAccessGuard = ({ lesson, courseProgress, children }) => {
   
   return children;
 };
+
+// Função para abrir a lista de alunos matriculados
+const handleShowEnrolledStudents = (course) => {
+  setSelectedCourseForStudents(course);
+  setShowEnrolledStudents(true);
+};
+
 
 // Função para obter progresso de uma aula específica
 const getLessonProgress = useCallback((lessonId) => {
@@ -1301,6 +1311,17 @@ const CourseDetailView = () => {
                   <div className="flex items-center gap-1">
                     <Users className="h-4 w-4" />
                     {selectedCourse.enrollmentCount || 0} alunos
+					
+					 {canManageCourses && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleShowEnrolledStudents(selectedCourse)}
+                className="h-6 px-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 border-blue-200"
+              >
+                Ver lista
+              </Button>
+            )}
                   </div>
                 </div>
                 
@@ -1310,7 +1331,7 @@ const CourseDetailView = () => {
                     <span>Seu progresso</span>
                     <span>{selectedCourse.userProgress.progress}%</span>
                   </div>
-                  <Progress value={selectedCourse.userProgress.progress} className="h-2" />
+                  <Progress value={selectedCourse.userProgress.progress} className="h-2 progress-custom" />
                 </div>
               </div>
             </CardContent>
@@ -1387,6 +1408,13 @@ const CourseDetailView = () => {
           </Card>
         </div>
       </div>
+	  <EnrolledStudentsDialog
+        open={showEnrolledStudents}
+        onOpenChange={setShowEnrolledStudents}
+        courseId={selectedCourseForStudents?._id || ''}
+        courseTitle={selectedCourseForStudents?.title || ''}
+        enrollmentCount={selectedCourseForStudents?.enrollmentCount || 0}
+      />
     </div>
   );
 };
@@ -1521,7 +1549,7 @@ const CourseDetailView = () => {
                   {course.userProgress && course.userProgress.progress > 0 && (
                     <div className="absolute bottom-2 left-2 right-2">
                       <div className="bg-white/90 rounded-full p-1">
-                        <Progress value={course.userProgress.progress} className="h-1" />
+                        <Progress value={course.userProgress.progress} className="h-2 progress-custom" />
                       </div>
                     </div>
                   )}
@@ -1632,7 +1660,7 @@ const CourseDetailView = () => {
                           <span>Progresso</span>
                           <span>{Math.round(course.userProgress.progress)}%</span>
                         </div>
-                        <Progress value={course.userProgress.progress} className="h-2" />
+                        <Progress value={course.userProgress.progress} className="h-2 progress-custom" />
                       </div>
                     )}
                   </div>

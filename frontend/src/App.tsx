@@ -25,7 +25,6 @@ import ArticlePage from "./pages/ArticlePage";
 import NewArticlePage from "./pages/NewArticlePage";
 import BannerAdmin from "./pages/BannerAdmin";
 import Unauthorized from "./pages/Unauthorized";
-import Chat from "./pages/Chat";
 import SuperCoinsAdmin from "./pages/SuperCoinsAdmin";
 import Institutional from "./pages/Institutional";
 import UsefulLinksPage from "./pages/UsefulLinksPage";

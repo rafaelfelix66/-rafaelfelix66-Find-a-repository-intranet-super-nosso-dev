@@ -93,12 +93,7 @@ const getEngagementRanking = async (req, res) => {
         }
       },
       {
-        $sort: { totalPoints: -1 }
-      },
-      {
-        $limit: parseInt(limit)
-      },
-      {
+
         $lookup: {
           from: 'users',
           localField: '_id',
@@ -108,6 +103,21 @@ const getEngagementRanking = async (req, res) => {
       },
       {
         $unwind: '$user'
+      },
+      // NOVA ETAPA: Filtrar usuários que NÃO são administradores
+      {
+        $match: {
+          $and: [
+            { 'user.roles': { $not: { $in: ['admin', 'administrator'] } } },
+            { 'user.permissions': { $not: { $in: ['admin:access', 'admin:dashboard'] } } }
+          ]
+        }
+      },
+      {
+        $sort: { totalPoints: -1 }
+      },
+      {
+        $limit: parseInt(limit)
       },
       {
         $project: {

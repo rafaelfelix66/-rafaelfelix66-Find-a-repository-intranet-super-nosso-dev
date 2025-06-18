@@ -255,6 +255,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ lesson, onProgress, onComplet
       className="bg-black rounded-lg overflow-hidden aspect-video relative group"
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
+      onMouseMove={() => setShowControls(true)}
     >
       <video
         ref={videoRef}
@@ -274,8 +275,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ lesson, onProgress, onComplet
       {/* Controls overlay */}
       <div 
         className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black to-transparent p-4 transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0'
+          showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
+        style={{ zIndex: 20 }}
       >
         {/* Progress bar */}
         <div className="mb-4">
@@ -358,11 +360,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ lesson, onProgress, onComplet
 
       {/* Play button overlay for paused state */}
       {!isPlaying && !isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div 
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          style={{ zIndex: 10 }}
+        >
           <Button
             variant="ghost"
             size="icon"
-            className="text-white hover:bg-white/20 w-16 h-16"
+            className="text-white hover:bg-white/20 w-16 h-16 pointer-events-auto"
             onClick={togglePlay}
           >
             <Play className="h-8 w-8" />

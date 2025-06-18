@@ -578,6 +578,15 @@ const getSuperCoinsStats = async (req, res) => {
           preserveNullAndEmptyArrays: true
         }
       },
+      // NOVA ETAPA: Filtrar usuários que NÃO são administradores
+      {
+        $match: {
+          $and: [
+            { 'userDetails.roles': { $not: { $in: ['admin', 'administrator'] } } },
+            { 'userDetails.permissions': { $not: { $in: ['admin:access', 'admin:dashboard'] } } }
+          ]
+        }
+      },
       {
         $project: {
           _id: 0,

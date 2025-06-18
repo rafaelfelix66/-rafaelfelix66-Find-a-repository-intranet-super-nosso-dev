@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const coursesController = require('../controllers/coursesController');
+const { getEnrolledStudents } = require('../controllers/coursesController');
 const auth = require('../middleware/auth');
 const { hasPermission } = require('../middleware/permissions');
 const multer = require('multer');
@@ -164,6 +165,12 @@ router.get('/:courseId/enrollment',
   auth, 
   coursesController.checkEnrollment
 );
+
+// @route   GET /api/courses/:id/enrolled-students
+// @desc    Listar alunos matriculados em um curso
+// @access  Private (Admin ou Instrutor)
+router.get('/:id/enrolled-students', auth, getEnrolledStudents);
+
 
 // @route   GET /api/courses/categories
 // @desc    Obter categorias disponíveis

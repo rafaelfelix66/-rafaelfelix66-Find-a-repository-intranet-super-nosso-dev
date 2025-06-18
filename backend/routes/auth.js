@@ -7,25 +7,13 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { trackLogin } = require('../middleware/trackEngagement');
+const sharp = require('sharp');
 
 // Configuração do multer para upload de avatar
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const avatarsDir = path.join(__dirname, '../uploads/avatars');
-    // Garantir que o diretório existe
-    if (!fs.existsSync(avatarsDir)) {
-      fs.mkdirSync(avatarsDir, { recursive: true });
-    }
-    cb(null, avatarsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueFilename = `${req.usuario.id}-${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueFilename);
-  }
-});
+const storage = multer.memoryStorage(); // Usar memória para processar antes de salvar
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif|webp/;
+  const allowedTypes = /jpeg|jpg|png|webp/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
   const mimetype = allowedTypes.test(file.mimetype);
   
@@ -33,14 +21,52 @@ const fileFilter = (req, file, cb) => {
     return cb(null, true);
   }
   
-  cb(new Error('Apenas imagens são permitidas'), false);
+  cb(new Error('Apenas imagens JPG, PNG ou WebP são permitidas'), false);
 };
 
 const upload = multer({ 
   storage, 
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+  limits: { fileSize: 2 * 1024 * 1024 } // Reduzido para 2MB
 });
+
+// Middleware para processar imagem
+const processAvatar = async (req, res, next) => {
+  if (!req.file) return next();
+  
+  try {
+    const avatarsDir = path.join(__dirname, '../uploads/avatars');
+    if (!fs.existsSync(avatarsDir)) {
+      fs.mkdirSync(avatarsDir, { recursive: true });
+    }
+    
+    const filename = `${req.usuario.id}-${Date.now()}.webp`;
+    const filepath = path.join(avatarsDir, filename);
+    
+    // Processar imagem com Sharp
+    await sharp(req.file.buffer)
+      .resize(400, 400, {
+        fit: 'cover',
+        position: 'center'
+      })
+      .webp({ quality: 85 })
+      .toFile(filepath);
+    
+    // Adicionar informações do arquivo processado ao req
+    req.processedFile = {
+      filename,
+      path: `/uploads/avatars/${filename}`
+    };
+    
+    next();
+  } catch (error) {
+    console.error('Erro ao processar avatar:', error);
+    return res.status(500).json({ 
+      mensagem: 'Erro ao processar imagem',
+      detalhes: 'A imagem deve estar em um formato válido (JPG, PNG, WebP)'
+    });
+  }
+};
 
 // @route   POST api/auth/register
 // @desc    Registrar usuário
@@ -88,12 +114,15 @@ router.get('/user', verificarToken, async (req, res) => {
 // @route   POST api/auth/avatar
 // @desc    Upload de avatar do usuário
 // @access  Private
-router.post('/avatar', verificarToken, upload.single('avatar'), async (req, res) => {
+router.post('/avatar', verificarToken, upload.single('avatar'), processAvatar, async (req, res) => {
   const { User } = require('../models');
   
   try {
-    if (!req.file) {
-      return res.status(400).json({ mensagem: 'Nenhuma imagem enviada' });
+    if (!req.processedFile) {
+      return res.status(400).json({ 
+        mensagem: 'Nenhuma imagem enviada ou erro no processamento',
+        dica: 'Use imagens em formato JPG, PNG ou WebP com até 2MB'
+      });
     }
     
     const user = await User.findById(req.usuario.id);
@@ -110,12 +139,17 @@ router.post('/avatar', verificarToken, upload.single('avatar'), async (req, res)
     }
     
     // Atualizar o caminho do avatar
-    user.avatar = `/uploads/avatars/${req.file.filename}`;
+    user.avatar = req.processedFile.path;
     await user.save();
     
     res.json({
       mensagem: 'Avatar atualizado com sucesso',
-      avatar: user.avatar
+      avatar: user.avatar,
+      dicas: {
+        formato: 'Imagem otimizada para 400x400px',
+        qualidade: 'Compressão WebP aplicada',
+        tamanho: 'Arquivo reduzido automaticamente'
+      }
     });
   } catch (err) {
     console.error('Erro ao fazer upload do avatar:', err);

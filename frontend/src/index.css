@@ -448,23 +448,12 @@ html, body {
   background-color: #ef4444;
 }
 
-.chat-messages-container {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scroll-behavior: smooth;
-  position: relative;
+/* Barra de progresso com melhor contraste */
+.progress-custom {
+  background-color: white;
+  border: 1px solid #e5e7eb; /* cinza claro */
 }
 
-/* Indicador visual quando auto-scroll está pausado */
-.scroll-paused-indicator {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: rgba(239, 68, 68, 0.9);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  z-index: 10;
+.progress-custom > div {
+  background-color: #dc2626; /* vermelho */
 }

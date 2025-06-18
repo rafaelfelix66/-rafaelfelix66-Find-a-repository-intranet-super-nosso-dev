@@ -68,11 +68,13 @@ export default function Institutional() {
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [draggedOver, setDraggedOver] = useState<string | null>(null);
   
+  type LayoutType = 'small' | 'medium' | 'large';
+  
   // Estados do formulário
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    layout: 'small' as 'small' | 'large',
+    layout: 'small' as LayoutType,
     attachmentType: 'image' as 'image' | 'document' | 'video' | 'youtube',
     linkUrl: '',
     linkType: 'internal' as 'internal' | 'external',
@@ -380,175 +382,161 @@ export default function Institutional() {
   
   // Renderizar conteúdo baseado no tipo
   const renderContent = (area: InstitutionalArea) => {
-    const handleClick = (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      if (area.linkUrl) {
-        if (area.linkType === 'external') {
-          // Garantir que URLs externas tenham protocolo
-          let url = area.linkUrl;
-          if (!url.startsWith('http://') && !url.startsWith('https://')) {
-            url = 'https://' + url;
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (area.linkUrl) {
+      if (area.linkType === 'external') {
+        let url = area.linkUrl;
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          url = 'https://' + url;
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        try {
+          const isValidRoute = area.linkUrl.startsWith('/') || 
+                              area.linkUrl.startsWith('#') ||
+                              !area.linkUrl.includes('://');
+                              
+          if (isValidRoute) {
+            navigate(area.linkUrl);
+          } else {
+            window.open(area.linkUrl, '_blank', 'noopener,noreferrer');
           }
-          window.open(url, '_blank', 'noopener,noreferrer');
-        } else {
-          // Para links internos, usar navigate do React Router
-          // Isso preserva o estado de autenticação e o contexto da aplicação
-          try {
-            // Verificar se é uma rota válida da aplicação
-            const isValidRoute = area.linkUrl.startsWith('/') || 
-                                area.linkUrl.startsWith('#') ||
-                                !area.linkUrl.includes('://');
-                                
-            if (isValidRoute) {
-              navigate(area.linkUrl);
-            } else {
-              // Se não for uma rota válida, tratar como externa
-              window.open(area.linkUrl, '_blank', 'noopener,noreferrer');
-            }
-          } catch (error) {
-            console.error('Erro ao navegar:', error);
-            toast({
-              title: "Erro de Navegação",
-              description: "Não foi possível acessar o link solicitado",
-              variant: "destructive"
-            });
-          }
+        } catch (error) {
+          console.error('Erro ao navegar:', error);
+          toast({
+            title: "Erro de Navegação",
+            description: "Não foi possível acessar o link solicitado",
+            variant: "destructive"
+          });
         }
       }
-    };
-    
-    const content = (
-      <div className={cn(
-        "relative group w-full h-full",
-        area.linkUrl && "cursor-pointer hover:opacity-90 transition-opacity"
-      )} onClick={area.linkUrl ? handleClick : undefined}>
-        {area.attachmentType === 'image' && (
+    }
+  };
+  
+  const content = (
+    <div className={cn(
+      "relative group w-full h-full",
+      area.linkUrl && "cursor-pointer hover:opacity-90 transition-opacity"
+    )} onClick={area.linkUrl ? handleClick : undefined}>
+      
+      {/* Renderização de imagens */}
+      {area.attachmentType === 'image' && (
+        <div className="relative w-full h-full overflow-hidden">
           <img 
             src={area.attachmentUrl} 
             alt={area.title}
             className="w-full h-full object-cover"
-            loading="lazy"
           />
-        )}
-        
-        {area.attachmentType === 'youtube' && area.youtubeVideoId && (
-          <div className="relative w-full h-full group">
-            <iframe
-              className="w-full h-full"
-              src={`https://www.youtube.com/embed/${area.youtubeVideoId}?rel=0&enablejsapi=1`}
-              title={area.title}
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-            
-            {/* Overlay para YouTube que só aparece quando não está reproduzindo */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                 style={{ padding: area.layout === 'small' ? '1.5rem' : '2rem' }}>  {/* ← AJUSTE do padding */}
-              <h3 className={cn(
-                "text-white font-semibold mb-2",
-                area.layout === 'small' ? "text-lg" : "text-2xl"  // ← AJUSTE do título
-              )}>{area.title}</h3>
-              {area.description && (
-                <p className={cn(
-                  "text-white/90 leading-relaxed",
-                  area.layout === 'small' ? "text-sm" : "text-base"  // ← AJUSTE da descrição
-                )}>{area.description}</p>
-              )}
-            </div>
+        </div>
+      )}
+
+      {/* Renderização de vídeos do YouTube */}
+      {area.attachmentType === 'youtube' && area.youtubeVideoId && (
+        <div className="relative w-full h-full">
+          <iframe
+            src={`https://www.youtube.com/embed/${area.youtubeVideoId}`}
+            title={area.title}
+            className="w-full h-full"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+          
+          {/* Overlay para vídeos do YouTube */}
+          <div 
+            className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
+            style={{ 
+              padding: area.layout === 'small' ? '1rem' : 
+                      area.layout === 'medium' ? '1.25rem' : '1.5rem',
+              maxHeight: '40%'
+            }}
+          >
+            <h3 className={cn(
+              "text-white font-semibold mb-1 drop-shadow-lg",
+              area.layout === 'small' ? "text-base" : 
+              area.layout === 'medium' ? "text-lg" : "text-xl"
+            )}>{area.title}</h3>
+            {area.description && (
+              <p className={cn(
+                "text-white/90 leading-relaxed drop-shadow-md line-clamp-2",
+                area.layout === 'small' ? "text-xs" : 
+                area.layout === 'medium' ? "text-sm" : "text-sm"
+              )}>{area.description}</p>
+            )}
           </div>
-        )}
-        
-        {area.attachmentType === 'video' && (
-          <div className="relative w-full h-full group/video">
-            <video 
-              className="w-full h-full object-cover"
-              controls
-              src={area.attachmentUrl}
-              preload="metadata"
-            >
-              Seu navegador não suporta vídeos.
-            </video>
-            
-            {/* Overlay que desaparece rapidamente quando não está em hover */}
-            <div 
-              className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 via-black/30 to-transparent opacity-0 group-hover/video:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
-              style={{ 
-                padding: area.layout === 'small' ? '1rem' : '1.5rem',
-                maxHeight: '40%' // Limita a altura do overlay
-              }}
-            >
-              <h3 className={cn(
-                "text-white font-semibold mb-1 drop-shadow-lg",
-                area.layout === 'small' ? "text-base" : "text-xl"
-              )}>{area.title}</h3>
-              {area.description && (
-                <p className={cn(
-                  "text-white/90 leading-relaxed drop-shadow-md line-clamp-2", // Limita a 2 linhas
-                  area.layout === 'small' ? "text-xs" : "text-sm"
-                )}>{area.description}</p>
-              )}
-            </div>
+        </div>
+      )}
+
+      {/* Renderização de vídeos locais */}
+      {area.attachmentType === 'video' && (
+        <div className="relative w-full h-full">
+          <video 
+            className="w-full h-full object-cover"
+            controls
+            poster={area.thumbnailUrl}
+          >
+            <source src={area.attachmentUrl} type="video/mp4" />
+            Seu navegador não suporta o elemento de vídeo.
+          </video>
+          
+          {/* Overlay para vídeos locais */}
+          <div 
+            className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
+            style={{ 
+              padding: area.layout === 'small' ? '1rem' : 
+                      area.layout === 'medium' ? '1.25rem' : '1.5rem',
+              maxHeight: '40%'
+            }}
+          >
+            <h3 className={cn(
+              "text-white font-semibold mb-1 drop-shadow-lg",
+              area.layout === 'small' ? "text-base" : 
+              area.layout === 'medium' ? "text-lg" : "text-xl"
+            )}>{area.title}</h3>
+            {area.description && (
+              <p className={cn(
+                "text-white/90 leading-relaxed drop-shadow-md line-clamp-2",
+                area.layout === 'small' ? "text-xs" : 
+                area.layout === 'medium' ? "text-sm" : "text-sm"
+              )}>{area.description}</p>
+            )}
           </div>
-        )}
-        
-        {area.attachmentType === 'document' && (
-          <div className="flex flex-col items-center justify-center h-full p-6 bg-gradient-to-br from-gray-50 to-gray-100">
-            {/* Preview do documento como iframe (primeira página) */}
-            {area.attachmentUrl.endsWith('.pdf') ? (
-              <div className="w-full h-full flex flex-col">
-                <iframe
-                  src={`${area.attachmentUrl}#page=1&view=fitH&toolbar=0&navpanes=0&scrollbar=0`}
-                  className="flex-1 w-full border-0 bg-white rounded-lg shadow-inner"
-                  style={{ minHeight: area.layout === 'small' ? '350px' : '450px' }} // ← AJUSTE AQUI baseado no layout
-                  title={area.title}
-                />
-                <div className="mt-4 text-center flex-shrink-0">
-                  <h3 className={cn(
-                    "font-medium mb-2",
-                    area.layout === 'small' ? "text-lg" : "text-xl"  // ← AJUSTE do título baseado no tamanho
-                  )}>{area.title}</h3>
-                  {area.description && (
-                    <p className={cn(
-                      "text-gray-600 mb-3",
-                      area.layout === 'small' ? "text-sm" : "text-base"  // ← AJUSTE da descrição
-                    )}>{area.description}</p>
-                  )}
-                  <Button 
-                    size={area.layout === 'small' ? "sm" : "default"}  // ← AJUSTE do botão
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.open(area.attachmentUrl, '_blank');
-                    }}
-                  >
-                    <FileText className={cn(
-                      "mr-2",
-                      area.layout === 'small' ? "h-4 w-4" : "h-5 w-5"  // ← AJUSTE do ícone
-                    )} />
-                    Abrir Documento
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <FileText className={cn(
-                  "text-gray-400 mb-6",
-                  area.layout === 'small' ? "h-24 w-24" : "h-32 w-32"  // ← AJUSTE do ícone baseado no tamanho
-                )} />
+        </div>
+      )}
+
+      {/* Renderização de documentos */}
+      {area.attachmentType === 'document' && (
+        <div className="flex flex-col items-center justify-center h-full p-6 bg-gradient-to-br from-gray-50 to-gray-100">
+          {area.attachmentUrl.endsWith('.pdf') ? (
+            <div className="w-full h-full flex flex-col">
+              <iframe
+                src={`${area.attachmentUrl}#page=1&view=fitH&toolbar=0&navpanes=0&scrollbar=0`}
+                className="flex-1 w-full border-0 bg-white rounded-lg shadow-inner"
+                style={{ 
+                  minHeight: area.layout === 'small' ? '300px' : 
+                            area.layout === 'medium' ? '180px' : '400px'
+                }}
+                title={area.title}
+              />
+              <div className="mt-4 text-center flex-shrink-0">
                 <h3 className={cn(
-                  "font-medium text-center mb-3",
-                  area.layout === 'small' ? "text-xl" : "text-2xl"  // ← AJUSTE do título
+                  "font-medium mb-2",
+                  area.layout === 'small' ? "text-lg" : 
+                  area.layout === 'medium' ? "text-lg" : "text-xl"
                 )}>{area.title}</h3>
                 {area.description && (
                   <p className={cn(
-                    "text-gray-600 text-center mb-6",
-                    area.layout === 'small' ? "text-sm" : "text-base"  // ← AJUSTE da descrição
+                    "text-gray-600 mb-3",
+                    area.layout === 'small' ? "text-sm" : 
+                    area.layout === 'medium' ? "text-sm" : "text-base"
                   )}>{area.description}</p>
                 )}
                 <Button 
-                  size={area.layout === 'small' ? "default" : "lg"}  // ← AJUSTE do botão
+                  size={area.layout === 'small' ? "sm" : 
+                       area.layout === 'medium' ? "sm" : "default"}
                   onClick={(e) => {
                     e.stopPropagation();
                     window.open(area.attachmentUrl, '_blank');
@@ -556,48 +544,86 @@ export default function Institutional() {
                 >
                   <FileText className={cn(
                     "mr-2",
-                    area.layout === 'small' ? "h-4 w-4" : "h-5 w-5"  // ← AJUSTE do ícone
+                    area.layout === 'small' ? "h-4 w-4" : "h-4 w-4"
                   )} />
-                  Visualizar Documento
+                  Abrir Documento
                 </Button>
-              </>
-            )}
-          </div>
-        )}
-        
-        {/* Overlay com título e descrição para imagens - com hover mais responsivo */}
-        {area.attachmentType !== 'document' && area.attachmentType !== 'video' && area.attachmentType !== 'youtube' && (
-          <div 
-            className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
-            style={{ 
-              padding: area.layout === 'small' ? '1rem' : '1.5rem',
-              maxHeight: '40%' // Limita a altura do overlay
-            }}
-          >
-            <h3 className={cn(
-              "text-white font-semibold mb-1 drop-shadow-lg",
-              area.layout === 'small' ? "text-base" : "text-xl"
-            )}>{area.title}</h3>
-            {area.description && (
-              <p className={cn(
-                "text-white/90 leading-relaxed drop-shadow-md line-clamp-3", // Limita a 3 linhas para imagens
-                area.layout === 'small' ? "text-xs" : "text-sm"
-              )}>{area.description}</p>
-            )}
-          </div>
-        )}
-        
-        {/* Indicador de link - mantido no canto superior direito */}
-        {area.linkUrl && (
-          <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10">
-            <ExternalLink className="h-5 w-5 text-gray-700" />
-          </div>
-        )}
-      </div>
-    );
-    
-    return content;
-  };
+              </div>
+            </div>
+          ) : (
+            <>
+              <FileText className={cn(
+                "text-gray-400 mb-6",
+                area.layout === 'small' ? "h-16 w-16" : 
+                area.layout === 'medium' ? "h-20 w-20" : "h-24 w-24"
+              )} />
+              <h3 className={cn(
+                "font-medium text-center mb-3",
+                area.layout === 'small' ? "text-lg" : 
+                area.layout === 'medium' ? "text-xl" : "text-2xl"
+              )}>{area.title}</h3>
+              {area.description && (
+                <p className={cn(
+                  "text-gray-600 text-center mb-6",
+                  area.layout === 'small' ? "text-sm" : 
+                  area.layout === 'medium' ? "text-sm" : "text-base"
+                )}>{area.description}</p>
+              )}
+              <Button 
+                size={area.layout === 'small' ? "default" : 
+                     area.layout === 'medium' ? "default" : "lg"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(area.attachmentUrl, '_blank');
+                }}
+              >
+                <FileText className={cn(
+                  "mr-2",
+                  area.layout === 'small' ? "h-4 w-4" : "h-5 w-5"
+                )} />
+                Visualizar Documento
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Overlay com título e descrição para imagens - com hover mais responsivo */}
+      {area.attachmentType === 'image' && (
+        <div 
+          className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10"
+          style={{ 
+            padding: area.layout === 'small' ? '1rem' : 
+                    area.layout === 'medium' ? '1.25rem' : '1.5rem',
+            maxHeight: '40%'
+          }}
+        >
+          <h3 className={cn(
+            "text-white font-semibold mb-1 drop-shadow-lg",
+            area.layout === 'small' ? "text-base" : 
+            area.layout === 'medium' ? "text-lg" : "text-xl"
+          )}>{area.title}</h3>
+          {area.description && (
+            <p className={cn(
+              "text-white/90 leading-relaxed drop-shadow-md line-clamp-3",
+              area.layout === 'small' ? "text-xs" : 
+              area.layout === 'medium' ? "text-sm" : "text-sm"
+            )}>{area.description}</p>
+          )}
+        </div>
+      )}
+      
+      {/* Indicador de link - mantido no canto superior direito */}
+      {area.linkUrl && (
+        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10">
+          <ExternalLink className="h-5 w-5 text-gray-700" />
+        </div>
+      )}
+    </div>
+  );
+  
+  return content;
+};
   
   // Obter ícone baseado no tipo
   const getTypeIcon = (type: string) => {
@@ -641,7 +667,7 @@ export default function Institutional() {
                 key={area._id} 
                 className={cn(
                   "overflow-hidden transition-all duration-200",
-                  area.layout === 'large' && "col-span-2",
+                  (area.layout === 'large' || area.layout === 'medium') && "col-span-2",
                   !area.active && "opacity-60",
                   canManage && "cursor-move",
                   draggedOver === area._id && "ring-2 ring-blue-500",
@@ -691,8 +717,11 @@ export default function Institutional() {
                 )}
                 <CardContent className={cn(
                   "p-0",
-                  area.layout === 'small' ? "h-[500px]" : "h-[600px]"  // Aumentado: small=500px, large=600px
+					area.layout === 'small' ? "h-[500px]" : 
+					area.layout === 'medium' ? "h-[200px]" :  // 1/3 de 600px
+					"h-[600px]"  // large
                 )}>
+				
                   {renderContent(area)}
                 </CardContent>
               </Card>
@@ -729,13 +758,14 @@ export default function Institutional() {
                   <Label htmlFor="layout">Layout *</Label>
                   <Select 
                     value={formData.layout} 
-                    onValueChange={(value: 'small' | 'large') => setFormData({ ...formData, layout: value })}
+                    onValueChange={(value: LayoutType) => setFormData({ ...formData, layout: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="small">Pequeno (1 coluna)</SelectItem>
+					  <SelectItem value="medium">Médio (2 colunas, altura reduzida)</SelectItem>
                       <SelectItem value="large">Grande (2 colunas)</SelectItem>
                     </SelectContent>
                   </Select>

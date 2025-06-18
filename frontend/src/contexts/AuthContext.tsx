@@ -89,7 +89,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.warn('Falha ao pré-carregar eventos:', err)
       );
       
-      console.log('Serviços inicializados para o usuário:', userId);
+      //console.log('Serviços inicializados para o usuário:', userId);
     } catch (error) {
       console.error('Erro ao inicializar serviços:', error);
     }
@@ -128,9 +128,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             
             setUser(userData);
 			
-			console.log('DEBUG AUTH - Dados completos do usuário:', userData);
-			console.log('DEBUG AUTH - Departamento:', userData?.departamento);
-			console.log('DEBUG AUTH - Todas as propriedades:', Object.keys(userData || {}));
+			//console.log('DEBUG AUTH - Dados completos do usuário:', userData);
+			//console.log('DEBUG AUTH - Departamento:', userData?.departamento);
+			//console.log('DEBUG AUTH - Todas as propriedades:', Object.keys(userData || {}));
             
             if (userData.id) {
               localStorage.setItem('userId', userData.id);

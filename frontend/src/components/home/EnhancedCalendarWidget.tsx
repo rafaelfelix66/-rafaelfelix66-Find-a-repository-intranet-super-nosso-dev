@@ -26,6 +26,7 @@ import { Link } from "react-router-dom";
 import { format, parse, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import DepartamentoSelector from "@/components/timeline/DepartamentoSelector";
 
 // Interface para eventos do calendário
 interface Event {
@@ -36,6 +37,7 @@ interface Event {
   description?: string;
   postId?: string;
   createdAt?: string;
+  departamento?: string[];
 }
 
 export function EnhancedCalendarWidget() {
@@ -53,6 +55,7 @@ export function EnhancedCalendarWidget() {
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [date, setDate] = useState<Date | undefined>(new Date());
+  const [selectedDepartments, setSelectedDepartments] = useState(['TODOS']);
   
   const DAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const MONTHS = [
@@ -153,6 +156,8 @@ const fetchEvents = async () => {
   setIsLoading(true);
   try {
     console.log("EnhancedCalendarWidget: Buscando posts da timeline...");
+    console.log("Departamentos selecionados para filtro:", selectedDepartments);
+    
     // Fazendo a chamada ao backend para buscar os eventos
     const response = await api.get('/timeline');
     
@@ -164,6 +169,20 @@ const fetchEvents = async () => {
       
       // Iterar sobre cada post recebido
       response.forEach(post => {
+        // NOVO: Filtrar por departamento antes de processar
+      const shouldIncludePost = selectedDepartments.includes('TODOS') || 
+          !post.departamentoVisibilidade || 
+          post.departamentoVisibilidade.some(dept => 
+            selectedDepartments.includes(dept) || dept === 'TODOS'
+          );
+        if (!shouldIncludePost) {
+          console.log(`Post ${post._id} filtrado por departamento:`, {
+            postDepartments: post.departamentoVisibilidade,
+            selectedDepartments
+          });
+          return; // Pular este post
+        }
+        
         // 1. Verificar se o post tem eventData
         if (post.eventData && typeof post.eventData === 'object') {
           console.log(`Post ${post._id} tem eventData:`, post.eventData);
@@ -180,7 +199,8 @@ const fetchEvents = async () => {
                 location: post.eventData.location || '',
                 description: post.text || '',
                 postId: post._id,
-                createdAt: post.createdAt
+                createdAt: post.createdAt,
+                departamento: post.departamentoVisibilidade || ['TODOS'] // NOVO: Incluir info do departamento
               });
               
               console.log(`Evento extraído do eventData: ${post.eventData.title}`);
@@ -207,7 +227,8 @@ const fetchEvents = async () => {
               location: 'Localização não especificada',
               description: post.text || '',
               postId: post._id,
-              createdAt: post.createdAt
+              createdAt: post.createdAt,
+              departamento: post.departamentoVisibilidade || ['TODOS'] // NOVO: Incluir info do departamento
             });
             
             console.log(`Evento temporário criado para post recente: ${post._id}`);
@@ -233,7 +254,8 @@ const fetchEvents = async () => {
                 location: eventLocation.trim(),
                 description: post.text || '',
                 postId: post._id,
-                createdAt: post.createdAt
+                createdAt: post.createdAt,
+                departamento: post.departamentoVisibilidade || ['TODOS'] // NOVO: Incluir info do departamento
               });
               
               console.log(`Evento extraído do texto: ${eventTitle.trim()}`);
@@ -247,12 +269,13 @@ const fetchEvents = async () => {
       // Ordenar eventos por data
       timelineEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       
-      console.log(`Encontrados ${timelineEvents.length} eventos na timeline`);
+      console.log(`Encontrados ${timelineEvents.length} eventos na timeline após filtro de departamento`);
       
       // Depurar cada evento encontrado
       timelineEvents.forEach(event => {
         console.log(`Evento: ${event.title}`);
         console.log(`- Data: ${event.date.toISOString()}`);
+        console.log(`- Departamento: ${event.departamento?.join(', ')}`);
         console.log(`- Dia: ${event.date.getDate()}, Mês: ${event.date.getMonth() + 1}, Ano: ${event.date.getFullYear()}`);
       });
       
@@ -287,6 +310,13 @@ const fetchEvents = async () => {
   useEffect(() => {
     console.log(`Estado de eventos atualizado: ${events.length} eventos`);
   }, [events]);
+  
+  // Recarregar eventos quando o filtro de departamento mudar
+	useEffect(() => {
+	  if (selectedDepartments.length > 0) {
+		fetchEvents();
+	  }
+	}, [selectedDepartments]);
   
   // Formatador de data para exibição
   const formatEventDate = (date: Date): string => {
@@ -468,14 +498,16 @@ const fetchEvents = async () => {
         date: formatEventDate(date),
         location: location.trim()
       };
+	   // Criar post com evento - isso salva no banco de dados
+	  // NOVO: Preparar dados do post com departamento
+	const postData = {
+      text: description || '',
+      eventData: eventData,
+      departamentoVisibilidade: selectedDepartments // NOVO: Incluir departamentos selecionados
+      };
       
       console.log("Enviando evento para o banco de dados:", eventData);
       
-      // Criar post com evento - isso salva no banco de dados
-      const postData = {
-        text: description || '',
-        eventData: eventData
-      };
       
       // Enviar para a API e salvar no banco de dados
       const response = await api.post('/timeline', postData);
@@ -494,7 +526,8 @@ const fetchEvents = async () => {
         location: location.trim(),
         description: description,
         postId: response._id,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        departamento: selectedDepartments
       };
       
       setEvents(prevEvents => [newEvent, ...prevEvents]);
@@ -525,7 +558,7 @@ const fetchEvents = async () => {
   
   return (
     <Card>
-      <CardHeader className="pb-3">
+            <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl">Calendário</CardTitle>
           <div className="flex space-x-1">
@@ -706,6 +739,13 @@ const fetchEvents = async () => {
                 rows={3}
               />
             </div>
+			
+			 <div className="grid gap-2">
+			  <Label>Departamentos que podem visualizar</Label>
+			  <DepartamentoSelector 
+				onChange={setSelectedDepartments}
+			  />
+			</div>
           </div>
           
           <DialogFooter>

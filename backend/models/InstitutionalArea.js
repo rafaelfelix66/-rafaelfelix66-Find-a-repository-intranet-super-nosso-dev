@@ -13,7 +13,7 @@ const InstitutionalAreaSchema = new mongoose.Schema({
   },
   layout: {
     type: String,
-    enum: ['small', 'large'], // small = 1 coluna, large = 2 colunas
+    enum: ['small','medium', 'large'], // small = 1 coluna, large = 2 colunas
     required: true
   },
   attachmentType: {

@@ -38,35 +38,54 @@ export default function Settings() {
     if (!file) return;
     
     // Validar tamanho
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > 2 * 1024 * 1024) {
       toast({
         title: "Arquivo muito grande",
-        description: "O arquivo deve ter no máximo 5MB.",
+        description: "O arquivo deve ter no máximo 2MB. Dica: Use imagens 400x400px.",
         variant: "destructive"
       });
       return;
     }
     
     // Validar tipo
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       toast({
         title: "Tipo inválido",
-        description: "Apenas imagens JPG, PNG, GIF e WebP são permitidas.",
+        description: "Apenas imagens JPG, PNG e WebP são permitidas.",
         variant: "destructive"
       });
       return;
     }
+	
+	// Validar dimensões (opcional - verificação no cliente)
+  const img = new Image();
+  img.onload = () => {
+    const aspectRatio = img.width / img.height;
+    if (aspectRatio < 0.8 || aspectRatio > 1.25) {
+      toast({
+        title: "Proporção inadequada",
+        description: "Use imagens próximas ao formato quadrado (1:1) para melhor resultado.",
+        variant: "destructive"
+      });
+    }
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
     
     try {
-      setIsLoading(true);
-      await uploadAvatar(file);
-    } catch (error) {
-      // Erro já tratado no contexto
-    } finally {
-      setIsLoading(false);
-    }
-  };
+		setIsLoading(true);
+		await uploadAvatar(file);
+		toast({
+		  title: "Avatar atualizado!",
+		  description: "Sua foto foi otimizada automaticamente.",
+		});
+	  } catch (error) {
+		// Erro já tratado no contexto
+	  } finally {
+		setIsLoading(false);
+	  }
+	};
   
   const handleRemoveAvatar = async () => {
     if (!confirm("Tem certeza que deseja remover sua foto de perfil?")) return;
@@ -167,6 +186,19 @@ export default function Settings() {
                   onChange={handleAvatarChange}
                 />
                 
+				 {/* Instruções para Upload de Avatar */}
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2 flex items-center gap-2">
+                    📸 Dicas para uma foto perfeita
+                  </h4>
+                  <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                    <p><strong>📐 Tamanho ideal:</strong> 400x400px (formato quadrado)</p>
+                    <p><strong>📁 Formatos aceitos:</strong> JPG, PNG, WebP</p>
+                    <p><strong>💾 Tamanho máximo:</strong> 2MB</p>
+                    <p><strong>💡 Dica importante:</strong> Imagens quadradas evitam distorção!</p>
+                  </div>
+                </div>
+				
                 {/* Informações pessoais */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">

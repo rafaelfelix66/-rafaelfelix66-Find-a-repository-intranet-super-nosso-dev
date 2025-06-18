@@ -14,23 +14,23 @@ export const usePermission = (): UsePermissionResult => {
   
   // Debug - remova em produção
   // console.log('usePermission hook - user:', user);
-  console.log('usePermission - Usuário:', user);
-  console.log('usePermission - Roles:', user?.roles);
-  console.log('usePermission - Permissions:', user?.permissions);
+  //console.log('usePermission - Usuário:', user);
+  //console.log('usePermission - Roles:', user?.roles);
+  //console.log('usePermission - Permissions:', user?.permissions);
   
   // Verificar uma permissão específica
   const hasPermission = (permission: string): boolean => {
-  console.log(`Verificando permissão: ${permission}`);
+  //console.log(`Verificando permissão: ${permission}`);
     // Se não há usuário, não tem permissão
     if (!user) {
-      console.log('Sem usuário - acesso negado');
+      //console.log('Sem usuário - acesso negado');
       return false;
     }
     
     // Log para depuração - remova em produção
-     console.log(`Verificando permissão '${permission}' para usuário:`, user.name);
-     console.log('Roles do usuário:', user.roles);
-     console.log('Permissions do usuário:', user.permissions);
+     //console.log(`Verificando permissão '${permission}' para usuário:`, user.name);
+     //console.log('Roles do usuário:', user.roles);
+     //console.log('Permissions do usuário:', user.permissions);
     
     // Caso especial: considere 'admin' como tendo todas as permissões
     if (user.roles?.includes('admin')) {
@@ -42,8 +42,8 @@ export const usePermission = (): UsePermissionResult => {
     const hasDirectPermission = user.permissions?.includes(permission) || false;
 	const hasRolePermission = user.roles?.includes('admin') || false;
 	
-	console.log('Permissão direta:', hasDirectPermission);
-    console.log('Usuário é admin:', hasRolePermission);
+	//console.log('Permissão direta:', hasDirectPermission);
+    //console.log('Usuário é admin:', hasRolePermission);
     
     // Para debug - remova em produção
      if (hasDirectPermission) {

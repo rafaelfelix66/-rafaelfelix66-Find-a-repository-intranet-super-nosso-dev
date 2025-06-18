@@ -105,23 +105,30 @@ const getCourses = async (req, res) => {
     });
     
     // Adicionar informações de progresso aos cursos
-    const coursesWithProgress = courses.map(course => {
-      const progress = progressMap[course._id.toString()];
-      
-      return {
-        ...course,
-        enrollmentCount: course.enrollmentCount || 0,
-        userProgress: progress ? {
-          progress: progress.progress,
-          status: progress.status,
-          lastAccessedAt: progress.lastAccessedAt,
-          enrolledAt: progress.enrolledAt
-        } : null,
-        lessonsCount: course.lessons ? course.lessons.length : 0,
-        estimatedDurationMinutes: course.estimatedDuration ? 
-          parseInt(course.estimatedDuration.replace(/\D/g, '')) * 60 : 0
-      };
-    });
+	const coursesWithProgress = await Promise.all(
+	  courses.map(async (course) => {
+		// Contar matrículas reais na tabela CourseProgress
+		const realEnrollmentCount = await CourseProgress.countDocuments({
+		  courseId: course._id
+		});
+		
+		const progress = progressMap[course._id.toString()];
+		
+		return {
+		  ...course,
+		  enrollmentCount: realEnrollmentCount, // Usar contador real
+		  userProgress: progress ? {
+			progress: progress.progress,
+			status: progress.status,
+			lastAccessedAt: progress.lastAccessedAt,
+			enrolledAt: progress.enrolledAt
+		  } : null,
+		  lessonsCount: course.lessons ? course.lessons.length : 0,
+		  estimatedDurationMinutes: course.estimatedDuration ? 
+			parseInt(course.estimatedDuration.replace(/\D/g, '')) * 60 : 0
+		};
+	  })
+	);
     
     // Contar total para paginação
     const total = await Course.countDocuments(filters);
@@ -188,8 +195,13 @@ const getCourse = async (req, res) => {
     
     console.log('Course access granted, progress found:', !!userProgress);
     
+	const realEnrollmentCount = await CourseProgress.countDocuments({
+		  courseId: courseId
+		});
+	
     res.json({
       ...course,
+	  enrollmentCount: realEnrollmentCount,
       userProgress: userProgress ? {
         progress: userProgress.progress,
         status: userProgress.status,
@@ -772,6 +784,97 @@ const updateCourse = async (req, res) => {
   }
 };
 
+// @desc    Obter lista de alunos matriculados em um curso
+// @route   GET /api/courses/:id/enrolled-students
+// @access  Private (Admin ou Instrutor)
+const getEnrolledStudents = async (req, res) => {
+  try {
+    const courseId = req.params.id;
+    const { page = 1, limit = 50 } = req.query;
+    
+    console.log('=== GET ENROLLED STUDENTS ===');
+    console.log('Course ID:', courseId);
+    console.log('User ID:', req.usuario.id);
+    
+    // Verificar se o curso existe
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ msg: 'Curso não encontrado' });
+    }
+    
+    // Verificar se o usuário tem permissão para ver a lista
+    const user = await User.findById(req.usuario.id);
+    const isAdmin = user?.roles?.includes('admin') || false;
+    const isInstructor = course.instructor && course.instructor.toString() === req.usuario.id;
+    
+    if (!isAdmin && !isInstructor) {
+      return res.status(403).json({ msg: 'Acesso negado. Apenas administradores ou instrutores podem ver a lista de alunos.' });
+    }
+    
+    // Configurar paginação
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Buscar progresso de todos os usuários matriculados no curso
+    const enrolledStudents = await CourseProgress.find({
+      courseId: courseId
+    })
+    .populate({
+      path: 'userId',
+      select: 'nome email departamento avatar createdAt',
+      model: 'User'
+    })
+    .sort({ enrolledAt: -1 })
+    .skip(skip)
+    .limit(parseInt(limit))
+    .lean();
+    
+    // Contar total de matriculados
+    const totalEnrolled = await CourseProgress.countDocuments({
+      courseId: courseId
+    });
+    
+    // Formatar dados dos estudantes
+    const studentsData = enrolledStudents.map(enrollment => ({
+      _id: enrollment.userId._id,
+      nome: enrollment.userId.nome,
+      email: enrollment.userId.email,
+      departamento: enrollment.userId.departamento,
+      avatar: enrollment.userId.avatar,
+      enrolledAt: enrollment.enrolledAt,
+      progress: enrollment.progress,
+      status: enrollment.status,
+      lastAccessedAt: enrollment.lastAccessedAt,
+      totalTimeSpent: enrollment.totalTimeSpent,
+      completedLessons: enrollment.lessonsProgress ? 
+        enrollment.lessonsProgress.filter(lp => lp.completed).length : 0,
+      totalLessons: course.lessons ? course.lessons.length : 0
+    }));
+    
+    res.json({
+      course: {
+        _id: course._id,
+        title: course.title,
+        totalLessons: course.lessons ? course.lessons.length : 0
+      },
+      students: studentsData,
+      totalEnrolled,
+      pagination: {
+        current: parseInt(page),
+        limit: parseInt(limit),
+        total: totalEnrolled,
+        pages: Math.ceil(totalEnrolled / parseInt(limit))
+      }
+    });
+    
+  } catch (err) {
+    console.error('Erro ao buscar alunos matriculados:', err);
+    res.status(500).json({ 
+      msg: 'Erro no servidor', 
+      error: err.message 
+    });
+  }
+};
+
 // Funções auxiliares
 const getFileType = (mimetype) => {
   if (mimetype.startsWith('video/')) return 'video';
@@ -800,5 +903,6 @@ module.exports = {
   addLesson,
   updateLesson,
   deleteLesson,
-  checkEnrollment 
+  checkEnrollment,
+  getEnrolledStudents 
 };
