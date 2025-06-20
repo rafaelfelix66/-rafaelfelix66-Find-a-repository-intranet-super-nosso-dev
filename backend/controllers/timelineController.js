@@ -59,114 +59,83 @@ const getPostById = async (req, res) => {
 // Obter todas as publicações
 const getPosts = async (req, res) => {
   try {
+    // Parâmetros de paginação
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
     // Buscar usuário com suas informações de departamento
     const user = await User.findById(req.usuario.id);
     if (!user) {
       return res.status(404).json({ mensagem: 'Usuário não encontrado' });
     }
     
-	console.log('Buscando posts para usuário:', req.usuario.id, 'Departamento:', user.departamento);
-	
+    console.log('Buscando posts para usuário:', req.usuario.id, 'Departamento:', user.departamento);
+    
     // Construir query para posts
-	const query = {
-	  $or: [
-		{ departamentoVisibilidade: 'TODOS' },
-		{ departamentoVisibilidade: user.departamento }
-	  ]
-	};
+    const query = {
+      $or: [
+        { departamentoVisibilidade: 'TODOS' },
+        { departamentoVisibilidade: user.departamento }
+      ]
+    };
 
-	console.log('Query de busca:', JSON.stringify(query));
-		
-    //console.log('Buscando posts para o usuário:', req.usuario.id);
+    console.log('Query de busca:', JSON.stringify(query));
+    
+    // Buscar posts com paginação
     const posts = await Post.find(query)
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .populate('user', ['nome', 'avatar', 'cargo', 'departamento'])
       .populate('comments.user', ['nome', 'avatar', 'cargo', 'departamento']);
-    //console.log(`Encontrados ${posts.length} posts`);
+    
+    // Contar total para paginação
+    const totalPosts = await Post.countDocuments(query);
+    
+    console.log(`Encontrados ${posts.length} posts (página ${page}/${Math.ceil(totalPosts / limit)})`);
     
     // Converter os posts para o formato esperado pelo frontend
     const formattedPosts = posts.map(post => {
-      // Converte o post para um objeto simples (sem métodos do mongoose)
       const postObj = post.toObject();
       
-      // Normalizar caminhos em attachments
+      // Normalizar caminhos de arquivos se existirem
       if (postObj.attachments && postObj.attachments.length > 0) {
-        postObj.attachments = postObj.attachments.map(attachment => {
-          if (typeof attachment === 'string') {
-            return normalizePath(attachment);
-          }
-          return attachment;
-        });
+        postObj.attachments = postObj.attachments.map(attachment => 
+          attachment ? normalizePath(attachment) : ''
+        ).filter(Boolean);
       }
       
-      // Garantir que o campo images existe e contém os mesmos valores que attachments
-      postObj.images = [];
-      if (postObj.attachments && postObj.attachments.length > 0) {
-        postObj.images = [...postObj.attachments];
-      }
-      
-      // CORREÇÃO IMPORTANTE: Processar propriamente o eventData para garantir que ele chegue ao frontend
+      // Processar eventData se existir
       if (postObj.eventData) {
-        //console.log(`Post ${postObj._id} contém dados de evento:`, {
-         // tipo: typeof postObj.eventData,
-         // valor: postObj.eventData
-        //});
-        
-        // Certificar-se de que eventData está no formato correto
-        let eventInfo = postObj.eventData;
-        
-        // Se for string, tenta transformar em objeto
-        if (typeof eventInfo === 'string') {
-          try {
-            eventInfo = JSON.parse(eventInfo);
-           // console.log(`Post ${postObj._id} - eventData parseado de string:`, eventInfo);
-            // Atualizar o eventData para o objeto parseado
-            postObj.eventData = eventInfo;
-          } catch (e) {
-            console.error(`Post ${postObj._id} - Erro ao processar eventData como JSON:`, e);
-            // Caso falhe o parse, mantém como objeto vazio mas não null
-            postObj.eventData = {};
+        try {
+          if (typeof postObj.eventData === 'string') {
+            postObj.eventData = JSON.parse(postObj.eventData);
           }
+        } catch (e) {
+          console.error('Erro ao fazer parse do eventData:', e);
+          postObj.eventData = null;
         }
-        
-        // SOLUÇÃO CRÍTICA: Garantir que eventData nunca seja null e tenha as propriedades esperadas
-        if (!postObj.eventData || typeof postObj.eventData !== 'object') {
-          postObj.eventData = {};
-        }
-        
-        // Garantir que as propriedades essenciais existam
-        if (!postObj.eventData.title) postObj.eventData.title = '';
-        if (!postObj.eventData.date) postObj.eventData.date = '';
-        if (!postObj.eventData.location) postObj.eventData.location = '';
-
-        // MANTER COMPATIBILIDADE: Para posts que esperam o campo 'event', duplique os dados
-        // Isso garante que tanto o novo formato (eventData) quanto o velho (event) funcionem
-        postObj.event = {
-          title: postObj.eventData.title,
-          date: postObj.eventData.date,
-          location: postObj.eventData.location
-        };
-        
-        //console.log(`Post ${postObj._id} processado com evento:`, postObj.eventData);
       }
-      
-      // Log detalhado para depuração
-      console.log(`Post ${postObj._id} processado:`, {
-        user: postObj.user ? postObj.user.nome : 'unknown',
-        text: postObj.text ? postObj.text.substr(0, 20) + (postObj.text.length > 20 ? '...' : '') : '',
-        attachmentsCount: postObj.attachments ? postObj.attachments.length : 0,
-        imagesCount: postObj.images ? postObj.images.length : 0,
-        hasEventData: !!postObj.eventData,
-        hasEvent: !!postObj.event
-      });
       
       return postObj;
     });
     
-    //console.log('Posts formatados com sucesso:', formattedPosts.length);
-    return res.json(formattedPosts);
+    // Retornar com informações de paginação
+    res.json({
+      posts: formattedPosts,
+      pagination: {
+        current: page,
+        limit,
+        total: totalPosts,
+        pages: Math.ceil(totalPosts / limit),
+        hasNext: page < Math.ceil(totalPosts / limit),
+        hasPrev: page > 1
+      }
+    });
+    
   } catch (err) {
-    console.error('Erro ao buscar posts:', err.message);
+    console.error('Erro no timelineController.getPosts:', err.message);
     res.status(500).send('Erro no servidor');
   }
 };

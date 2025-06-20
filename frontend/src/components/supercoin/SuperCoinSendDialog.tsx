@@ -10,6 +10,7 @@ import { Dialog,
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Select, 
@@ -19,7 +20,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Info } from "lucide-react";
+import { AlertCircle, Info, Search, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { superCoinsService, CoinAttribute, CoinBalance } from '@/services/superCoinsService';
 import { api } from '@/lib/api';
@@ -45,6 +46,7 @@ export function SuperCoinSendDialog({
   const { toast } = useToast();
   const { hasPermission } = usePermission();
   const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [attributes, setAttributes] = useState<CoinAttribute[]>([]);
   const [balance, setBalance] = useState<CoinBalance | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,6 +60,10 @@ export function SuperCoinSendDialog({
   const [selectedAttribute, setSelectedAttribute] = useState("");
   const [message, setMessage] = useState("");
   
+  // Estado para o filtro de nome
+  const [nameFilter, setNameFilter] = useState("");
+  const [showUserList, setShowUserList] = useState(false);
+  
   // Estados para controle de erros de saldo
   const [selectedCost, setSelectedCost] = useState(0);
   const [hasInsufficientBalance, setHasInsufficientBalance] = useState(false);
@@ -70,6 +76,7 @@ export function SuperCoinSendDialog({
       const currentUserId = localStorage.getItem('userId');
       const filteredUsers = response.filter(user => user._id !== currentUserId);
       setUsers(filteredUsers);
+      setFilteredUsers(filteredUsers);
     } catch (error) {
       console.error('Erro ao buscar usuários:', error);
       toast({
@@ -105,6 +112,18 @@ export function SuperCoinSendDialog({
     }
   };
   
+  // Filtrar usuários por nome
+  useEffect(() => {
+    if (nameFilter.trim() === "") {
+      setFilteredUsers(users);
+    } else {
+      const filtered = users.filter(user => 
+        user.nome.toLowerCase().includes(nameFilter.toLowerCase())
+      );
+      setFilteredUsers(filtered);
+    }
+  }, [nameFilter, users]);
+  
   // Carregar dados quando o diálogo abrir
   useEffect(() => {
     if (open) {
@@ -126,6 +145,8 @@ export function SuperCoinSendDialog({
       setSelectedUser("");
       setSelectedAttribute("");
       setMessage("");
+      setNameFilter("");
+      setShowUserList(false);
       setSelectedCost(0);
       setHasInsufficientBalance(false);
     }
@@ -141,6 +162,20 @@ export function SuperCoinSendDialog({
       }
     }
   }, [selectedAttribute, balance, attributes]);
+  
+  // Função para selecionar usuário
+  const selectUser = (user: User) => {
+    setSelectedUser(user._id);
+    setNameFilter(user.nome);
+    setShowUserList(false);
+  };
+  
+  // Função para limpar seleção de usuário
+  const clearUserSelection = () => {
+    setSelectedUser("");
+    setNameFilter("");
+    setShowUserList(false);
+  };
   
   // Função para enviar moedas
   const handleSendCoins = async () => {
@@ -213,6 +248,11 @@ export function SuperCoinSendDialog({
     return attr ? `${attr.cost} moedas` : "";
   };
   
+  const getSelectedUserName = () => {
+    const user = users.find(u => u._id === selectedUser);
+    return user ? user.nome : "";
+  };
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -244,39 +284,99 @@ export function SuperCoinSendDialog({
         )}
         
         <div className="space-y-4 py-4">
+          {/* Campo de filtro por nome */}
           <div className="space-y-2">
             <Label htmlFor="recipient">Destinatário</Label>
-            <Select 
-              value={selectedUser} 
-              onValueChange={setSelectedUser}
-              disabled={initialLoading || users.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={
-                  initialLoading 
-                    ? "Carregando usuários..." 
-                    : users.length === 0
-                    ? "Nenhum usuário disponível"
-                    : "Selecione um destinatário"
-                } />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map(user => (
-                  <SelectItem key={user._id} value={user._id}>
-                    <div className="flex items-center">
-                      <span>{user.nome}</span>
-                      {user.departamento && (
-                        <Badge variant="outline" className="ml-2">
-                          {user.departamento}
-                        </Badge>
-                      )}
+            <div className="relative">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Digite o nome do destinatário..."
+                  value={nameFilter}
+                  onChange={(e) => {
+                    setNameFilter(e.target.value);
+                    setShowUserList(true);
+                    if (e.target.value === "") {
+                      setSelectedUser("");
+                    }
+                  }}
+                  onFocus={() => setShowUserList(true)}
+                  onBlur={() => {
+                    // Delay para permitir cliques na lista
+                    setTimeout(() => setShowUserList(false), 200);
+                  }}
+                  className="pl-10 pr-10"
+                  disabled={initialLoading}
+                />
+                {selectedUser && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                    onClick={clearUserSelection}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              
+              {/* Lista de usuários filtrados */}
+              {showUserList && !selectedUser && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  {filteredUsers.length > 0 ? (
+                    filteredUsers.map(user => (
+                      <div
+                        key={user._id}
+                        className="p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        onClick={() => selectUser(user)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{user.nome}</span>
+                          {user.departamento && (
+                            <Badge variant="outline" className="text-xs">
+                              {user.departamento}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 text-center text-gray-500 text-sm">
+                      {nameFilter ? "Nenhum usuário encontrado" : "Carregando usuários..."}
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Mostrar usuário selecionado */}
+            {selectedUser && (
+              <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-blue-800">{getSelectedUserName()}</span>
+                    {users.find(u => u._id === selectedUser)?.departamento && (
+                      <Badge variant="outline" className="text-xs">
+                        {users.find(u => u._id === selectedUser)?.departamento}
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-blue-600 hover:text-blue-800"
+                    onClick={clearUserSelection}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
           
+          {/* Seleção de atributo */}
           <div className="space-y-2">
             <Label htmlFor="attribute">Atributo</Label>
             <Select 
@@ -307,10 +407,10 @@ export function SuperCoinSendDialog({
                       ></div>
                       <span>{attr.name}</span>
                       <Badge 
-                        variant={attr.cost > (balance?.balance || 0) ? "destructive" : "outline"} 
+                        variant={attr.cost > (balance?.balance || 0) ? "destructive" : "outline"}
                         className="ml-2"
                       >
-                        {attr.cost} coins
+                        {attr.cost} moedas
                       </Badge>
                     </div>
                   </SelectItem>
@@ -324,8 +424,8 @@ export function SuperCoinSendDialog({
             )}
           </div>
           
-          {/* Campo de mensagem (oculto se usuário não tem permissão) */}
-          {canSendMessage ? (
+          {/* Campo de mensagem (condicional) */}
+          {canSendMessage && (
             <div className="space-y-2">
               <Label htmlFor="message">Mensagem (opcional)</Label>
               <Textarea
@@ -336,7 +436,7 @@ export function SuperCoinSendDialog({
                 rows={3}
               />
             </div>
-          ) : null}
+          )}
         </div>
         
         <DialogFooter>

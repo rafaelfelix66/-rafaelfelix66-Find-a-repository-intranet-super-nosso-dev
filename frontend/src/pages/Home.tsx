@@ -385,28 +385,35 @@ const Home = () => {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false);
   
+  //Estados paginação
+  const [pagination, setPagination] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  
   // Refs para inputs de arquivo
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   
   // Função para buscar os posts
-  const fetchPosts = async () => {
+
+const fetchPosts = async (page = 1, append = false) => {
   try {
-    const data = await api.get('/timeline');
+    const data = await api.get(`/timeline?page=${page}&limit=10`);
     
-    if (Array.isArray(data)) {
+    // CORREÇÃO: Verificar se a resposta tem a estrutura correta
+    if (data && data.posts && Array.isArray(data.posts)) {
       const userId = localStorage.getItem('userId');
       
-      const formattedPosts = data.map(post => {
+      const formattedPosts = data.posts.map(post => {
         console.log(`Post ${post._id}:`, {
           text: post.text ? post.text.substring(0, 30) : "Sem texto",
-          hasAttachments: !!post.attachments && post.attachments.length > 0,
-          attachments: post.attachments,
-          images: post.images,
-          event: post.event,
-          eventData: post.eventData
+          hasAttachments: !!(post.attachments && post.attachments.length > 0),
+          hasEventData: !!post.eventData,
+          hasEvent: !!post.event,
+          eventData: post.eventData,
+          event: post.event
         });
-        
+
         const formattedPost = {
           id: post._id,
           user: {
@@ -415,7 +422,7 @@ const Home = () => {
             avatar: post.user?.avatar,
             cargo: post.user?.cargo,
             department: post.user?.departamento,
-            initials: getInitials(post.user?.nome || 'Usuário')
+            initials: post.user?.nome ? getInitials(post.user.nome) : 'U'
           },
           content: post.text || "",
           timestamp: formatTimestamp(post.createdAt),
@@ -424,27 +431,23 @@ const Home = () => {
           comments: (post.comments || []).map(comment => ({
             id: comment._id,
             user: {
-              id: comment.user?._id,
-              name: comment.user?.nome || 'Usuário',
-              avatar: comment.user?.avatar,
-              cargo: comment.user?.cargo,
-              department: comment.user?.departamento,
-              initials: getInitials(comment.user?.nome || 'Usuário')
+              id: comment.user._id,
+              name: comment.user.nome,
+              avatar: comment.user.avatar,
+              cargo: comment.user.cargo,
+              department: comment.user.departamento
             },
-            content: comment.text,
+            content: comment.text || comment.content,
             timestamp: formatTimestamp(comment.createdAt),
-            likes: comment.likes || [],
+            likes: comment.likes?.length || 0,
             liked: comment.likes?.includes(userId) || false
           })),
-          liked: post.likes?.some(like => 
-            like.toString() === userId || 
-            like === userId
-          ) || false,
+          liked: post.likes?.includes(userId) || false,
           images: [],
-          event: null
+          event: null as any
         };
-        
-        // Verificar tanto eventData quanto event
+
+        // CORREÇÃO: Processar dados do evento ANTES das imagens
         if (post.eventData && typeof post.eventData === 'object') {
           console.log(`Post ${post._id} tem eventData:`, post.eventData);
           formattedPost.event = {
@@ -456,12 +459,11 @@ const Home = () => {
           console.log(`Post ${post._id} tem event:`, post.event);
           formattedPost.event = post.event;
         }
-        
-        // NOVO: Processar texto para extrair URLs do YouTube
+
+        // Processar YouTube
         let processedImages = [];
         let cleanContent = formattedPost.content;
 
-        // Verificar se tem marcador de YouTube no texto
         const youtubeMatch = cleanContent.match(/\[YOUTUBE:(.*?)\]/);
         if (youtubeMatch) {
           processedImages.push(youtubeMatch[1]);
@@ -482,10 +484,93 @@ const Home = () => {
         return formattedPost;
       });
       
-      return formattedPosts;
-    } else {
-      console.error('Resposta do backend não é um array:', data);
-      return [];
+      return {
+        posts: formattedPosts,
+        pagination: data.pagination
+      };
+    } 
+    // FALLBACK: Se ainda vier no formato antigo (array direto)
+    else if (Array.isArray(data)) {
+      console.warn('Resposta no formato antigo (array direto), convertendo...');
+      const userId = localStorage.getItem('userId');
+      
+      const formattedPosts = data.map(post => {
+        const formattedPost = {
+          id: post._id,
+          user: {
+            id: post.user?._id,
+            name: post.user?.nome || 'Usuário',
+            avatar: post.user?.avatar,
+            cargo: post.user?.cargo,
+            department: post.user?.departamento,
+            initials: post.user?.nome ? getInitials(post.user.nome) : 'U'
+          },
+          content: post.text || "",
+          timestamp: formatTimestamp(post.createdAt),
+          likes: post.likes?.length || 0,
+          reactions: post.reactions || [],
+          comments: (post.comments || []).map(comment => ({
+            id: comment._id,
+            user: {
+              id: comment.user._id,
+              name: comment.user.nome,
+              avatar: comment.user.avatar,
+              cargo: comment.user.cargo,
+              department: comment.user.departamento
+            },
+            content: comment.text || comment.content,
+            timestamp: formatTimestamp(comment.createdAt),
+            likes: comment.likes?.length || 0,
+            liked: comment.likes?.includes(userId) || false
+          })),
+          liked: post.likes?.includes(userId) || false,
+          images: [],
+          event: null as any
+        };
+
+        // CORREÇÃO: Processar dados do evento no formato antigo também
+        if (post.eventData && typeof post.eventData === 'object') {
+          console.log(`Post ${post._id} tem eventData (formato antigo):`, post.eventData);
+          formattedPost.event = {
+            title: post.eventData.title || '',
+            date: post.eventData.date || '',
+            location: post.eventData.location || ''
+          };
+        } else if (post.event && typeof post.event === 'object') {
+          console.log(`Post ${post._id} tem event (formato antigo):`, post.event);
+          formattedPost.event = post.event;
+        }
+
+        // Processar YouTube e anexos...
+        let processedImages = [];
+        let cleanContent = formattedPost.content;
+
+        const youtubeMatch = cleanContent.match(/\[YOUTUBE:(.*?)\]/);
+        if (youtubeMatch) {
+          processedImages.push(youtubeMatch[1]);
+          cleanContent = cleanContent.replace(/\[YOUTUBE:.*?\]/, '').trim();
+          formattedPost.content = cleanContent;
+        }
+
+        if (post.attachments && post.attachments.length > 0) {
+          const attachments = post.attachments
+            .filter(attachment => attachment)
+            .map(attachment => normalizePath(attachment));
+          processedImages = [...processedImages, ...attachments];
+        }
+
+        formattedPost.images = processedImages;
+        return formattedPost;
+      });
+      
+      return {
+        posts: formattedPosts,
+        pagination: null // Sem paginação no formato antigo
+      };
+    }
+    else {
+      console.error('Resposta da timeline não é um array nem objeto com posts:', data);
+      return { posts: [], pagination: null };
     }
   } catch (error) {
     console.error('Erro ao carregar posts:', error);
@@ -715,35 +800,62 @@ const Home = () => {
   };
   
   // Carregar posts quando o componente montar
-  useEffect(() => {
-    const loadPosts = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('Token não encontrado');
-        navigate('/login');
-        return;
-      }
+useEffect(() => {
+  const loadPosts = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('Token não encontrado');
+      navigate('/login');
+      return;
+    }
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        const fetchedPosts = await fetchPosts();
-        setPosts(fetchedPosts);
-      } catch (error) {
-        setError('Não foi possível carregar os posts');
-        toast({ 
-          title: "Erro", 
-          description: "Não foi possível carregar os posts.", 
-          variant: "destructive" 
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+    try {
+      const { posts: fetchedPosts, pagination: paginationData } = await fetchPosts(1);
+      setPosts(fetchedPosts);
+      setPagination(paginationData);
+      setCurrentPage(1);
+    } catch (error) {
+      setError('Não foi possível carregar os posts');
+      toast({ 
+        title: "Erro", 
+        description: "Não foi possível carregar os posts.",
+        variant: "destructive" 
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    loadPosts();
-  }, [navigate]);
+  loadPosts();
+}, [navigate]);
+
+// Função para carregar mais posts
+const loadMorePosts = async () => {
+  if (!pagination?.hasNext || loadingMore) return;
+  
+  setLoadingMore(true);
+  
+  try {
+    const nextPage = currentPage + 1;
+    const { posts: newPosts, pagination: newPagination } = await fetchPosts(nextPage);
+    
+    setPosts(prevPosts => [...prevPosts, ...newPosts]);
+    setPagination(newPagination);
+    setCurrentPage(nextPage);
+    
+  } catch (error) {
+    toast({
+      title: "Erro",
+      description: "Não foi possível carregar mais posts.",
+      variant: "destructive"
+    });
+  } finally {
+    setLoadingMore(false);
+  }
+};
   
   // Manipuladores de eventos
   const handleLike = async (postId: string) => {
@@ -1645,7 +1757,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								cargo: post.user.cargo,
 								department: post.user.department
 							  }}
-							  showAttributes={true}
+							  showAttributes={false}
 							  size="md"
 							  enableModal={true}
 							/>
@@ -1949,6 +2061,26 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                     </PermissionGuard>
                   </div>
                 )}
+				{/* Botão Carregar Mais */}
+				{pagination?.hasNext && (
+				  <div className="text-center mt-6">
+					<Button
+					  onClick={loadMorePosts}
+					  disabled={loadingMore}
+					  variant="outline"
+					  className="min-w-[200px]"
+					>
+					  {loadingMore ? (
+						<>
+						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#e60909] mr-2"></div>
+						  Carregando...
+						</>
+					  ) : (
+						`Carregar mais (${pagination.total - posts.length} restantes)`
+					  )}
+					</Button>
+				  </div>
+				)}
               </TabsContent>
               <TabsContent value="fotos" className="space-y-6">
 				  {filteredPosts.length > 0 ? (
@@ -2254,6 +2386,26 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					  </PermissionGuard>
 					</div>
 				  )}
+	            {/* Botão Carregar Mais */}
+				{pagination?.hasNext && (
+				  <div className="text-center mt-6">
+					<Button
+					  onClick={loadMorePosts}
+					  disabled={loadingMore}
+					  variant="outline"
+					  className="min-w-[200px]"
+					>
+					  {loadingMore ? (
+						<>
+						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#e60909] mr-2"></div>
+						  Carregando...
+						</>
+					  ) : (
+						`Carregar mais (${pagination.total - posts.length} restantes)`
+					  )}
+					</Button>
+				  </div>
+				)}
 				</TabsContent>
 
 				<TabsContent value="videos" className="space-y-6">
@@ -2560,6 +2712,26 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					  </PermissionGuard>
 					</div>
 				  )}
+				 {/* Botão Carregar Mais */}
+				{pagination?.hasNext && (
+				  <div className="text-center mt-6">
+					<Button
+					  onClick={loadMorePosts}
+					  disabled={loadingMore}
+					  variant="outline"
+					  className="min-w-[200px]"
+					>
+					  {loadingMore ? (
+						<>
+						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#e60909] mr-2"></div>
+						  Carregando...
+						</>
+					  ) : (
+						`Carregar mais (${pagination.total - posts.length} restantes)`
+					  )}
+					</Button>
+				  </div>
+				)}
 				</TabsContent>
 
 				<TabsContent value="eventos" className="space-y-6">
@@ -2866,6 +3038,26 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					  </PermissionGuard>
 					</div>
 				  )}
+				{/* Botão Carregar Mais */}
+				{pagination?.hasNext && (
+				  <div className="text-center mt-6">
+					<Button
+					  onClick={loadMorePosts}
+					  disabled={loadingMore}
+					  variant="outline"
+					  className="min-w-[200px]"
+					>
+					  {loadingMore ? (
+						<>
+						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#e60909] mr-2"></div>
+						  Carregando...
+						</>
+					  ) : (
+						`Carregar mais (${pagination.total - posts.length} restantes)`
+					  )}
+					</Button>
+				  </div>
+				)}
 				</TabsContent>
             </Tabs>
           </div>

@@ -160,134 +160,157 @@ const fetchEvents = async () => {
     
     // Fazendo a chamada ao backend para buscar os eventos
     const response = await api.get('/timeline');
-    
-    if (Array.isArray(response)) {
-      console.log(`EnhancedCalendarWidget: Recebidos ${response.length} posts`);
-      
-      // Processar posts para extrair eventos
-      const timelineEvents = [];
-      
-      // Iterar sobre cada post recebido
-      response.forEach(post => {
-        // NOVO: Filtrar por departamento antes de processar
-      const shouldIncludePost = selectedDepartments.includes('TODOS') || 
-          !post.departamentoVisibilidade || 
-          post.departamentoVisibilidade.some(dept => 
-            selectedDepartments.includes(dept) || dept === 'TODOS'
-          );
-        if (!shouldIncludePost) {
-          console.log(`Post ${post._id} filtrado por departamento:`, {
-            postDepartments: post.departamentoVisibilidade,
-            selectedDepartments
-          });
-          return; // Pular este post
-        }
-        
-        // 1. Verificar se o post tem eventData
-        if (post.eventData && typeof post.eventData === 'object') {
-          console.log(`Post ${post._id} tem eventData:`, post.eventData);
-          
-          try {
-            // Confirmar se os campos necessários estão presentes
-            if (post.eventData.title && post.eventData.date) {
-              const eventDate = parseEventDate(post.eventData.date);
-              
-              timelineEvents.push({
-                id: post._id + "-event", 
-                title: post.eventData.title,
-                date: eventDate,
-                location: post.eventData.location || '',
-                description: post.text || '',
-                postId: post._id,
-                createdAt: post.createdAt,
-                departamento: post.departamentoVisibilidade || ['TODOS'] // NOVO: Incluir info do departamento
-              });
-              
-              console.log(`Evento extraído do eventData: ${post.eventData.title}`);
-            } else {
-              console.warn(`eventData incompleto no post ${post._id}`);
-            }
-          } catch (e) {
-            console.error(`Erro ao processar eventData do post ${post._id}:`, e);
-          }
-        }
-        
-        // 2. Para posts recém-criados que podem ter perdido eventData
-        else if (post.text && post.text.toLowerCase() === 'teste') {
-          const postDate = new Date(post.createdAt);
-          const now = new Date();
-          const isRecent = (now.getTime() - postDate.getTime()) < 24 * 60 * 60 * 1000; // Últimas 24 horas
-          
-          if (isRecent) {
-            console.log(`Post recente encontrado que pode ser um evento: ${post._id}`);
-            timelineEvents.push({
-              id: post._id + "-auto", 
-              title: "Evento",
-              date: new Date(), // Data atual como fallback
-              location: 'Localização não especificada',
-              description: post.text || '',
-              postId: post._id,
-              createdAt: post.createdAt,
-              departamento: post.departamentoVisibilidade || ['TODOS'] // NOVO: Incluir info do departamento
-            });
-            
-            console.log(`Evento temporário criado para post recente: ${post._id}`);
-          }
-        }
-        
-        // 3. Verificar posts com formato de evento no texto
-        else if (post.text && typeof post.text === 'string') {
-          const eventPattern = /Título:\s*([^,\n]+)(?:,|\n)?\s*Data:\s*([^,\n]+)(?:,|\n)?\s*Local:\s*([^,\n]+)/i;
-          const match = post.text.match(eventPattern);
-          
-          if (match) {
-            console.log(`Post ${post._id} contém padrão de evento no texto`);
-            const [_, eventTitle, eventDateText, eventLocation] = match;
-            
-            try {
-              const eventDate = parseEventDate(eventDateText.trim());
-              
-              timelineEvents.push({
-                id: post._id + "-parsed-event",
-                title: eventTitle.trim(),
-                date: eventDate,
-                location: eventLocation.trim(),
-                description: post.text || '',
-                postId: post._id,
-                createdAt: post.createdAt,
-                departamento: post.departamentoVisibilidade || ['TODOS'] // NOVO: Incluir info do departamento
-              });
-              
-              console.log(`Evento extraído do texto: ${eventTitle.trim()}`);
-            } catch (e) {
-              console.error(`Erro ao converter data do evento em texto: ${e.message}`);
-            }
-          }
-        }
-      });
-      
-      // Ordenar eventos por data
-      timelineEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-      console.log(`Encontrados ${timelineEvents.length} eventos na timeline após filtro de departamento`);
-      
-      // Depurar cada evento encontrado
-      timelineEvents.forEach(event => {
-        console.log(`Evento: ${event.title}`);
-        console.log(`- Data: ${event.date.toISOString()}`);
-        console.log(`- Departamento: ${event.departamento?.join(', ')}`);
-        console.log(`- Dia: ${event.date.getDate()}, Mês: ${event.date.getMonth() + 1}, Ano: ${event.date.getFullYear()}`);
-      });
-      
-      setEvents(timelineEvents);
+
+    let timelinePosts = [];
+
+    // CORREÇÃO: Verificar novo formato com paginação
+    if (response && response.posts && Array.isArray(response.posts)) {
+      console.log(`EnhancedCalendarWidget: Recebidos ${response.posts.length} posts`);
+      timelinePosts = response.posts;
+    } 
+    // FALLBACK: Formato antigo (array direto)
+    else if (Array.isArray(response)) {
+      console.log(`EnhancedCalendarWidget: Recebidos ${response.length} posts (formato antigo)`);
+      timelinePosts = response;
     } else {
-      console.error('Resposta da API não é um array:', response);
+      console.error("EnhancedCalendarWidget: Resposta não é um array nem objeto com posts:", response);
       toast({
         title: "Erro de formato",
         description: "A resposta da API não está no formato esperado",
         variant: "destructive"
       });
+      return; // Sair da função se não conseguir processar
     }
+
+    // Processar posts para extrair eventos
+    const timelineEvents = [];
+    
+    // Iterar sobre cada post recebido
+    timelinePosts.forEach(post => {
+      console.log(`Processando post ${post._id}:`, {
+        hasEventData: !!post.eventData,
+        hasEvent: !!post.event,
+        eventData: post.eventData,
+        event: post.event,
+        text: post.text?.substring(0, 30)
+      });
+
+      // NOVO: Filtrar por departamento antes de processar
+      const shouldIncludePost = selectedDepartments.includes('TODOS') || 
+          !post.departamentoVisibilidade || 
+          post.departamentoVisibilidade.some(dept => 
+            selectedDepartments.includes(dept) || dept === 'TODOS'
+          );
+      if (!shouldIncludePost) {
+        console.log(`Post ${post._id} filtrado por departamento:`, {
+          postDepartments: post.departamentoVisibilidade,
+          selectedDepartments
+        });
+        return; // Pular este post
+      }
+      
+      // 1. CORREÇÃO: Verificar se o post tem eventData OU event
+      if ((post.eventData && typeof post.eventData === 'object') || 
+          (post.event && typeof post.event === 'object')) {
+        
+        // Priorizar eventData, mas usar event como fallback
+        const eventInfo = post.eventData || post.event;
+        
+        console.log(`Post ${post._id} tem dados de evento:`, eventInfo);
+        
+        try {
+          // Confirmar se os campos necessários estão presentes
+          if (eventInfo.title && eventInfo.date) {
+            const eventDate = parseEventDate(eventInfo.date);
+            
+            timelineEvents.push({
+              id: post._id + "-event", 
+              title: eventInfo.title,
+              date: eventDate,
+              location: eventInfo.location || '',
+              description: post.text || '',
+              postId: post._id,
+              createdAt: post.createdAt,
+              departamento: post.departamentoVisibilidade || ['TODOS']
+            });
+            
+            console.log(`Evento extraído: ${eventInfo.title}`);
+          } else {
+            console.warn(`Dados de evento incompletos no post ${post._id}:`, eventInfo);
+          }
+        } catch (e) {
+          console.error(`Erro ao processar dados de evento do post ${post._id}:`, e);
+        }
+      }
+      
+      // 2. Para posts recém-criados que podem ter perdido eventData
+      else if (post.text && post.text.toLowerCase() === 'teste') {
+        const postDate = new Date(post.createdAt);
+        const now = new Date();
+        const isRecent = (now.getTime() - postDate.getTime()) < 24 * 60 * 60 * 1000; // Últimas 24 horas
+        
+        if (isRecent) {
+          console.log(`Post recente encontrado que pode ser um evento: ${post._id}`);
+          timelineEvents.push({
+            id: post._id + "-auto", 
+            title: "Evento",
+            date: new Date(), // Data atual como fallback
+            location: 'Localização não especificada',
+            description: post.text || '',
+            postId: post._id,
+            createdAt: post.createdAt,
+            departamento: post.departamentoVisibilidade || ['TODOS']
+          });
+          
+          console.log(`Evento temporário criado para post recente: ${post._id}`);
+        }
+      }
+      
+      // 3. Verificar posts com formato de evento no texto
+      else if (post.text && typeof post.text === 'string') {
+        const eventPattern = /Título:\s*([^,\n]+)(?:,|\n)?\s*Data:\s*([^,\n]+)(?:,|\n)?\s*Local:\s*([^,\n]+)/i;
+        const match = post.text.match(eventPattern);
+        
+        if (match) {
+          console.log(`Post ${post._id} contém padrão de evento no texto`);
+          const [_, eventTitle, eventDateText, eventLocation] = match;
+          
+          try {
+            const eventDate = parseEventDate(eventDateText.trim());
+            
+            timelineEvents.push({
+              id: post._id + "-parsed-event",
+              title: eventTitle.trim(),
+              date: eventDate,
+              location: eventLocation.trim(),
+              description: post.text || '',
+              postId: post._id,
+              createdAt: post.createdAt,
+              departamento: post.departamentoVisibilidade || ['TODOS']
+            });
+            
+            console.log(`Evento extraído do texto: ${eventTitle.trim()}`);
+          } catch (e) {
+            console.error(`Erro ao converter data do evento em texto: ${e.message}`);
+          }
+        }
+      }
+    });
+    
+    // Ordenar eventos por data
+    timelineEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    console.log(`Encontrados ${timelineEvents.length} eventos na timeline após filtro de departamento`);
+    
+    // Depurar cada evento encontrado
+    timelineEvents.forEach(event => {
+      console.log(`Evento: ${event.title}`);
+      console.log(`- Data: ${event.date.toISOString()}`);
+      console.log(`- Departamento: ${event.departamento?.join(', ')}`);
+      console.log(`- Dia: ${event.date.getDate()}, Mês: ${event.date.getMonth() + 1}, Ano: ${event.date.getFullYear()}`);
+    });
+    
+    setEvents(timelineEvents);
   } catch (error) {
     console.error('Erro ao carregar eventos:', error);
     toast({

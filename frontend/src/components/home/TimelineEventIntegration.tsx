@@ -28,40 +28,49 @@ export function TimelineEventIntegration() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTimelinePosts = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+  const fetchTimelinePosts = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      console.log("TimelineEventIntegration: Buscando posts da timeline...");
+      const response = await api.get('/timeline');
+      
+      // CORREÇÃO: Verificar novo formato com paginação
+      if (response && response.posts && Array.isArray(response.posts)) {
+        console.log(`TimelineEventIntegration: Recebidos ${response.posts.length} posts`);
+        setPosts(response.posts);
         
-        console.log("TimelineEventIntegration: Buscando posts da timeline...");
-        const response = await api.get('/timeline');
+        // Verificar posts com eventos
+        const eventsCount = response.posts.filter(post => post.eventData).length;
+        console.log(`TimelineEventIntegration: Encontrados ${eventsCount} posts com eventos`);
+      } 
+      // FALLBACK: Formato antigo (array direto)
+      else if (Array.isArray(response)) {
+        console.log(`TimelineEventIntegration: Recebidos ${response.length} posts (formato antigo)`);
+        setPosts(response);
         
-        if (Array.isArray(response)) {
-          console.log(`TimelineEventIntegration: Recebidos ${response.length} posts`);
-          setPosts(response);
-          
-          // Verificar posts com eventos
-          const eventsCount = response.filter(post => post.eventData).length;
-          console.log(`TimelineEventIntegration: Encontrados ${eventsCount} posts com eventos`);
-        } else {
-          console.error("TimelineEventIntegration: Resposta não é um array:", response);
-          setError("Formato de resposta inválido");
-        }
-      } catch (error) {
-        console.error("TimelineEventIntegration: Erro ao buscar posts:", error);
-        setError("Não foi possível carregar as atividades recentes");
-        toast({
-          title: "Erro",
-          description: "Não foi possível carregar as atividades recentes.",
-          variant: "destructive"
-        });
-      } finally {
-        setIsLoading(false);
+        const eventsCount = response.filter(post => post.eventData).length;
+        console.log(`TimelineEventIntegration: Encontrados ${eventsCount} posts com eventos`);
+      } else {
+        console.error("TimelineEventIntegration: Resposta não é um array nem objeto com posts:", response);
+        setError("Formato de resposta inválido");
       }
-    };
-    
-    fetchTimelinePosts();
-  }, []);
+    } catch (error) {
+      console.error("TimelineEventIntegration: Erro ao buscar posts:", error);
+      setError("Não foi possível carregar as atividades recentes");
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as atividades recentes.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  fetchTimelinePosts();
+}, []);
   
   if (isLoading) {
     return (
