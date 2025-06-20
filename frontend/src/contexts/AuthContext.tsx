@@ -2,7 +2,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from "@/hooks/use-toast";
-import { activitiesService } from '@/services/activitiesService';
 import { calendarService } from '@/services/calendarService';
 import { api } from '@/lib/api';
 
@@ -81,9 +80,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Inicializa os serviços após autenticação bem-sucedida
   const initializeServices = (userId: string) => {
     try {
-      activitiesService.getAll().catch(err => 
-        console.warn('Falha ao pré-carregar atividades:', err)
-      );
       
       calendarService.getEvents().catch(err => 
         console.warn('Falha ao pré-carregar eventos:', err)

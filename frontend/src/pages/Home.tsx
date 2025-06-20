@@ -400,8 +400,12 @@ const fetchPosts = async (page = 1, append = false) => {
   try {
     const data = await api.get(`/timeline?page=${page}&limit=10`);
     
+    // Como @/services/api retorna o JSON completo, data já é o objeto correto
+    console.log('Resposta completa da API:', data);
+    
     // CORREÇÃO: Verificar se a resposta tem a estrutura correta
     if (data && data.posts && Array.isArray(data.posts)) {
+      // Resto da função permanece igual...
       const userId = localStorage.getItem('userId');
       
       const formattedPosts = data.posts.map(post => {
@@ -565,7 +569,7 @@ const fetchPosts = async (page = 1, append = false) => {
       
       return {
         posts: formattedPosts,
-        pagination: null // Sem paginação no formato antigo
+        pagination: data.pagination
       };
     }
     else {

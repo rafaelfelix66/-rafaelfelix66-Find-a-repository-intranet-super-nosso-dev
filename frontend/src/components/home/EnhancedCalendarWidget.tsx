@@ -163,12 +163,14 @@ const fetchEvents = async () => {
 
     let timelinePosts = [];
 
-    // CORREÇÃO: Verificar novo formato com paginação
+    // CORREÇÃO: Como estamos usando @/lib/api (Axios com interceptor), 
+    // a response já retorna response.data diretamente
+    // Verificar novo formato com paginação
     if (response && response.posts && Array.isArray(response.posts)) {
       console.log(`EnhancedCalendarWidget: Recebidos ${response.posts.length} posts`);
       timelinePosts = response.posts;
     } 
-    // FALLBACK: Formato antigo (array direto)
+    // FALLBACK: Formato antigo (array direto) - não deve acontecer mais com @/lib/api
     else if (Array.isArray(response)) {
       console.log(`EnhancedCalendarWidget: Recebidos ${response.length} posts (formato antigo)`);
       timelinePosts = response;
