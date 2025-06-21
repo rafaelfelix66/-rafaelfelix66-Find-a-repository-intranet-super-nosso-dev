@@ -58,7 +58,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           <img 
             src="/super-nosso-logo.png" 
             alt="Super Nosso Logo" 
-            className="h-12 mx-auto mb-4"
+            className="h-15 mx-auto mb-4"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.src = "https://via.placeholder.com/120x40/EA384C/FFFFFF?text=SUPER+NOSSO";

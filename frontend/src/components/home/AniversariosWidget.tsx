@@ -106,7 +106,7 @@ export const AniversariosWidget: React.FC = () => {
     <Card className="mt-6">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg flex items-center">
-          <Calendar className="h-5 w-5 mr-2 text-[#e60909]" />
+          <Calendar className="h-5 w-5 mr-2 text-[#870f0b]" />
           Aniversariantes do Dia
         </CardTitle>
       </CardHeader>

@@ -1,4 +1,4 @@
-//src/components/layout/Layout.tsx
+//src/components/layout/Layout.tsx - Corrigido para usar estrutura original
 import { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";

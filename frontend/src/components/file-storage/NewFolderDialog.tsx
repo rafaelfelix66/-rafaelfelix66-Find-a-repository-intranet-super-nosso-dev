@@ -131,7 +131,7 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
               value={folderName}
               onChange={(e) => setFolderName(e.target.value)}
               placeholder="Digite o nome da pasta"
-              className="focus-visible:ring-[#e60909]"
+              className="focus-visible:ring-[#870f0b]"
             />
           </div>
           
@@ -143,7 +143,7 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
               value={folderDescription}
               onChange={(e) => setFolderDescription(e.target.value)}
               placeholder="Digite uma breve descrição da pasta"
-              className="focus-visible:ring-[#e60909]"
+              className="focus-visible:ring-[#870f0b]"
               rows={3}
             />
           </div>
@@ -154,8 +154,8 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
             <div 
               className={`
                 border-2 border-dashed rounded-lg p-4 text-center cursor-pointer
-                transition-all duration-200 hover:border-[#e60909] hover:bg-[#e60909]/5
-                ${coverPreview ? 'border-[#e60909] bg-[#e60909]/5' : 'border-gray-300'}
+                transition-all duration-200 hover:border-[#870f0b] hover:bg-[#870f0b]/5
+                ${coverPreview ? 'border-[#870f0b] bg-[#870f0b]/5' : 'border-gray-300'}
               `}
               onClick={() => fileInputRef.current?.click()}
             >
@@ -295,7 +295,7 @@ export const NewFolderDialog = ({ isOpen, onOpenChange }: NewFolderDialogProps) 
           <Button
             onClick={handleCreateFolder}
             disabled={!folderName.trim() || isLoading}
-            className="bg-[#e60909] hover:bg-[#e60909]/90"
+            className="bg-[#870f0b] hover:bg-[#870f0b]/90"
           >
             {isLoading ? (
               <>

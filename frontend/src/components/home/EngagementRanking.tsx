@@ -64,7 +64,7 @@ export function EngagementRanking() {
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-[#e60909]" />
+              <TrendingUp className="h-5 w-5 text-[#870f0b]" />
               <span>Top Engajamento</span>
             </div>
             
@@ -72,7 +72,7 @@ export function EngagementRanking() {
               <Button
                 variant={period === "week" ? "default" : "outline"}
                 size="sm"
-                className={period === "week" ? "text-xs bg-[#e60909] hover:bg-[#e60909]/90" : "text-xs"}
+                className={period === "week" ? "text-xs bg-[#870f0b] hover:bg-[#870f0b]/90" : "text-xs"}
                 onClick={() => setPeriod("week")}
               >
                 Semana
@@ -80,7 +80,7 @@ export function EngagementRanking() {
               <Button
                 variant={period === "month" ? "default" : "outline"}
                 size="sm"
-                className={period === "month" ? "text-xs bg-[#e60909] hover:bg-[#e60909]/90" : "text-xs"}
+                className={period === "month" ? "text-xs bg-[#870f0b] hover:bg-[#870f0b]/90" : "text-xs"}
                 onClick={() => setPeriod("month")}
               >
                 Mês
@@ -91,7 +91,7 @@ export function EngagementRanking() {
         <CardContent className="space-y-2">
           {loading ? (
             <div className="flex justify-center items-center h-40">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#e60909]"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#870f0b]"></div>
             </div>
           ) : ranking.length > 0 ? (
             <>
@@ -113,7 +113,7 @@ export function EngagementRanking() {
                       <p className="text-sm font-medium truncate">{user.userName}</p>
                     </div>
                     <div className="text-right">
-                      <Badge variant="outline" className="bg-[#e60909]/10 text-[#e60909] border-0">
+                      <Badge variant="outline" className="bg-[#870f0b]/10 text-[#870f0b] border-0">
                         {user.totalPoints} pts
                       </Badge>
                     </div>
@@ -124,7 +124,7 @@ export function EngagementRanking() {
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="w-full text-[#e60909] hover:text-[#e60909] hover:bg-[#e60909]/10"
+                className="w-full text-[#870f0b] hover:text-[#870f0b] hover:bg-[#870f0b]/10"
                 onClick={() => setShowFullRanking(true)}
               >
                 Ver ranking completo
@@ -177,7 +177,7 @@ export function EngagementRanking() {
                       )}
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-[#e60909]">{user.totalPoints}</p>
+                      <p className="text-2xl font-bold text-[#870f0b]">{user.totalPoints}</p>
                       <div className="flex gap-2 justify-end">
                         <Badge variant="outline">
                           {user.actionsCount} ações

@@ -314,7 +314,7 @@ const handleSave = async () => {
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button 
-                className="bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+                className="bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
                 onClick={() => {
                   resetForm();
                   setDialogOpen(true);
@@ -461,7 +461,7 @@ const handleSave = async () => {
                   Cancelar
                 </Button>
                 <Button 
-                  className="bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+                  className="bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
                   onClick={handleSave}
                 >
                   {isEditing ? "Atualizar" : "Criar"}
@@ -586,13 +586,14 @@ const handleSave = async () => {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDelete(banner._id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+							<Button
+							  variant="outline"
+							  size="sm"
+							  className="text-red-600 hover:text-red-800"
+							  onClick={() => handleDelete(banner._id)}
+							>
+							  <Trash2 className="h-4 w-4" />
+							</Button>
                         </div>
                       </TableCell>
                     </TableRow>

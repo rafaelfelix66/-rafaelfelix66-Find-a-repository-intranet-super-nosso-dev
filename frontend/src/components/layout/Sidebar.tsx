@@ -110,61 +110,67 @@ export function Sidebar() {
     logout();
   };
 
-  //        <SidebarItem 
-  //          icon={HelpCircle} 
-  //          to="/base-conhecimento" 
-  //          label="Base de Conhecimento" 
-  //          active={getActivePath("/base-conhecimento")} 
-  //          isOpen={isOpen}
-  //        />
-
   const goToSettings = () => {
     navigate("/configuracoes");
   };
 
   return (
     <>
+      {/* CORREÇÃO MOBILE: Botão sanduíche posicionado corretamente */}
       {isMobile && (
         <Button
           id="menu-toggle"
           variant="ghost"
           size="icon"
           onClick={toggleSidebar}
-          className="fixed top-4 left-4 z-50"
+          className="fixed top-4 left-4 z-50 bg-white/95 backdrop-blur-sm border border-gray-200 shadow-lg hover:bg-white dark:bg-gray-800/95 dark:border-gray-700 dark:hover:bg-gray-800"
+          style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '8px'
+          }}
         >
           <Menu />
         </Button>
+      )}
+
+      {/* CORREÇÃO MOBILE: Overlay quando sidebar está aberta */}
+      {isMobile && isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-45"
+          onClick={() => setIsOpen(false)}
+        />
       )}
       
       <div 
         id="sidebar"
         className={cn(
-          "fixed top-0 left-0 h-full shadow-lg transition-all duration-300 z-40",
-          isOpen ? "w-64" : isMobile ? "w-0 -translate-x-full" : "w-16",
-          "flex flex-col overflow-hidden bg-[#e60909] text-white",
+          "fixed top-0 left-0 h-full shadow-lg transition-all duration-300",
+          isOpen ? "w-64 z-50" : isMobile ? "w-0 -translate-x-full z-50" : "w-16 z-40",
+          "flex flex-col overflow-hidden bg-gradient-to-b from-[#870f0b] to-[#6d0c09] text-white",
           !isOpen && "sidebar-collapsed"
         )}
       >
         <div className="p-4 border-b border-white/20 flex items-center justify-between">
           <div className="flex items-center gap-3 overflow-hidden">
             <img 
-              src="/super-nosso-logo.png" 
+              src="/super-nosso-logo2.png" 
               alt="Super Nosso Logo" 
-              className="h-8 w-auto object-contain"
+              className="h-20 w-auto object-contain"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 target.src = "https://via.placeholder.com/40x40/FFFFFF/FFFFFF?text=SN";
               }}
             />
-            {isOpen && <span className="font-bold text-white">Intranet</span>}
+            
           </div>
           {isMobile && isOpen && (
-            <Button variant="ghost" size="icon" className="text-white hover:bg-[#e60909]/90" onClick={toggleSidebar}>
+            <Button variant="ghost" size="icon" className="text-white hover:bg-[#870f0b]/90" onClick={toggleSidebar}>
               <X size={20} />
             </Button>
           )}
           {!isMobile && (
-            <Button variant="ghost" size="icon" className="text-white hover:bg-[#e60909]/90" onClick={toggleSidebar}>
+            <Button variant="ghost" size="icon" className="text-white hover:bg-[#870f0b]/90" onClick={toggleSidebar}>
               {isOpen ? <X size={20} /> : <Menu size={20} />}
             </Button>
           )}
@@ -178,13 +184,13 @@ export function Sidebar() {
             active={getActivePath("/")} 
             isOpen={isOpen}
           />
-		  <SidebarItem 
-		    icon={Building2} 
-			to="/institucional" 
-			label="Institucional" 
-			active={getActivePath("/institucional")} 
-			isOpen={isOpen}
-		  />
+          <SidebarItem 
+            icon={Building2} 
+            to="/institucional" 
+            label="Institucional" 
+            active={getActivePath("/institucional")} 
+            isOpen={isOpen}
+          />
           <SidebarItem 
             icon={FileText} 
             to="/arquivos" 
@@ -192,75 +198,75 @@ export function Sidebar() {
             active={getActivePath("/arquivos")} 
             isOpen={isOpen}
           />
-		  <SidebarItem 
-			icon={GraduationCap} 
-			to="/aprendizagem" 
-			label="Treinamentos" 
-			active={getActivePath("/aprendizagem")} 
-			isOpen={isOpen}
-		  />
-		  {hasPermission('roles:manage') && (
           <SidebarItem 
-            icon={MessageSquare} 
-            to="/chat" 
-            label="Pesquisa" 
-            active={getActivePath("/chat")} 
+            icon={GraduationCap} 
+            to="/aprendizagem" 
+            label="Treinamentos" 
+            active={getActivePath("/aprendizagem")} 
             isOpen={isOpen}
           />
-		  )}		  
           {hasPermission('roles:manage') && (
-          <SidebarItem 
-            icon={Shield} 
-            to="/admin/permissions" 
-            label="Gerenciar Permissões" 
-            active={getActivePath("/admin/permissions")} 
-            isOpen={isOpen}
-          />
-         )}
+            <SidebarItem 
+              icon={MessageSquare} 
+              to="/chat" 
+              label="Pesquisa" 
+              active={getActivePath("/chat")} 
+              isOpen={isOpen}
+            />
+          )}		  
+          {hasPermission('roles:manage') && (
+            <SidebarItem 
+              icon={Shield} 
+              to="/admin/permissions" 
+              label="Gerenciar Permissões" 
+              active={getActivePath("/admin/permissions")} 
+              isOpen={isOpen}
+            />
+          )}
           {hasPermission('roles:manage') && ( 
+            <SidebarItem 
+              icon={LayoutDashboard} 
+              to="/admin/banners" 
+              label="Gerenciar Banners" 
+              active={getActivePath("/admin/banners")} 
+              isOpen={isOpen}
+            />
+          )}
+          {hasPermission('admin:dashboard') && (
+            <SidebarItem 
+              icon={BarChart} 
+              to="/admin/engagement" 
+              label="Dashboard de Engajamento" 
+              active={getActivePath("/admin/engagement")} 
+              isOpen={isOpen}
+            />
+          )}
+          {hasPermission('supercoins:manage') && (
+            <SidebarItem 
+              icon={Coins} 
+              to="/admin/supercoins" 
+              label="Super Coins" 
+              active={getActivePath("/admin/supercoins")} 
+              isOpen={isOpen}
+            />
+          )}
+          {hasPermission('roles:manage') && (
+            <SidebarItem 
+              icon={Link2} 
+              to="/links-uteis" 
+              label="Links Úteis" 
+              active={getActivePath("/links-uteis")} 
+              isOpen={isOpen}
+            />
+          )}
           <SidebarItem 
-            icon={LayoutDashboard} 
-            to="/admin/banners" 
-            label="Gerenciar Banners" 
-            active={getActivePath("/admin/banners")} 
+            icon={Briefcase} 
+            to="/vagas" 
+            label="Vagas" 
+            active={getActivePath("/vagas")} 
             isOpen={isOpen}
-          />
-		  )}
-		  {hasPermission('admin:dashboard') && (
-		  <SidebarItem 
-			icon={BarChart} 
-			to="/admin/engagement" 
-			label="Dashboard de Engajamento" 
-			active={getActivePath("/admin/engagement")} 
-			isOpen={isOpen}
-		  />
-		  )}
-		  {hasPermission('supercoins:manage') && (
-		  <SidebarItem 
-			icon={Coins} 
-			to="/admin/supercoins" 
-			label="Super Coins" 
-			active={getActivePath("/admin/supercoins")} 
-			isOpen={isOpen}
-		  />
-		  )}
-		  {hasPermission('roles:manage') && (
+          />		 
           <SidebarItem 
-            icon={Link2} 
-            to="/links-uteis" 
-            label="Links Úteis" 
-            active={getActivePath("/links-uteis")} 
-            isOpen={isOpen}
-          />
-         )}
-		  <SidebarItem 
-		    icon={Briefcase} 
-		    to="/vagas" 
-		    label="Vagas" 
-		    active={getActivePath("/vagas")} 
-		    isOpen={isOpen}
-		  />		 
-		  <SidebarItem 
             icon={User} 
             to="/configuracoes" 
             label="Meu Perfil" 
@@ -272,7 +278,7 @@ export function Sidebar() {
         <div className={cn("p-4 border-t border-white/20", !isOpen && "flex justify-center")}>
           <div 
             className={cn(
-              "flex items-center gap-3 cursor-pointer transition-colors hover:bg-[#e60909]/90 p-2 rounded-md",
+              "flex items-center gap-3 cursor-pointer transition-colors hover:bg-[#870f0b]/90 p-2 rounded-md",
               !isOpen && "justify-center p-1"
             )}
             onClick={goToSettings}  
@@ -288,7 +294,7 @@ export function Sidebar() {
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="text-white hover:text-white hover:bg-[#e60909]/90"
+                className="text-white hover:text-white hover:bg-[#870f0b]/90"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleLogout();
@@ -300,7 +306,7 @@ export function Sidebar() {
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="text-white hover:text-white hover:bg-[#e60909]/90 ml-0 p-0 h-auto w-auto"
+                className="text-white hover:text-white hover:bg-[#870f0b]/90 ml-0 p-0 h-auto w-auto"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleLogout();

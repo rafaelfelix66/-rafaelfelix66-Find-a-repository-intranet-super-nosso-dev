@@ -218,7 +218,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <File className="h-4 w-4 mr-2 text-[#e60909]" />
+                        <File className="h-4 w-4 mr-2 text-[#870f0b]" />
                         <span className="font-medium text-sm">
                           {selectedFile?.name}
                         </span>
@@ -233,9 +233,9 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
               <div 
                 className={`
                   border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 cursor-pointer
-                  ${isDragging ? 'border-[#e60909] bg-[#e60909]/10 scale-[1.02]' : ''}
-                  ${selectedFile && !isDragging ? 'border-[#e60909] bg-[#e60909]/5' : ''}
-                  ${!selectedFile && !isDragging ? 'border-gray-300 hover:border-[#e60909] hover:bg-[#e60909]/5' : ''}
+                  ${isDragging ? 'border-[#870f0b] bg-[#870f0b]/10 scale-[1.02]' : ''}
+                  ${selectedFile && !isDragging ? 'border-[#870f0b] bg-[#870f0b]/5' : ''}
+                  ${!selectedFile && !isDragging ? 'border-gray-300 hover:border-[#870f0b] hover:bg-[#870f0b]/5' : ''}
                 `}
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={handleDragOver}
@@ -245,14 +245,14 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
               >
                 {isDragging ? (
                   <div>
-                    <Upload className="h-16 w-16 mx-auto mb-4 text-[#e60909] animate-pulse" />
-                    <div className="text-lg font-medium text-[#e60909]">
+                    <Upload className="h-16 w-16 mx-auto mb-4 text-[#870f0b] animate-pulse" />
+                    <div className="text-lg font-medium text-[#870f0b]">
                       Solte o arquivo aqui
                     </div>
                   </div>
                 ) : selectedFile ? (
                   <div>
-                    <File className="h-16 w-16 mx-auto mb-4 text-[#e60909]" />
+                    <File className="h-16 w-16 mx-auto mb-4 text-[#870f0b]" />
                     <div className="text-lg font-medium text-gray-900">
                       {selectedFile.name}
                     </div>
@@ -284,7 +284,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-[#e60909] text-[#e60909] hover:bg-[#e60909] hover:text-white"
+                      className="border-[#870f0b] text-[#870f0b] hover:bg-[#870f0b] hover:text-white"
                     >
                       Escolher arquivo
                     </Button>
@@ -309,7 +309,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
                   value={linkName}
                   onChange={(e) => setLinkName(e.target.value)}
                   placeholder="Ex: Site da empresa, Documentação, etc."
-                  className="focus-visible:ring-[#e60909]"
+                  className="focus-visible:ring-[#870f0b]"
                 />
               </div>
               
@@ -320,7 +320,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                   placeholder="https://exemplo.com"
-                  className="focus-visible:ring-[#e60909]"
+                  className="focus-visible:ring-[#870f0b]"
                 />
                 {linkUrl && !isValidUrl(linkUrl) && (
                   <p className="text-sm text-red-500">URL inválida</p>
@@ -356,7 +356,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Adicione uma descrição para ajudar outros usuários a entender o conteúdo"
-              className="focus-visible:ring-[#e60909]"
+              className="focus-visible:ring-[#870f0b]"
               rows={3}
             />
           </div>
@@ -453,7 +453,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
           
           {activeTab === "file" ? (
             <Button 
-              className="bg-[#e60909] hover:bg-[#e60909]/90 text-white font-medium"
+              className="bg-[#870f0b] hover:bg-[#870f0b]/90 text-white font-medium"
               onClick={handleFileUpload}
               disabled={!canSubmitFile}
             >
@@ -461,7 +461,7 @@ export const UploadDialog = ({ isOpen, onOpenChange }: UploadDialogProps) => {
             </Button>
           ) : (
             <Button 
-              className="bg-[#e60909] hover:bg-[#e60909]/90 text-white font-medium"
+              className="bg-[#870f0b] hover:bg-[#870f0b]/90 text-white font-medium"
               onClick={handleLinkCreate}
               disabled={!canSubmitLink}
             >

@@ -1,4 +1,4 @@
-// src/components/layout/Header.tsx
+// src/components/layout/Header.tsx - Corrigido para funcionar com Sidebar original
 import { useState } from "react";
 import { Bell, Search, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,14 @@ export function Header() {
   return (
     <header className="w-full bg-white dark:bg-gray-900 border-b px-4 py-3 sticky top-0 z-30 shadow-sm transition-all">
       <div className="flex justify-between items-center">
-        <div className="ml-4 sm:ml-16 md:ml-20 lg:ml-64 transition-all flex items-center gap-3">
+        {/* CORREÇÃO: Padding-left adequado para dar espaço ao botão sanduíche no mobile */}
+        <div 
+          className="flex items-center gap-3 transition-all"
+          style={{
+            marginLeft: isMobile ? '60px' : '120px',
+            paddingLeft: isMobile ? '0' : '4rem'
+          }}
+        >
           <UserAvatar size="sm" />
           <h2 className="text-xl font-bold text-supernosso-darkgray">
             Bem-vindo(a), {user?.name?.split(' ')[0] || 'Usuário'}

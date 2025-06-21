@@ -146,7 +146,7 @@ export default function Settings() {
                         src={user?.avatar} 
                         alt={user?.name}
                       />
-                      <AvatarFallback className="bg-[#e60909] text-white text-2xl">
+                      <AvatarFallback className="bg-[#870f0b] text-white text-2xl">
                         {getInitials(user?.name || "")}
                       </AvatarFallback>
                     </Avatar>

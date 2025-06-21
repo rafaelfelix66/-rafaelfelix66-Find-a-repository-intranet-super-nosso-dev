@@ -50,7 +50,7 @@ export const FileHeader = () => {
         
         {hasPermission('files:upload') && (
 		<Button 
-		  className="bg-[#e60909] hover:bg-[#e60909]/90 text-white flex-shrink-0"
+		  className="bg-[#870f0b] hover:bg-[#870f0b]/90 text-white flex-shrink-0"
 		  onClick={() => setIsUploadDialogOpen(true)}
 		>
 		  <Upload className="h-4 w-4 mr-2" />

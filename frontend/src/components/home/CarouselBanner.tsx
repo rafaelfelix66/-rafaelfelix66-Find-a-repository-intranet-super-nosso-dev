@@ -1,4 +1,4 @@
-// frontend/src/components/home/CarouselBanner.tsx
+// frontend/src/components/home/CarouselBanner.tsx - Versão corrigida mantendo características originais
 import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/services/api";
 import { useToast } from "@/components/ui/use-toast";
 import { BannerItem } from "./BannerItem";
+import { useIsMobile } from "@/hooks/use-mobile"; // ADICIONADO para responsividade
 
 interface Slide {
   _id: string;
@@ -32,8 +33,9 @@ export function CarouselBanner() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const { toast } = useToast();
+  const isMobile = useIsMobile(); // ADICIONADO para responsividade
   
-  // Função para buscar os banners
+  // Função para buscar os banners (MANTIDO ORIGINAL)
   const fetchBanners = async () => {
     setIsLoading(true);
     setHasError(false);
@@ -64,6 +66,7 @@ export function CarouselBanner() {
     fetchBanners();
   }, []);
   
+  // MANTIDO ORIGINAL - Funções de navegação
   const nextSlide = () => {
     if (slides.length <= 1) return;
     setCurrentSlide((prev) => (prev + 1) % slides.length);
@@ -78,7 +81,7 @@ export function CarouselBanner() {
     setCurrentSlide(index);
   };
   
-  // Efeito para mostrar que a imagem foi carregada
+  // MANTIDO ORIGINAL - Efeito para mostrar que a imagem foi carregada
   useEffect(() => {
     const timer = setTimeout(() => {
       if (slides.length > 0) {
@@ -89,7 +92,7 @@ export function CarouselBanner() {
     return () => clearTimeout(timer);
   }, [slides]);
   
-  // Rotação automática
+  // MANTIDO ORIGINAL - Rotação automática
   useEffect(() => {
     if (slides.length <= 1) return; // Não rotacionar se houver apenas 1 slide
     
@@ -99,17 +102,26 @@ export function CarouselBanner() {
     
     return () => clearInterval(interval);
   }, [slides.length, currentSlide]);
+
+  // ADICIONADO - Altura responsiva para mobile
+  const getResponsiveHeight = () => {
+    if (isMobile) {
+      if (window.innerWidth <= 480) return "h-[220px]";
+      return "h-[240px]";
+    }
+    return "h-[300px] sm:h-[400px]"; // Original
+  };
   
-  // Se não houver slides, mostrar um placeholder
+  // MANTIDO ORIGINAL - Se não houver slides, mostrar um placeholder
   if (slides.length === 0 && !isLoading) {
     return (
-      <div className="relative w-full h-[300px] sm:h-[400px] overflow-hidden rounded-xl shadow-md bg-gray-100 flex items-center justify-center">
+      <div className={cn("relative w-full overflow-hidden rounded-xl shadow-md bg-gray-100 flex items-center justify-center", getResponsiveHeight())}>
         <div className="text-center p-4">
           <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-2" />
           <h3 className="text-lg font-medium">Nenhum banner disponível</h3>
           <p className="text-sm text-gray-500">Adicione banners para personalizar sua página inicial</p>
           <Button 
-            className="mt-4 bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+            className="mt-4 bg-[#870f0b] hover:bg-[#870f0b]/90 text-white" // ATUALIZADO cor
             onClick={fetchBanners}
           >
             Tentar novamente
@@ -120,7 +132,7 @@ export function CarouselBanner() {
   }
   
   return (
-    <div className="relative w-full h-[300px] sm:h-[400px] overflow-hidden rounded-xl shadow-md">
+    <div className={cn("relative w-full overflow-hidden rounded-xl shadow-md", getResponsiveHeight())}>
       {slides.map((slide, index) => (
         <div 
           key={slide._id}
@@ -130,12 +142,13 @@ export function CarouselBanner() {
           )}
         >
           <div className="relative w-full h-full">
+            {/* MANTIDO ORIGINAL - Overlay */}
             <div className={cn(
               "absolute inset-0 bg-black/40 z-10 transition-opacity",
               isLoading ? "opacity-100" : "opacity-40"
             )} />
             
-            {/* Utilizando o componente BannerItem para rastrear os cliques */}
+            {/* MANTIDO ORIGINAL - Utilizando o componente BannerItem para rastrear os cliques */}
             <div className="absolute inset-0 z-20">
               <BannerItem
                 id={slide._id}
@@ -146,12 +159,27 @@ export function CarouselBanner() {
               />
             </div>
             
-            <div className="absolute bottom-0 left-0 right-0 z-30 p-4 sm:p-8 text-white pointer-events-none">
-              <h3 className="text-xl sm:text-2xl font-bold mb-2 animate-fade-in">{slide.title}</h3>
-              <p className="text-sm sm:text-base mb-4 max-w-md animate-fade-in opacity-90">{slide.description}</p>
+            {/* RESPONSIVO - Conteúdo de texto adaptado */}
+            <div className={cn(
+              "absolute bottom-0 left-0 right-0 z-30 text-white pointer-events-none",
+              isMobile ? "p-3" : "p-4 sm:p-8"
+            )}>
+              <h3 className={cn(
+                "font-bold mb-2 animate-fade-in",
+                isMobile ? "text-lg" : "text-xl sm:text-2xl"
+              )}>
+                {slide.title}
+              </h3>
+              <p className={cn(
+                "mb-4 max-w-md animate-fade-in opacity-90",
+                isMobile ? "text-xs mb-3" : "text-sm sm:text-base"
+              )}>
+                {slide.description}
+              </p>
               {slide.link && (
                 <Button 
                   variant="outline" 
+                  size={isMobile ? "sm" : "default"}
                   className="bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 hover:border-white/30 animate-fade-in pointer-events-auto"
                   onClick={(e) => {
                     e.stopPropagation(); // Evitar duplo clique
@@ -170,34 +198,46 @@ export function CarouselBanner() {
         </div>
       ))}
       
+      {/* RESPONSIVO - Botões de navegação com tamanho adaptável */}
       {slides.length > 1 && (
         <>
           <Button 
             variant="outline" 
             size="icon" 
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-40 bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 text-white rounded-full"
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 z-40 bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 text-white rounded-full",
+              isMobile ? "left-2 w-9 h-9" : "left-4"
+            )}
             onClick={prevSlide}
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={isMobile ? 16 : 20} />
           </Button>
           
           <Button 
             variant="outline" 
             size="icon" 
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-40 bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 text-white rounded-full"
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 z-40 bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20 text-white rounded-full",
+              isMobile ? "right-2 w-9 h-9" : "right-4"
+            )}
             onClick={nextSlide}
           >
-            <ChevronRight size={20} />
+            <ChevronRight size={isMobile ? 16 : 20} />
           </Button>
           
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex space-x-2">
+          {/* RESPONSIVO - Indicadores com posicionamento adaptável */}
+          <div className={cn(
+            "absolute left-1/2 -translate-x-1/2 z-40 flex space-x-2",
+            isMobile ? "bottom-2" : "bottom-4"
+          )}>
             {slides.map((_, index) => (
               <button
                 key={index}
                 className={cn(
-                  "w-2 h-2 rounded-full transition-all",
+                  "rounded-full transition-all",
+                  isMobile ? "w-1.5 h-1.5" : "w-2 h-2",
                   index === currentSlide 
-                    ? "bg-white w-6" 
+                    ? isMobile ? "bg-white w-4" : "bg-white w-6"
                     : "bg-white/50 hover:bg-white/70"
                 )}
                 onClick={() => goToSlide(index)}

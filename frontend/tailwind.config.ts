@@ -63,8 +63,21 @@ export default {
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
 				},
+				red: {
+						50: '#fef2f2',
+						100: '#fee2e2', 
+						200: '#fecaca',
+						300: '#fca5a5',
+						400: '#f87171',
+						500: '#ef4444',
+						600: '#870f0b',  // ← ADICIONAR ESTA LINHA
+						700: '#6d0c09',  // ← ADICIONAR ESTA LINHA
+						800: '#5a0a08',
+						900: '#470806',
+						950: '#2c0504'
+					  },
 				supernosso: {
-					red: '#EA384C',
+					red: '#870f0b',
 					'light-red': '#FDE1D3',
 					darkgray: '#403E43',
 					lightgray: '#F9F9F9',

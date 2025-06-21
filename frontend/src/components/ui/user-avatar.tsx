@@ -109,7 +109,7 @@ export function UserAvatar({
         />
         <AvatarFallback 
           className={cn(
-            "bg-[#e60909] text-white font-medium",
+            "bg-[#870f0b] text-white font-medium",
             textSizes[size]
           )}
         >
@@ -155,7 +155,7 @@ export function UserAvatar({
             
             {/* Glow effect */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-96 h-96 bg-[#e60909]/20 rounded-full blur-3xl" />
+              <div className="w-96 h-96 bg-[#870f0b]/20 rounded-full blur-3xl" />
             </div>
             
             {/* Content container */}
@@ -164,7 +164,7 @@ export function UserAvatar({
               <div className="flex justify-center mb-6">
                 <div className="relative">
                   {/* Ring decorativo */}
-                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#e60909] to-[#ff4444] p-1">
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#870f0b] to-[#ff4444] p-1">
                     <div className="w-full h-full rounded-full bg-gray-900" />
                   </div>
                   
@@ -177,7 +177,7 @@ export function UserAvatar({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-[#e60909] to-[#ff4444] flex items-center justify-center">
+                      <div className="w-full h-full bg-gradient-to-br from-[#870f0b] to-[#ff4444] flex items-center justify-center">
                         <span className="text-3xl text-white font-bold">
                           {getInitials(user?.name || "")}
                         </span>

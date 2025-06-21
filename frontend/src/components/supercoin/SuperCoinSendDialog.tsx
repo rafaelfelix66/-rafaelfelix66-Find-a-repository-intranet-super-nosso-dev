@@ -403,7 +403,7 @@ export function SuperCoinSendDialog({
                     <div className="flex items-center">
                       <div 
                         className="w-4 h-4 rounded-full mr-2"
-                        style={{ backgroundColor: attr.color || "#e60909" }}
+                        style={{ backgroundColor: attr.color || "#870f0b" }}
                       ></div>
                       <span>{attr.name}</span>
                       <Badge 

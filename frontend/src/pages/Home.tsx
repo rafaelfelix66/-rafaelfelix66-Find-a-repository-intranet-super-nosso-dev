@@ -1398,7 +1398,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
             >
               <Dialog open={newPostDialog} onOpenChange={setNewPostDialog}>
                 <DialogTrigger asChild>
-                  <Button className="bg-[#e60909] hover:bg-[#e60909]/90 text-white">
+                  <Button className="bg-[#870f0b] hover:bg-[#870f0b]/90 text-white">
                     <Plus className="mr-2 h-4 w-4" />
                     Nova Publicação
                   </Button>
@@ -1418,7 +1418,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							<div className="relative">
 							  <Textarea 
 								placeholder="O que você deseja compartilhar?" 
-								className="mt-2 focus-visible:ring-[#e60909] resize-none pr-10"
+								className="mt-2 focus-visible:ring-[#870f0b] resize-none pr-10"
 								rows={4}
 								value={newPostContent}
 								onChange={(e) => setNewPostContent(e.target.value)}
@@ -1503,7 +1503,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 						{showEventForm && (
 						  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-4 mt-4">
 							<div className="flex items-center justify-between">
-							  <h3 className="font-medium text-[#e60909] flex items-center gap-2">
+							  <h3 className="font-medium text-[#870f0b] flex items-center gap-2">
 								<Calendar className="h-4 w-4" /> 
 								Detalhes do Evento
 							  </h3>
@@ -1708,7 +1708,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 						  Cancelar
 						</Button>
 						<Button 
-						  className="bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+						  className="bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
 						  onClick={createNewPost}
 						>
 						  Publicar
@@ -1741,7 +1741,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                   <div className="text-center py-12 text-red-500">
                     <p>{error}</p>
                     <Button 
-                      className="mt-4 bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+                      className="mt-4 bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
                       onClick={() => window.location.reload()}
                     >
                       Tentar novamente
@@ -1806,10 +1806,10 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                         
                         {/* Exibição de informações do evento */}
                         {post.event && post.event.title && (
-                          <div className="bg-[#e60909]/10 rounded-lg p-3 mb-4">
+                          <div className="bg-[#870f0b]/10 rounded-lg p-3 mb-4">
                             <div className="flex items-center">
-                              <Calendar className="h-5 w-5 text-[#e60909] mr-2" />
-                              <h4 className="font-medium text-[#e60909]">{post.event.title}</h4>
+                              <Calendar className="h-5 w-5 text-[#870f0b] mr-2" />
+                              <h4 className="font-medium text-[#870f0b]">{post.event.title}</h4>
                             </div>
                             <div className="text-sm ml-7 space-y-1 mt-1">
                               <p className="text-gray-600">{post.event.date}</p>
@@ -1891,7 +1891,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  className={cn(
 									"flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-all duration-200",
 									userReacted 
-									  ? "bg-[#e60909]/10 border-[#e60909] text-[#e60909] shadow-sm" 
+									  ? "bg-[#870f0b]/10 border-[#870f0b] text-[#870f0b] shadow-sm"
 									  : "bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300"
 								  )}
 								  onClick={() => handleAddReaction(post.id, reaction.emoji)}
@@ -1915,11 +1915,11 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							variant="ghost" 
 							className={cn(
 							  "flex-1", 
-							  post.liked ? "text-[#e60909]" : ""
+							  post.liked ? "text-[#870f0b]" : ""
 							)}
 							onClick={() => handleLike(post.id)}
 						  >
-							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#e60909]" : "")} />
+							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#870f0b]" : "")} />
 							Curtir
 						  </Button>
 						</PermissionGuard>
@@ -1964,10 +1964,10 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  <span>{comment.timestamp}</span>
 								  <PermissionGuard requiredPermission="timeline:like_comment">
 									<button 
-									  className={`flex items-center gap-1 hover:text-[#e60909] ${comment.liked ? 'text-[#e60909] font-medium' : ''}`}
+									  className={`flex items-center gap-1 hover:text-[#870f0b] ${comment.liked ? 'text-[#870f0b] font-medium' : ''}`}
 									  onClick={() => handleLikeComment(post.id, comment.id)}
 									>
-									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#e60909]" : "")} />
+									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#870f0b]" : "")} />
 									  {comment.likes?.length > 0 && comment.likes.length}
 									</button>
 								  </PermissionGuard>
@@ -2019,7 +2019,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							  />
 							</div>
 							<Button 
-							  className="rounded-l-none bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+							  className="rounded-l-none bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
 							  onClick={() => handleComment(post.id)}
 							  disabled={!commentInput[post.id]?.trim()}
 							>
@@ -2056,7 +2056,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                     </p>
                     <PermissionGuard requiredPermission="timeline:create">
                       <Button 
-                        className="mt-4 bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+                        className="mt-4 bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
                         onClick={() => setNewPostDialog(true)}
                       >
                         <Plus className="mr-2 h-4 w-4" />
@@ -2076,7 +2076,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					>
 					  {loadingMore ? (
 						<>
-						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#e60909] mr-2"></div>
+						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#870f0b] mr-2"></div>
 						  Carregando...
 						</>
 					  ) : (
@@ -2146,10 +2146,10 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                         
                         {/* Exibição de informações do evento */}
                         {post.event && post.event.title && (
-                          <div className="bg-[#e60909]/10 rounded-lg p-3 mb-4">
+                          <div className="bg-[#870f0b]/10 rounded-lg p-3 mb-4">
                             <div className="flex items-center">
-                              <Calendar className="h-5 w-5 text-[#e60909] mr-2" />
-                              <h4 className="font-medium text-[#e60909]">{post.event.title}</h4>
+                              <Calendar className="h-5 w-5 text-[#870f0b] mr-2" />
+                              <h4 className="font-medium text-[#870f0b]">{post.event.title}</h4>
                             </div>
                             <div className="text-sm ml-7 space-y-1 mt-1">
                               <p className="text-gray-600">{post.event.date}</p>
@@ -2231,7 +2231,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  className={cn(
 									"flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-all duration-200",
 									userReacted 
-									  ? "bg-[#e60909]/10 border-[#e60909] text-[#e60909] shadow-sm" 
+									  ? "bg-[#870f0b]/10 border-[#870f0b] text-[#870f0b] shadow-sm"
 									  : "bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300"
 								  )}
 								  onClick={() => handleAddReaction(post.id, reaction.emoji)}
@@ -2255,11 +2255,11 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							variant="ghost" 
 							className={cn(
 							  "flex-1", 
-							  post.liked ? "text-[#e60909]" : ""
+							  post.liked ? "text-[#870f0b]" : ""
 							)}
 							onClick={() => handleLike(post.id)}
 						  >
-							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#e60909]" : "")} />
+							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#870f0b]" : "")} />
 							Curtir
 						  </Button>
 						</PermissionGuard>
@@ -2303,10 +2303,10 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  <span>{comment.timestamp}</span>
 								  <PermissionGuard requiredPermission="timeline:like_comment">
 									<button 
-									  className={`flex items-center gap-1 hover:text-[#e60909] ${comment.liked ? 'text-[#e60909] font-medium' : ''}`}
+									  className={`flex items-center gap-1 hover:text-[#870f0b] ${comment.liked ? 'text-[#870f0b] font-medium' : ''}`}
 									  onClick={() => handleLikeComment(post.id, comment.id)}
 									>
-									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#e60909]" : "")} />
+									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#870f0b]" : "")} />
 									  {comment.likes?.length > 0 && comment.likes.length}
 									</button>
 								  </PermissionGuard>
@@ -2358,7 +2358,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							  />
 							</div>
 							<Button 
-							  className="rounded-l-none bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+							  className="rounded-l-none bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
 							  onClick={() => handleComment(post.id)}
 							  disabled={!commentInput[post.id]?.trim()}
 							>
@@ -2381,7 +2381,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					  </p>
 					  <PermissionGuard requiredPermission="timeline:create">
 						<Button 
-						  className="mt-4 bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+						  className="mt-4 bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
 						  onClick={() => setNewPostDialog(true)}
 						>
 						  <Plus className="mr-2 h-4 w-4" />
@@ -2401,7 +2401,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					>
 					  {loadingMore ? (
 						<>
-						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#e60909] mr-2"></div>
+						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#870f0b] mr-2"></div>
 						  Carregando...
 						</>
 					  ) : (
@@ -2472,10 +2472,10 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                         
                         {/* Exibição de informações do evento */}
                         {post.event && post.event.title && (
-                          <div className="bg-[#e60909]/10 rounded-lg p-3 mb-4">
+                          <div className="bg-[#870f0b]/10 rounded-lg p-3 mb-4">
                             <div className="flex items-center">
-                              <Calendar className="h-5 w-5 text-[#e60909] mr-2" />
-                              <h4 className="font-medium text-[#e60909]">{post.event.title}</h4>
+                              <Calendar className="h-5 w-5 text-[#870f0b] mr-2" />
+                              <h4 className="font-medium text-[#870f0b]">{post.event.title}</h4>
                             </div>
                             <div className="text-sm ml-7 space-y-1 mt-1">
                               <p className="text-gray-600">{post.event.date}</p>
@@ -2557,7 +2557,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  className={cn(
 									"flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-all duration-200",
 									userReacted 
-									  ? "bg-[#e60909]/10 border-[#e60909] text-[#e60909] shadow-sm" 
+									  ? "bg-[#870f0b]/10 border-[#870f0b] text-[#870f0b] shadow-sm"
 									  : "bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300"
 								  )}
 								  onClick={() => handleAddReaction(post.id, reaction.emoji)}
@@ -2581,11 +2581,11 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							variant="ghost" 
 							className={cn(
 							  "flex-1", 
-							  post.liked ? "text-[#e60909]" : ""
+							  post.liked ? "text-[#870f0b]" : ""
 							)}
 							onClick={() => handleLike(post.id)}
 						  >
-							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#e60909]" : "")} />
+							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#870f0b]" : "")} />
 							Curtir
 						  </Button>
 						</PermissionGuard>
@@ -2629,10 +2629,10 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  <span>{comment.timestamp}</span>
 								  <PermissionGuard requiredPermission="timeline:like_comment">
 									<button 
-									  className={`flex items-center gap-1 hover:text-[#e60909] ${comment.liked ? 'text-[#e60909] font-medium' : ''}`}
+									  className={`flex items-center gap-1 hover:text-[#870f0b] ${comment.liked ? 'text-[#870f0b] font-medium' : ''}`}
 									  onClick={() => handleLikeComment(post.id, comment.id)}
 									>
-									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#e60909]" : "")} />
+									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#870f0b]" : "")} />
 									  {comment.likes?.length > 0 && comment.likes.length}
 									</button>
 								  </PermissionGuard>
@@ -2684,7 +2684,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							  />
 							</div>
 							<Button 
-							  className="rounded-l-none bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+							  className="rounded-l-none bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
 							  onClick={() => handleComment(post.id)}
 							  disabled={!commentInput[post.id]?.trim()}
 							>
@@ -2707,7 +2707,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					  </p>
 					  <PermissionGuard requiredPermission="timeline:create">
 						<Button 
-						  className="mt-4 bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+						  className="mt-4 bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
 						  onClick={() => setNewPostDialog(true)}
 						>
 						  <Plus className="mr-2 h-4 w-4" />
@@ -2727,7 +2727,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					>
 					  {loadingMore ? (
 						<>
-						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#e60909] mr-2"></div>
+						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#870f0b] mr-2"></div>
 						  Carregando...
 						</>
 					  ) : (
@@ -2798,10 +2798,10 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
                         
                         {/* Exibição de informações do evento */}
                         {post.event && post.event.title && (
-                          <div className="bg-[#e60909]/10 rounded-lg p-3 mb-4">
+                          <div className="bg-[#870f0b]/10 rounded-lg p-3 mb-4">
                             <div className="flex items-center">
-                              <Calendar className="h-5 w-5 text-[#e60909] mr-2" />
-                              <h4 className="font-medium text-[#e60909]">{post.event.title}</h4>
+                              <Calendar className="h-5 w-5 text-[#870f0b] mr-2" />
+                              <h4 className="font-medium text-[#870f0b]">{post.event.title}</h4>
                             </div>
                             <div className="text-sm ml-7 space-y-1 mt-1">
                               <p className="text-gray-600">{post.event.date}</p>
@@ -2883,7 +2883,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  className={cn(
 									"flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-all duration-200",
 									userReacted 
-									  ? "bg-[#e60909]/10 border-[#e60909] text-[#e60909] shadow-sm" 
+									  ? "bg-[#870f0b]/10 border-[#870f0b] text-[#870f0b] shadow-sm"
 									  : "bg-gray-50 border-gray-200 hover:bg-gray-100 hover:border-gray-300"
 								  )}
 								  onClick={() => handleAddReaction(post.id, reaction.emoji)}
@@ -2907,11 +2907,11 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							variant="ghost" 
 							className={cn(
 							  "flex-1", 
-							  post.liked ? "text-[#e60909]" : ""
+							  post.liked ? "text-[#870f0b]" : ""
 							)}
 							onClick={() => handleLike(post.id)}
 						  >
-							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#e60909]" : "")} />
+							<Heart className={cn("mr-1 h-4 w-4", post.liked ? "fill-[#870f0b]" : "")} />
 							Curtir
 						  </Button>
 						</PermissionGuard>
@@ -2955,10 +2955,10 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 								  <span>{comment.timestamp}</span>
 								  <PermissionGuard requiredPermission="timeline:like_comment">
 									<button 
-									  className={`flex items-center gap-1 hover:text-[#e60909] ${comment.liked ? 'text-[#e60909] font-medium' : ''}`}
+									  className={`flex items-center gap-1 hover:text-[#870f0b] ${comment.liked ? 'text-[#870f0b] font-medium' : ''}`}
 									  onClick={() => handleLikeComment(post.id, comment.id)}
 									>
-									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#e60909]" : "")} />
+									  <Heart className={cn("h-3 w-3", comment.liked ? "fill-[#870f0b]" : "")} />
 									  {comment.likes?.length > 0 && comment.likes.length}
 									</button>
 								  </PermissionGuard>
@@ -3010,7 +3010,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 							  />
 							</div>
 							<Button 
-							  className="rounded-l-none bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+							  className="rounded-l-none bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
 							  onClick={() => handleComment(post.id)}
 							  disabled={!commentInput[post.id]?.trim()}
 							>
@@ -3033,7 +3033,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					  </p>
 					  <PermissionGuard requiredPermission="timeline:create">
 						<Button 
-						  className="mt-4 bg-[#e60909] hover:bg-[#e60909]/90 text-white"
+						  className="mt-4 bg-[#870f0b] hover:bg-[#870f0b]/90 text-white"
 						  onClick={() => setNewPostDialog(true)}
 						>
 						  <Plus className="mr-2 h-4 w-4" />
@@ -3053,7 +3053,7 @@ const handleDeleteComment = async (postId: string, commentId: string) => {
 					>
 					  {loadingMore ? (
 						<>
-						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#e60909] mr-2"></div>
+						  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#870f0b] mr-2"></div>
 						  Carregando...
 						</>
 					  ) : (
